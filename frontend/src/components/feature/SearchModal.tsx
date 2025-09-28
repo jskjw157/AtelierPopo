@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { allProducts, searchProducts } from "@/data/products";
+import { useCart } from "@/hooks/useCart";
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(allProducts);
   const router = useRouter();
+  const { addToCart } = useCart();
 
   useEffect(() => {
     if (searchQuery.trim() === "") {
@@ -28,46 +30,16 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
     router.push(`/product-detail?id=${productId}`);
   };
 
-  const addToCart = (product: any, event: React.MouseEvent) => {
+  const handleAddToCart = (product: any, event: React.MouseEvent) => {
     event.stopPropagation();
 
-    const cartItem = {
+    addToCart({
       id: product.id,
       name: product.name,
       price: product.price,
       image: product.image,
       quantity: 1,
-      color: "",
-      size: "",
-    };
-
-    let existingCart = [];
-    try {
-      const stored = localStorage.getItem("cart");
-      existingCart = stored ? JSON.parse(stored) : [];
-      if (!Array.isArray(existingCart)) {
-        existingCart = [];
-      }
-    } catch (e) {
-      existingCart = [];
-    }
-
-    const existingItemIndex = existingCart.findIndex(
-      (item: any) => item.id === cartItem.id
-    );
-
-    if (existingItemIndex > -1) {
-      existingCart[existingItemIndex].quantity += 1;
-    } else {
-      existingCart.push(cartItem);
-    }
-
-    try {
-      localStorage.setItem("cart", JSON.stringify(existingCart));
-      window.dispatchEvent(new Event("cartUpdated"));
-    } catch (e) {
-      console.error("Failed to write cart to localStorage:", e);
-    }
+    });
   };
 
   if (!isOpen) return null;
@@ -176,7 +148,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
                           </button>
                           <button
                             className="px-3 py-2 border border-pink-500 text-pink-500 hover:bg-pink-50 rounded-lg transition-all duration-200 cursor-pointer text-xs"
-                            onClick={(e) => addToCart(product, e)}
+                            onClick={(e) => handleAddToCart(product, e)}
                             title="장바구니에 담기"
                           >
                             <i className="ri-shopping-cart-line"></i>

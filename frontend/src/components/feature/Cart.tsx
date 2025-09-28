@@ -1,17 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-
-interface CartItem {
-  id: number;
-  name: string;
-  price: string;
-  image: string;
-  quantity: number;
-  color?: string;
-  size?: string;
-}
+import { useRouter } from "next/navigation";
+import { useCart } from "@/hooks/useCart";
 
 interface CartProps {
   isOpen: boolean;
@@ -19,73 +9,43 @@ interface CartProps {
 }
 
 export default function Cart({ isOpen, onClose }: CartProps) {
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const router = useRouter();
+  const { cartItems, totalPrice, updateQuantity, removeItem, clearCart } =
+    useCart();
 
-  useEffect(() => {
-    // 로컬 스토리지에서 장바구니 데이터 불러오기
-    const savedCart = localStorage.getItem('cart');
-    if (savedCart) {
-      setCartItems(JSON.parse(savedCart));
+  const handleUpdateQuantity = (id: number, newQuantity: number) => {
+    const item = cartItems.find((item) => item.id === id);
+    if (item) {
+      updateQuantity(id, item.color, item.size, newQuantity);
     }
-  }, [isOpen]);
+  };
 
-  const updateQuantity = (id: number, newQuantity: number) => {
-    if (newQuantity === 0) {
-      removeItem(id);
-      return;
+  const handleRemoveItem = (id: number) => {
+    const item = cartItems.find((item) => item.id === id);
+    if (item) {
+      removeItem(id, item.color, item.size);
     }
-    
-    const updatedItems = cartItems.map(item =>
-      item.id === id ? { ...item, quantity: newQuantity } : item
-    );
-    setCartItems(updatedItems);
-    localStorage.setItem('cart', JSON.stringify(updatedItems));
-    
-    // 커스텀 이벤트 발생
-    window.dispatchEvent(new Event('cartUpdated'));
-  };
-
-  const removeItem = (id: number) => {
-    const updatedItems = cartItems.filter(item => item.id !== id);
-    setCartItems(updatedItems);
-    localStorage.setItem('cart', JSON.stringify(updatedItems));
-    
-    // 커스텀 이벤트 발생
-    window.dispatchEvent(new Event('cartUpdated'));
-  };
-
-  const getTotalPrice = () => {
-    return cartItems.reduce((total, item) => {
-      const price = parseInt(item.price.replace(/[^0-9]/g, ''), 10);
-      return total + (price * item.quantity);
-    }, 0);
-  };
-
-  const clearCart = () => {
-    setCartItems([]);
-    localStorage.removeItem('cart');
-    
-    // 커스텀 이벤트 발생
-    window.dispatchEvent(new Event('cartUpdated'));
   };
 
   const handleCheckout = () => {
     onClose();
-    router.push('/checkout');
+    router.push("/checkout");
   };
 
   const handleShoppingRedirect = () => {
     onClose();
-    router.push('/products');
+    router.push("/products");
   };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
-      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={onClose}></div>
-      
+      <div
+        className="absolute inset-0 bg-black bg-opacity-50"
+        onClick={onClose}
+      ></div>
+
       <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl">
         <div className="flex flex-col h-full">
           {/* Header */}
@@ -115,34 +75,51 @@ export default function Cart({ isOpen, onClose }: CartProps) {
             ) : (
               <div className="space-y-4">
                 {cartItems.map((item) => (
-                  <div key={`${item.id}-${item.color}-${item.size}`} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
+                  <div
+                    key={`${item.id}-${item.color}-${item.size}`}
+                    className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg"
+                  >
                     <img
                       src={item.image}
                       alt={item.name}
                       className="w-16 h-16 object-cover object-top rounded-lg"
                     />
-                    
+
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-gray-900 truncate">{item.name}</h3>
+                      <h3 className="font-medium text-gray-900 truncate">
+                        {item.name}
+                      </h3>
                       {item.color && (
-                        <p className="text-sm text-gray-500">색상: {item.color}</p>
+                        <p className="text-sm text-gray-500">
+                          색상: {item.color}
+                        </p>
                       )}
                       {item.size && (
-                        <p className="text-sm text-gray-500">사이즈: {item.size}</p>
+                        <p className="text-sm text-gray-500">
+                          사이즈: {item.size}
+                        </p>
                       )}
-                      <p className="font-semibold text-gray-900">{item.price}</p>
+                      <p className="font-semibold text-gray-900">
+                        {item.price}
+                      </p>
                     </div>
 
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        onClick={() =>
+                          handleUpdateQuantity(item.id, item.quantity - 1)
+                        }
                         className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer"
                       >
                         <i className="ri-subtract-line text-sm"></i>
                       </button>
-                      <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                      <span className="w-8 text-center text-sm font-medium">
+                        {item.quantity}
+                      </span>
                       <button
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        onClick={() =>
+                          handleUpdateQuantity(item.id, item.quantity + 1)
+                        }
                         className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors cursor-pointer"
                       >
                         <i className="ri-add-line text-sm"></i>
@@ -150,7 +127,7 @@ export default function Cart({ isOpen, onClose }: CartProps) {
                     </div>
 
                     <button
-                      onClick={() => removeItem(item.id)}
+                      onClick={() => handleRemoveItem(item.id)}
                       className="p-2 text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
                     >
                       <i className="ri-delete-bin-line"></i>
@@ -165,14 +142,16 @@ export default function Cart({ isOpen, onClose }: CartProps) {
           {cartItems.length > 0 && (
             <div className="border-t border-gray-200 p-6 space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-lg font-semibold text-gray-900">총 금액</span>
+                <span className="text-lg font-semibold text-gray-900">
+                  총 금액
+                </span>
                 <span className="text-xl font-bold text-gray-900">
-                  {getTotalPrice().toLocaleString()}원
+                  {totalPrice.toLocaleString()}원
                 </span>
               </div>
-              
+
               <div className="space-y-3">
-                <button 
+                <button
                   onClick={handleCheckout}
                   className="w-full bg-pink-500 hover:bg-pink-600 text-white py-3 rounded-lg font-semibold transition-all duration-200 whitespace-nowrap cursor-pointer"
                 >

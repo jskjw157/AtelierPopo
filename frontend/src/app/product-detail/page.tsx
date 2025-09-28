@@ -5,10 +5,13 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { getProductById, allProducts } from "@/data/products";
+import { useCart } from "@/hooks/useCart";
 
 function ProductDetailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { addToCart } = useCart();
+
   const [product, setProduct] = useState<any>(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedColor, setSelectedColor] = useState("");
@@ -33,10 +36,10 @@ function ProductDetailContent() {
     }
   }, [searchParams]);
 
-  const addToCart = () => {
+  const handleAddToCart = () => {
     if (!product) return;
 
-    const cartItem = {
+    addToCart({
       id: product.id,
       name: product.name,
       price: product.price,
@@ -44,40 +47,7 @@ function ProductDetailContent() {
       quantity,
       color: selectedColor,
       size: selectedSize,
-    };
-
-    let existingCart = [];
-    try {
-      const stored = localStorage.getItem("cart");
-      existingCart = stored ? JSON.parse(stored) : [];
-      if (!Array.isArray(existingCart)) {
-        console.warn("Cart data malformed, resetting.");
-        existingCart = [];
-      }
-    } catch (e) {
-      console.error("Failed to parse cart from localStorage:", e);
-      existingCart = [];
-    }
-
-    const existingItemIndex = existingCart.findIndex(
-      (item: any) =>
-        item.id === cartItem.id &&
-        item.color === cartItem.color &&
-        item.size === cartItem.size
-    );
-
-    if (existingItemIndex > -1) {
-      existingCart[existingItemIndex].quantity += quantity;
-    } else {
-      existingCart.push(cartItem);
-    }
-
-    try {
-      localStorage.setItem("cart", JSON.stringify(existingCart));
-      window.dispatchEvent(new Event("cartUpdated"));
-    } catch (e) {
-      console.error("Failed to write cart to localStorage:", e);
-    }
+    });
 
     setShowAddedMessage(true);
     setTimeout(() => setShowAddedMessage(false), 2000);
@@ -86,7 +56,7 @@ function ProductDetailContent() {
   const handleOrder = () => {
     if (!product) return;
 
-    addToCart();
+    handleAddToCart();
     setShowOrderModal(true);
   };
 
@@ -301,7 +271,7 @@ function ProductDetailContent() {
             <div className="space-y-4 pt-6">
               <button
                 type="button"
-                onClick={addToCart}
+                onClick={handleAddToCart}
                 className="w-full bg-pink-100 hover:bg-pink-200 text-pink-700 py-4 rounded-lg font-semibold text-lg transition-all duration-200 whitespace-nowrap cursor-pointer relative border border-pink-200"
               >
                 장바구니에 담기

@@ -1,56 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Cart from "../feature/Cart";
 import SearchModal from "../feature/SearchModal";
+import { useCart } from "@/hooks/useCart";
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [cartItemCount, setCartItemCount] = useState(0);
 
   const router = useRouter();
   const pathname = usePathname();
-
-  useEffect(() => {
-    // 장바구니 아이템 수 업데이트
-    const updateCartCount = () => {
-      const savedCart = localStorage.getItem("cart");
-      if (savedCart) {
-        const cartItems = JSON.parse(savedCart);
-        const totalCount = cartItems.reduce(
-          (total: number, item: any) => total + item.quantity,
-          0
-        );
-        setCartItemCount(totalCount);
-      } else {
-        setCartItemCount(0);
-      }
-    };
-
-    updateCartCount();
-
-    // 스토리지 변경 감지
-    const handleStorageChange = () => {
-      updateCartCount();
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-
-    // 커스텀 이벤트로 장바구니 업데이트 감지
-    const handleCartUpdate = () => {
-      updateCartCount();
-    };
-
-    window.addEventListener("cartUpdated", handleCartUpdate);
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("cartUpdated", handleCartUpdate);
-    };
-  }, []);
+  const { cartItemCount } = useCart();
 
   const handleNavigation = (path: string) => {
     if (path.startsWith("#")) {

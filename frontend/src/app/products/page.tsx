@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { allProducts, categories } from "@/data/products";
+import { useCart } from "@/hooks/useCart";
 
 function ProductsContent() {
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -14,6 +15,7 @@ function ProductsContent() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { addToCart } = useCart();
 
   useEffect(() => {
     const category = searchParams.get("category");
@@ -49,46 +51,16 @@ function ProductsContent() {
     return 0;
   });
 
-  const addToCart = (product: any, event: React.MouseEvent) => {
+  const handleAddToCart = (product: any, event: React.MouseEvent) => {
     event.stopPropagation();
 
-    const cartItem = {
+    addToCart({
       id: product.id,
       name: product.name,
       price: product.price,
       image: product.image,
       quantity: 1,
-      color: "",
-      size: "",
-    };
-
-    let existingCart = [];
-    try {
-      const stored = localStorage.getItem("cart");
-      existingCart = stored ? JSON.parse(stored) : [];
-      if (!Array.isArray(existingCart)) {
-        existingCart = [];
-      }
-    } catch (e) {
-      existingCart = [];
-    }
-
-    const existingItemIndex = existingCart.findIndex(
-      (item: any) => item.id === cartItem.id
-    );
-
-    if (existingItemIndex > -1) {
-      existingCart[existingItemIndex].quantity += 1;
-    } else {
-      existingCart.push(cartItem);
-    }
-
-    try {
-      localStorage.setItem("cart", JSON.stringify(existingCart));
-      window.dispatchEvent(new Event("cartUpdated"));
-    } catch (e) {
-      console.error("Failed to write cart to localStorage:", e);
-    }
+    });
   };
 
   return (
@@ -191,7 +163,7 @@ function ProductsContent() {
                     </button>
                     <button
                       className="px-3 py-2 border border-pink-500 text-pink-500 hover:bg-pink-50 rounded-lg transition-all duration-200 cursor-pointer"
-                      onClick={(e) => addToCart(product, e)}
+                      onClick={(e) => handleAddToCart(product, e)}
                       title="장바구니에 담기"
                     >
                       <i className="ri-shopping-cart-line"></i>

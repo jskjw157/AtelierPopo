@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import { useCart } from "@/hooks/useCart";
 
 interface CartItem {
   id: number;
@@ -27,7 +28,6 @@ interface OrderForm {
 }
 
 export default function Checkout() {
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [orderForm, setOrderForm] = useState<OrderForm>({
     name: "",
     email: "",
@@ -41,33 +41,21 @@ export default function Checkout() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const router = useRouter();
+  const {
+    cartItems,
+    totalPrice,
+    getShippingFee,
+    getFinalTotal,
+    clearCart,
+    isLoading,
+  } = useCart();
 
   useEffect(() => {
-    // 장바구니 데이터 불러오기
-    const savedCart = localStorage.getItem("cart");
-    if (savedCart) {
-      setCartItems(JSON.parse(savedCart));
-    } else {
-      // 장바구니가 비어있으면 제품 페이지로 리다이렉트
+    // 로딩이 완료된 후에만 장바구니 체크
+    if (!isLoading && cartItems.length === 0) {
       router.push("/products");
     }
-  }, [router]);
-
-  const getTotalPrice = () => {
-    return cartItems.reduce((total, item) => {
-      const price = parseInt(item.price.replace(/[^0-9]/g, ""), 10);
-      return total + price * item.quantity;
-    }, 0);
-  };
-
-  const getShippingFee = () => {
-    const total = getTotalPrice();
-    return total >= 50000 ? 0 : 3000; // 5만원 이상 무료배송
-  };
-
-  const getFinalTotal = () => {
-    return getTotalPrice() + getShippingFee();
-  };
+  }, [cartItems, router, isLoading]);
 
   const handleInputChange = (
     e: React.ChangeEvent<
@@ -102,8 +90,7 @@ export default function Checkout() {
       await new Promise((resolve) => setTimeout(resolve, 2000)); // 시뮬레이션
 
       // 주문 완료 후 장바구니 비우기
-      localStorage.removeItem("cart");
-      window.dispatchEvent(new Event("cartUpdated"));
+      clearCart();
 
       setShowSuccessModal(true);
     } catch (error) {
@@ -118,6 +105,19 @@ export default function Checkout() {
     router.push("/");
   };
 
+  // 로딩 중이면 로딩 표시
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <i className="ri-loader-4-line text-pink-500 text-4xl mb-4 animate-spin"></i>
+          <p className="text-gray-500">장바구니 정보를 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 로딩 완료 후 장바구니가 비어있으면 빈 장바구니 표시
   if (cartItems.length === 0 && !showSuccessModal) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -364,7 +364,7 @@ export default function Checkout() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">상품금액</span>
                   <span className="text-gray-900">
-                    {getTotalPrice().toLocaleString()}원
+                    {totalPrice.toLocaleString()}원
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
