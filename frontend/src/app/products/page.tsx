@@ -5,124 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-
-const allProducts = [
-  {
-    id: 1,
-    name: "블루밍 에코백",
-    price: "28,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Handmade%20cotton%20eco%20bag%20with%20delicate%20floral%20embroidery%2C%20pastel%20blue%20and%20pink%20colors%2C%20minimalist%20design%2C%20clean%20white%20background%2C%20soft%20lighting%2C%20detailed%20stitching%20visible%2C%20artisan%20craftsmanship%2C%20Korean%20style%20aesthetic%2C%20professional%20product%20photography&width=400&height=400&seq=eco1&orientation=squarish",
-    category: "에코백",
-  },
-  {
-    id: 2,
-    name: "러블리 미니파우치",
-    price: "15,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Small%20handmade%20fabric%20pouch%20with%20heart%20pattern%2C%20soft%20pink%20and%20cream%20colors%2C%20ribbon%20details%2C%20clean%20white%20background%2C%20minimalist%20styling%2C%20Korean%20handcraft%20aesthetic%2C%20delicate%20embroidery%2C%20professional%20product%20photography&width=400&height=400&seq=pouch1&orientation=squarish",
-    category: "파우치",
-  },
-  {
-    id: 3,
-    name: "데일리 캔버스백",
-    price: "35,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Canvas%20daily%20bag%20handmade%20with%20natural%20beige%20color%2C%20simple%20minimal%20design%2C%20leather%20handles%2C%20clean%20white%20background%2C%20professional%20product%20photography%2C%20Korean%20style%20craftsmanship%2C%20soft%20shadows&width=400&height=400&seq=daily1&orientation=squarish",
-    category: "데일리백",
-  },
-  {
-    id: 4,
-    name: "플라워 곱창밴드",
-    price: "8,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Handmade%20fabric%20hair%20scrunchie%20with%20small%20flower%20print%2C%20pastel%20colors%2C%20delicate%20pattern%2C%20clean%20white%20background%2C%20Korean%20style%20hair%20accessory%2C%20soft%20cotton%20material%2C%20professional%20product%20photography&width=400&height=400&seq=band1&orientation=squarish",
-    category: "헤어밴드",
-  },
-  {
-    id: 5,
-    name: "베이비 기저귀파우치",
-    price: "22,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Baby%20diaper%20pouch%20handmade%20with%20soft%20pastel%20colors%2C%20cute%20animal%20motifs%2C%20clean%20white%20background%2C%20organized%20compartments%2C%20Korean%20style%20baby%20accessory%20gentle%20colors%2C%20professional%20product%20photography&width=400&height=400&seq=baby1&orientation=squarish",
-    category: "베이비소품",
-  },
-  {
-    id: 6,
-    name: "스위트 미니백",
-    price: "32,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Small%20handmade%20bag%20with%20bow%20detail%2C%20pastel%20pink%20color%2C%20minimalist%20design%20clean%20white%20background%20Korean%20style%20craftsmanship%20delicate%20stitching%20professional%20product%20photography&width=400&height=400&seq=mini1&orientation=squarish",
-    category: "미니백",
-  },
-  {
-    id: 7,
-    name: "로맨틱 크로스백",
-    price: "42,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Romantic%20crossbody%20bag%20handmade%20with%20soft%20fabric%2C%20pastel%20colors%2C%20delicate%20lace%20details%2C%20clean%20white%20background%2C%20Korean%20style%20fashion%20accessory%20professional%20product%20photography&width=400&height=400&seq=cross1&orientation=squarish",
-    category: "크로스백",
-  },
-  {
-    id: 8,
-    name: "큐티 동전지갑",
-    price: "12,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Small%20cute%20coin%20purse%20handmade%20with%20cartoon%20characters%2C%20bright%20colors%2C%20clean%20white%20background%20Korean%20style%20small%20accessory%20professional%20product%20photography&width=400&height=400&seq=coin1&orientation=squarish",
-    category: "지갑",
-  },
-  {
-    id: 9,
-    name: "프린세스 헤어핀",
-    price: "6,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Princess%20style%20handmade%20hair%20pins%20with%20pearl%20and%20ribbon%20details%2C%20pastel%20colors%2C%20clean%20white%20background%2C%20Korean%20style%20hair%20accessory%20delicate%20craftsmanship%20professional%20product%20photography&width=400&height=400&seq=pin1&orientation=squarish",
-    category: "헤어핀",
-  },
-  {
-    id: 10,
-    name: "빈티지 숄더백",
-    price: "38,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Vintage%20style%20shoulder%20bag%20handmade%20with%20natural%20linen%20fabric%2C%20neutral%20colors%2C%20clean%20white%20background%2C%20Korean%20style%20craftsmanship%20professional%20product%20photography&width=400&height=400&seq=shoulder1&orientation=squarish",
-    category: "숄더백",
-  },
-  {
-    id: 11,
-    name: "스마일 키링",
-    price: "9,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Smile%20face%20keychain%20handmade%20with%20colorful%20felt%20fabric%2C%20cute%20design%2C%20clean%20white%20background%2C%20Korean%20style%20small%20accessory%20professional%20product%20photography&width=400&height=400&seq=key1&orientation=squarish",
-    category: "키링",
-  },
-  {
-    id: 12,
-    name: "엘레강스 클루시",
-    price: "45,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Elegant%20clutch%20bag%20handmade%20with%20silk%20fabric%2C%20sophisticated%20design%20clean%20white%20background%20Korean%20style%20luxury%20accessory%20professional%20product%20photography&width=400&height=400&seq=clutch1&orientation=squarish",
-    category: "클러치",
-  },
-];
-
-const categories = [
-  "전체",
-  "에코백",
-  "파우치",
-  "데일리백",
-  "헤어밴드",
-  "베이비소품",
-  "미니백",
-  "크로스백",
-  "지갑",
-  "헤어핀",
-  "숄더백",
-  "키링",
-  "클러치",
-];
+import { allProducts, categories } from "@/data/products";
 
 function ProductsContent() {
-  const [selectedCategory, setSelectedCategory] = useState("전체");
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [sortBy, setSortBy] = useState("name");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -143,7 +29,7 @@ function ProductsContent() {
 
   const filteredProducts = allProducts.filter((product) => {
     const matchesCategory =
-      selectedCategory === "전체" || product.category === selectedCategory;
+      selectedCategory === "all" || product.category === selectedCategory;
     const matchesSearch =
       searchQuery === "" ||
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -229,15 +115,15 @@ function ProductsContent() {
             <div className="flex flex-wrap gap-2">
               {categories.map((category) => (
                 <button
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
+                  key={category.value}
+                  onClick={() => setSelectedCategory(category.value)}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap cursor-pointer ${
-                    selectedCategory === category
+                    selectedCategory === category.value
                       ? "bg-pink-500 text-white"
                       : "bg-gray-100 text-gray-700 hover:bg-pink-100 hover:text-pink-600"
                   }`}
                 >
-                  {category}
+                  {category.name}
                 </button>
               ))}
             </div>

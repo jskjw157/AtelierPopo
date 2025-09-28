@@ -1,57 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-
-const products = [
-  {
-    id: 1,
-    name: "블루밍 에코백",
-    price: "28,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Handmade%20cotton%20eco%20bag%20with%20delicate%20floral%20embroidery%2C%20pastel%20blue%20and%20pink%20colors%2C%20minimalist%20design%2C%20clean%20white%20background%2C%20soft%20lighting%2C%20detailed%20stitching%20visible%2C%20artisan%20craftsmanship%2C%20Korean%20style%20aesthetic%2C%20professional%20product%20photography&width=400&height=400&seq=eco1&orientation=squarish",
-    category: "에코백",
-  },
-  {
-    id: 2,
-    name: "러블리 미니파우치",
-    price: "15,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Small%20handmade%20fabric%20pouch%20with%20heart%20pattern%2C%20soft%20pink%20and%20cream%20colors%2C%20ribbon%20details%2C%20clean%20white%20background%2C%20minimalist%20styling%2C%20Korean%20handcraft%20aesthetic%2C%20delicate%20embroidery%2C%20professional%20product%20photography&width=400&height=400&seq=pouch1&orientation=squarish",
-    category: "파우치",
-  },
-  {
-    id: 3,
-    name: "데일리 캔버스백",
-    price: "35,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Canvas%20daily%20bag%20handmade%20with%20natural%20beige%20color%2C%20simple%20minimal%20design%2C%20leather%20handles%2C%20clean%20white%20background%2C%20professional%20product%20photography%2C%20Korean%20style%20craftsmanship%2C%20soft%20shadows&width=400&height=400&seq=daily1&orientation=squarish",
-    category: "데일리백",
-  },
-  {
-    id: 4,
-    name: "플라워 곱창밴드",
-    price: "8,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Handmade%20fabric%20hair%20scrunchie%20with%20small%20flower%20print%2C%20pastel%20colors%2C%20delicate%20pattern%2C%20clean%20white%20background%2C%20Korean%20style%20hair%20accessory%2C%20soft%20cotton%20material%2C%20professional%20product%20photography&width=400&height=400&seq=band1&orientation=squarish",
-    category: "헤어밴드",
-  },
-  {
-    id: 5,
-    name: "베이비 기저귀파우치",
-    price: "22,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Baby%20diaper%20pouch%20handmade%20with%20soft%20pastel%20colors%2C%20cute%20animal%20motifs%2C%20clean%20white%20background%2C%20organized%20compartments%2C%20Korean%20style%20baby%20accessory%2C%20gentle%20colors%2C%20professional%20product%20photography&width=400&height=400&seq=baby1&orientation=squarish",
-    category: "베이비소품",
-  },
-  {
-    id: 6,
-    name: "스위트 미니백",
-    price: "32,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Small%20handmade%20bag%20with%20bow%20detail%2C%20pastel%20pink%20color%2C%20minimalist%20design%2C%20clean%20white%20background%2C%20Korean%20style%20craftsmanship%2C%20delicate%20stitching%2C%20professional%20product%20photography&width=400&height=400&seq=mini1&orientation=squarish",
-    category: "미니백",
-  },
-];
+import { featuredProducts } from "@/data/products";
 
 export default function FeaturedProducts() {
   const router = useRouter();
@@ -80,7 +30,7 @@ export default function FeaturedProducts() {
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8"
           data-product-shop
         >
-          {products.map((product) => (
+          {featuredProducts.map((product) => (
             <div
               key={product.id}
               className="bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden cursor-pointer"

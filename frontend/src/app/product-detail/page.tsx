@@ -4,64 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-
-const allProducts = [
-  {
-    id: 1,
-    name: "블루밍 에코백",
-    price: "28,000원",
-    originalPrice: "35,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Handmade%20cotton%20eco%20bag%20with%20delicate%20floral%20embroidery%2C%20pastel%20blue%20and%20pink%20colors%2C%20minimalist%20design%2C%20clean%20white%20background%2C%20soft%20lighting%2C%20detailed%20stitching%20visible%2C%20artisan%20craftsmanship%2C%20Korean%20style%20aesthetic%2C%20professional%20product%20photography&width=600&height=600&seq=eco1detail&orientation=squarish",
-    images: [
-      "https://readdy.ai/api/search-image?query=Handmade%20cotton%20eco%20bag%20with%20delicate%20floral%20embroidery%2C%20pastel%20blue%20and%20pink%20colors%2C%20minimalist%20design%2C%20clean%20white%20background%2C%20soft%20lighting%2C%20detailed%20stitching%20visible%2C%20artisan%20craftsmanship%2C%20Korean%20style%20aesthetic%2C%20professional%20product%20photography&width=600&height=600&seq=eco1detail&orientation=squarish",
-      "https://readdy.ai/api/search-image?query=Cotton%20eco%20bag%20interior%20view%20showing%20quality%20lining%20and%20pockets%2C%20clean%20white%20background%2C%20Korean%20handcraft%20details%2C%20professional%20product%20photography&width=600&height=600&seq=eco1interior&orientation=squarish",
-      "https://readdy.ai/api/search-image?query=Eco%20bag%20styled%20with%20casual%20outfit%2C%20lifestyle%20photography%2C%20Korean%20aesthetic%2C%20natural%20lighting%2C%20clean%20background&width=600&height=600&seq=eco1lifestyle&orientation=squarish",
-    ],
-    category: "에코백",
-    description:
-      "일상을 더욱 특별하게 만들어주는 블루밍 에코백입니다. 부드러운 코튼 소재에 섬세한 플로럴 자수가 포인트로, 어떤 스타일링에도 완벽하게 어울립니다. 넉넉한 수납공간과 튼튼한 손잡이로 실용성도 뛰어납니다.",
-    features: [
-      "프리미엄 코튼 100% 소재",
-      "핸드메이드 플로럴 자수",
-      "넉넉한 수납공간 (40cm x 35cm)",
-      "튼튼한 손잡이 (25cm)",
-      "내부 작은 포켓 포함",
-    ],
-    colors: ["블루", "핑크", "화이트"],
-    sizes: ["원사이즈"],
-    inStock: true,
-    rating: 4.8,
-    reviews: 127,
-  },
-  {
-    id: 2,
-    name: "러블리 미니파우치",
-    price: "15,000원",
-    originalPrice: "18,000원",
-    image:
-      "https://readdy.ai/api/search-image?query=Small%20handmade%20fabric%20pouch%20with%20heart%20pattern%2C%20soft%20pink%20and%20cream%20colors%2C%20ribbon%20details%2C%20clean%20white%20background%2C%20minimalist%20styling%2C%20Korean%20handcraft%20aesthetic%2C%20delicate%20embroidery%2C%20professional%20product%20photography&width=600&height=600&seq=pouch1detail&orientation=squarish",
-    images: [
-      "https://readdy.ai/api/search-image?query=Small%20handmade%20fabric%20pouch%20with%20heart%20pattern%2C%20soft%20pink%20and%20cream%20colors%2C%20ribbon%20details%2C%20clean%20white%20background%2C%20minimalist%20styling%2C%20Korean%20handcraft%20aesthetic%2C%20delicate%20embroidery%2C%20professional%20product%20photography&width=600&height=600&seq=pouch1detail&orientation=squarish",
-      "https://readdy.ai/api/search-image?query=Mini%20pouch%20opened%20showing%20interior%20compartments%2C%20clean%20white%20background%2C%20Korean%20handcraft%20quality%2C%20professional%20product%20photography&width=600&height=600&seq=pouch1open&orientation=squarish",
-    ],
-    category: "파우치",
-    description:
-      "사랑스러운 하트 패턴이 돋보이는 미니파우치입니다. 작지만 알찬 수납력으로 립스틱, 동전, 작은 소품들을 깔끔하게 정리할 수 있어요. 리본 디테일이 더욱 귀여운 매력을 더합니다.",
-    features: [
-      "부드러운 패브릭 소재",
-      "핸드메이드 하트 자수",
-      "컴팩트한 사이즈 (12cm x 8cm)",
-      "리본 장식 디테일",
-      "YKK 지퍼 사용",
-    ],
-    colors: ["핑크", "크림"],
-    sizes: ["원사이즈"],
-    inStock: true,
-    rating: 4.9,
-    reviews: 89,
-  },
-];
+import { getProductById, allProducts } from "@/data/products";
 
 function ProductDetailContent() {
   const searchParams = useSearchParams();
@@ -78,9 +21,7 @@ function ProductDetailContent() {
     const productId = searchParams.get("id");
 
     if (productId) {
-      const foundProduct = allProducts.find(
-        (p) => p.id === parseInt(productId, 10)
-      );
+      const foundProduct = getProductById(parseInt(productId, 10));
       if (foundProduct) {
         setProduct(foundProduct);
         setSelectedColor(foundProduct.colors?.[0] ?? "");
@@ -198,7 +139,10 @@ function ProductDetailContent() {
           <div className="space-y-4">
             <div className="aspect-square overflow-hidden rounded-2xl bg-gray-50">
               <img
-                src={product.images?.[selectedImage] ?? product.image}
+                src={
+                  (product.images && product.images[selectedImage]) ||
+                  product.image
+                }
                 alt={product.name}
                 className="w-full h-full object-cover object-top"
               />
