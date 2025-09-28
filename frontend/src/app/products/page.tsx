@@ -7,6 +7,7 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { allProducts, categories } from "@/data/products";
 import { useCart } from "@/hooks/useCart";
+import { Button } from "@/components/ui/button";
 
 function ProductsContent() {
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -152,22 +153,25 @@ function ProductsContent() {
                     {product.price}
                   </p>
                   <div className="flex gap-2 mt-4">
-                    <button
-                      className="flex-1 bg-pink-500 hover:bg-pink-600 text-white py-2 rounded-lg font-medium transition-all duration-200 whitespace-nowrap cursor-pointer"
+                    <Button
+                      variant="pinkPrimary"
+                      size="productButton"
+                      className="flex-1"
                       onClick={(e) => {
                         e.stopPropagation();
                         router.push(`/product-detail?id=${product.id}`);
                       }}
                     >
                       상세보기
-                    </button>
-                    <button
-                      className="px-3 py-2 border border-pink-500 text-pink-500 hover:bg-pink-50 rounded-lg transition-all duration-200 cursor-pointer"
+                    </Button>
+                    <Button
+                      variant="pinkOutline"
+                      size="icon"
                       onClick={(e) => handleAddToCart(product, e)}
                       title="장바구니에 담기"
                     >
                       <i className="ri-shopping-cart-line"></i>
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>

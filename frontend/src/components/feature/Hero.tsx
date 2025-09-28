@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+
 export default function Hero() {
   const scrollToProducts = () => {
     const productsSection = document.getElementById("products");
@@ -55,18 +57,20 @@ export default function Hero() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <button
+            <Button
               onClick={scrollToProducts}
-              className="bg-pink-500 hover:bg-pink-600 text-white px-8 py-4 rounded-full font-medium transition-all duration-300 shadow-lg hover:shadow-xl whitespace-nowrap cursor-pointer"
+              variant="heroRounded"
+              size="heroButton"
             >
               제품 둘러보기
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={scrollToAbout}
-              className="border-2 border-gray-300 hover:border-pink-500 text-gray-700 hover:text-pink-500 px-8 py-4 rounded-full font-medium transition-all duration-300 whitespace-nowrap cursor-pointer"
+              variant="grayOutline"
+              size="heroButton"
             >
               아틀리에 소개
-            </button>
+            </Button>
           </div>
         </div>
       </div>

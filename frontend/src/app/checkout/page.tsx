@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useCart } from "@/hooks/useCart";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface CartItem {
   id: number;
@@ -162,30 +165,26 @@ export default function Checkout() {
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      이름 *
-                    </label>
-                    <input
+                    <Label htmlFor="name">이름 *</Label>
+                    <Input
+                      id="name"
                       type="text"
                       name="name"
                       value={orderForm.name}
                       onChange={handleInputChange}
                       required
-                      className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
                       placeholder="이름을 입력해주세요"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      이메일 *
-                    </label>
-                    <input
+                    <Label htmlFor="email">이메일 *</Label>
+                    <Input
+                      id="email"
                       type="email"
                       name="email"
                       value={orderForm.email}
                       onChange={handleInputChange}
                       required
-                      className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
                       placeholder="이메일을 입력해주세요"
                     />
                   </div>
