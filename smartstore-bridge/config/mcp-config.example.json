@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "atelier-popo-smartstore": {
+      "command": "node",
+      "args": [
+        "C:/CHANGE_ME/atelier-popo-smartstore-bridge/src/mcp.js"
+      ],
+      "env": {
+        "ATELIER_POPO_CONFIG": "C:/CHANGE_ME/atelier-popo-smartstore-bridge/config/atelier-popo.json",
+        "NAVER_CLIENT_ID": "CHANGE_ME",
+        "NAVER_CLIENT_SECRET": "CHANGE_ME",
+        "NAVER_TOKEN_TYPE": "SELF",
+        "NAVER_ALLOW_WRITES": "false"
+      }
+    }
+  }
+}

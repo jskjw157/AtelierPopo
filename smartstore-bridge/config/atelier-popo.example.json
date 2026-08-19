@@ -1,0 +1,54 @@
+{
+  "catalogRoot": "D:/CHANGE_ME/queensilver_all_products_20260809",
+  "workDir": "../work",
+  "databasePath": "../work/atelier-popo.sqlite",
+  "templateFile": "./naver-product-template.example.json",
+  "sellerCodePrefix": "QUEEN",
+  "writeConfirmation": "REGISTER",
+  "includeSoldOut": false,
+  "defaultStockQuantity": 999,
+  "categories": {
+    "귀걸이": "REPLACE_WITH_NAVER_LEAF_CATEGORY_ID",
+    "피어싱": "REPLACE_WITH_NAVER_LEAF_CATEGORY_ID",
+    "반지": "REPLACE_WITH_NAVER_LEAF_CATEGORY_ID",
+    "목걸이": "REPLACE_WITH_NAVER_LEAF_CATEGORY_ID",
+    "팔찌": "REPLACE_WITH_NAVER_LEAF_CATEGORY_ID",
+    "발찌": "REPLACE_WITH_NAVER_LEAF_CATEGORY_ID",
+    "애완용_미아방지": "REPLACE_WITH_NAVER_LEAF_CATEGORY_ID",
+    "연예인스타일": "REPLACE_WITH_NAVER_LEAF_CATEGORY_ID",
+    "단종_주문제작가능": "REPLACE_WITH_NAVER_LEAF_CATEGORY_ID",
+    "애완용/미아방지": "REPLACE_WITH_NAVER_LEAF_CATEGORY_ID",
+    "단종/주문제작 가능": "REPLACE_WITH_NAVER_LEAF_CATEGORY_ID"
+  },
+  "pricing": {
+    "mode": "markup",
+    "sourcePriceIncludesVat": false,
+    "vatRate": 0.1,
+    "multiplier": 2.2,
+    "flatFee": 0,
+    "minimumPrice": 19900,
+    "roundUnit": 1000,
+    "ending": 900
+  },
+  "images": {
+    "representativeIndex": 1,
+    "excludeDetailIndices": [
+      2
+    ],
+    "maxOptionalImages": 9,
+    "detailImageWidth": 860,
+    "representativeSize": 1000,
+    "jpegQuality": 88,
+    "uploadBatchMaxFiles": 10,
+    "uploadBatchMaxBytes": 9500000
+  },
+  "channel": {
+    "channelProductDisplayStatusType": "ON",
+    "naverShoppingRegistration": true,
+    "storeKeepExclusiveProduct": false
+  },
+  "batch": {
+    "maxSize": 20,
+    "delayMs": 800
+  }
+}

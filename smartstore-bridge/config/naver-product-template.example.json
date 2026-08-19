@@ -1,0 +1,17 @@
+{
+  "originProduct": {
+    "statusType": "SALE",
+    "saleType": "NEW",
+    "deliveryInfo": {
+      "__SETUP_REQUIRED__": "스마트스토어의 실제 배송/반품지 설정을 반영한 유효한 deliveryInfo 객체로 교체하세요."
+    },
+    "detailAttribute": {
+      "__SETUP_REQUIRED__": "원산지, A/S, 상품정보제공고시(FASHION_ITEMS) 등 실제 스토어 정보가 들어간 유효한 detailAttribute 객체로 교체하세요."
+    }
+  },
+  "smartstoreChannelProduct": {
+    "channelProductDisplayStatusType": "ON",
+    "naverShoppingRegistration": true,
+    "storeKeepExclusiveProduct": false
+  }
+}
