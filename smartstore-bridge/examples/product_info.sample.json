@@ -1,0 +1,76 @@
+{
+  "product_id": "1905",
+  "name": "925 실버 큐빅 물방울 스카시 원터치 귀걸이",
+  "categories": [
+    "귀걸이"
+  ],
+  "source_url": "https://www.queensilver.kr/product/925-실버-큐빅-물방울-스카시-원터치-귀걸이/1905/category/45/display/1/",
+  "collected_at": "2026-08-10T08:07:52.646700+00:00",
+  "sale_price_display": "14,500원 (부가세별도)",
+  "product_info": {
+    "상품명": "925 실버 큐빅 물방울 스카시 원터치 귀걸이",
+    "판매가": "14,500원 (부가세별도)",
+    "색상": "- [필수] 옵션을 선택해 주세요 - ------------------- 실버 로즈골드 (+2,000원) 골드 (+2,000원)"
+  },
+  "options": [
+    {
+      "name": "색상",
+      "values": [
+        {
+          "name": "실버",
+          "value": "P0000CVH000A",
+          "sold_out": false
+        },
+        {
+          "name": "로즈골드 (+2,000원)",
+          "value": "P0000CVH000B",
+          "sold_out": false
+        },
+        {
+          "name": "골드 (+2,000원)",
+          "value": "P0000CVH000C",
+          "sold_out": false
+        }
+      ]
+    }
+  ],
+  "sold_out": true,
+  "image_urls": [
+    "https://www.queensilver.kr/web/product/big/202607/e9d40496ab10b1394a4c0f26996fd60b.webp",
+    "https://www.queensilver.kr/web/product/small/202607/eb1f047c65cd71d9f2c3ba1ae9ee6dbc.webp",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/4495a9cb2f13110b789fa031e7d58b6d.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/c78cdd45982aff934e46d8dae84ce402.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/440abb05e99ba8bfbf747b3989dd7627.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/3fbd23c42db30b3c6797d1b7c8e469ad.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/35c24a76d465ee71bd2b22f8b88c4c6b.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/036302e167330d30449da0c759aaffa3.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/d2d60e56dd6b92902954820edfe90fba.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/ebbc35fe84c9b1b48ab5e8e63eab6e7d.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/d9e25172a45a9bb774597018050da579.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/90b47e8cfc278447159b368300d4df13.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/93820713548a7401030085457f26dc4b.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/b3d5a790a4a0674a18d3b2075affc0db.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/79b1caee739ca3f41e7ec2c3aecd9338.jpg",
+    "https://www.queensilver.kr/web/upload/NNEditor/20260720/e76c50da92b9cf898949a1904896dafa.jpg"
+  ],
+  "downloaded_images": [
+    "002_eb1f047c65cd71d9f2c3ba1ae9ee6dbc.webp",
+    "004_c78cdd45982aff934e46d8dae84ce402.jpg",
+    "003_4495a9cb2f13110b789fa031e7d58b6d.jpg",
+    "001_e9d40496ab10b1394a4c0f26996fd60b.webp",
+    "006_3fbd23c42db30b3c6797d1b7c8e469ad.jpg",
+    "008_036302e167330d30449da0c759aaffa3.jpg",
+    "009_d2d60e56dd6b92902954820edfe90fba.jpg",
+    "005_440abb05e99ba8bfbf747b3989dd7627.jpg",
+    "010_ebbc35fe84c9b1b48ab5e8e63eab6e7d.jpg",
+    "012_90b47e8cfc278447159b368300d4df13.jpg",
+    "011_d9e25172a45a9bb774597018050da579.jpg",
+    "013_93820713548a7401030085457f26dc4b.jpg",
+    "014_b3d5a790a4a0674a18d3b2075affc0db.jpg",
+    "016_e76c50da92b9cf898949a1904896dafa.jpg",
+    "015_79b1caee739ca3f41e7ec2c3aecd9338.jpg",
+    "007_35c24a76d465ee71bd2b22f8b88c4c6b.jpg"
+  ],
+  "image_download_errors": [],
+  "local_folder": "귀걸이\\1905_925 실버 큐빅 물방울 스카시 원터치 귀걸이"
+}
