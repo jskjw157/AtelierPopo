@@ -228,7 +228,7 @@ ATELIER_HTTP_ALLOW_BATCH_WRITES=true
 
 ## 9. Hostinger 배포
 
-자세한 절차는 [`docs/HOSTINGER_DEPLOY.md`](docs/HOSTINGER_DEPLOY.md)를 참고하세요.
+배포, 인증, 카탈로그 검증, 상품 미리보기, 상품 1개 실등록, 멱등성 확인, 소량 배치, 즉시 중지·롤백까지의 전체 절차는 [`docs/HOSTINGER_DEPLOY.md`](docs/HOSTINGER_DEPLOY.md)를 따르세요.
 
 핵심 설정:
 
@@ -284,10 +284,23 @@ npm run inspect:mcp
 
 ## 12. 테스트
 
+로컬 정적 검사와 단위·통합 테스트:
+
 ```bash
 npm run check
 npm test
 ```
+
+배포된 Hostinger API의 읽기 전용 원격 smoke test:
+
+```bash
+ATELIER_BASE_URL="https://YOUR_DOMAIN" \
+ATELIER_API_KEY="YOUR_ATELIER_API_KEY" \
+ATELIER_TEST_PRODUCT_ID="1905" \
+npm run test:remote
+```
+
+인프라만 먼저 확인하려면 `ATELIER_SMOKE_MODE=infra`를 추가합니다. 이 스크립트는 상품 등록·수정 API를 호출하지 않습니다. 자세한 합격 기준과 최초 상품 1개 등록 절차는 [`docs/HOSTINGER_DEPLOY.md`](docs/HOSTINGER_DEPLOY.md)를 따르세요.
 
 테스트 범위에는 가격·옵션·페이로드·카탈로그 경로·SQLite 멱등성 작업·HTTP 인증·절대경로 차단·비동기 등록·원격 쓰기 잠금이 포함됩니다.
 
