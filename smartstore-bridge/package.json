@@ -18,8 +18,9 @@
     "cli": "node src/cli.js",
     "mcp": "node src/mcp.js",
     "test": "node --test",
-    "check": "node --check src/cli.js && node --check src/mcp.js && node --check src/http.js && node --check src/http/server.js && node --check src/http/runtime.js && node --check src/http/routes-system.js && node --check src/http/routes-products.js && node --check src/http/routes-ledger.js && node --check src/http/openapi.js",
-    "inspect:mcp": "npx @modelcontextprotocol/inspector node src/mcp.js"
+    "check": "node --check src/cli.js && node --check src/mcp.js && node --check src/http.js && node --check src/http/server.js && node --check src/http/runtime.js && node --check src/http/routes-system.js && node --check src/http/routes-products.js && node --check src/http/routes-ledger.js && node --check src/http/openapi.js && node --check scripts/remote-smoke-test.mjs",
+    "inspect:mcp": "npx @modelcontextprotocol/inspector node src/mcp.js",
+    "test:remote": "node scripts/remote-smoke-test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
