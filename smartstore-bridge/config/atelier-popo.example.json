@@ -40,7 +40,8 @@
     "representativeSize": 1000,
     "jpegQuality": 88,
     "uploadBatchMaxFiles": 10,
-    "uploadBatchMaxBytes": 9500000
+    "uploadBatchMaxBytes": 9500000,
+    "cleanupNormalizedAfterUpload": true
   },
   "channel": {
     "channelProductDisplayStatusType": "ON",

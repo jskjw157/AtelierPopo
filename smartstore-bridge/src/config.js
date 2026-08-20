@@ -31,6 +31,12 @@ function resolveFrom(baseDir, value) {
   return path.resolve(baseDir, value);
 }
 
+function resolveEnvPath(name, fallback, baseDir) {
+  const value = process.env[name];
+  if (!value) return resolveFrom(baseDir, fallback);
+  return path.isAbsolute(value) ? value : path.resolve(value);
+}
+
 export function loadConfig(explicitPath) {
   loadDotEnv();
   const configPath = path.resolve(explicitPath || process.env.ATELIER_POPO_CONFIG || './config/atelier-popo.example.json');
@@ -42,10 +48,12 @@ export function loadConfig(explicitPath) {
   const config = {
     ...raw,
     configPath,
-    workDir: resolveFrom(baseDir, raw.workDir || '../work'),
-    databasePath: resolveFrom(baseDir, raw.databasePath || '../work/atelier-popo.sqlite'),
-    templateFile: resolveFrom(baseDir, raw.templateFile),
-    catalogRoot: raw.catalogRoot ? resolveFrom(baseDir, raw.catalogRoot) : undefined,
+    workDir: resolveEnvPath('ATELIER_WORK_DIR', raw.workDir || '../work', baseDir),
+    databasePath: resolveEnvPath('ATELIER_DATABASE_PATH', raw.databasePath || '../work/atelier-popo.sqlite', baseDir),
+    templateFile: resolveEnvPath('ATELIER_TEMPLATE_FILE', raw.templateFile, baseDir),
+    catalogRoot: process.env.ATELIER_CATALOG_ROOT
+      ? resolveEnvPath('ATELIER_CATALOG_ROOT', undefined, baseDir)
+      : (raw.catalogRoot ? resolveFrom(baseDir, raw.catalogRoot) : undefined),
     naver: {
       clientId: process.env.NAVER_CLIENT_ID || '',
       clientSecret: process.env.NAVER_CLIENT_SECRET || '',

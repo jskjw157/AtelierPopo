@@ -1,20 +1,21 @@
 # 초기 설정 체크리스트
 
-- [ ] Node.js 22.5 이상 설치
-- [ ] `npm install`
+- [ ] Node.js 22.5 이상 확인
+- [ ] `npm install`, `npm run check`, `npm test` 성공
 - [ ] `.env.example`을 `.env`로 복사
-- [ ] 내 스토어 애플리케이션의 ID/시크릿 입력
-- [ ] 실제 API 호출 서버의 공인 IPv4 등록
-- [ ] `config/atelier-popo.example.json`을 `config/atelier-popo.json`으로 복사
-- [ ] `catalogRoot`를 퀸실버 로컬 데이터 루트로 변경
-- [ ] 9개 소스 카테고리를 네이버 리프 카테고리 ID로 매핑
-- [ ] 가격 배수·최저가·끝자리 정책 검토
-- [ ] 스토어의 실제 배송/반품지/A/S/원산지/상품정보고시가 들어간 상품 템플릿 완성
-- [ ] `auth test` 통과
-- [ ] 품절이 아닌 상품 1개 `validate` 통과
-- [ ] 같은 상품 1개 `preview` 결과 수동 검토
-- [ ] 테스트 상품 1개만 실제 등록
-- [ ] 스마트스토어센터에서 상품명·가격·옵션·이미지·배송/반품 정보 검수
-- [ ] 10개 배치 dry-run
-- [ ] 10개 실제 배치 후 재검수
-- [ ] 문제없을 때만 20개 단위로 확대
+- [ ] 네이버 Client ID/Secret 입력
+- [ ] Hostinger 외부 송신 IPv4를 네이버 API 호출 IP로 등록
+- [ ] 32자 이상 `ATELIER_API_KEY` 생성
+- [ ] 퀸실버 전체 폴더를 서버에 배치
+- [ ] `ATELIER_CATALOG_ROOT` 지정
+- [ ] 영속 `ATELIER_WORK_DIR`, `ATELIER_DATABASE_PATH` 지정
+- [ ] 카테고리별 네이버 리프 카테고리 ID 입력
+- [ ] 기존 판매 상품에서 네이버 템플릿 추출
+- [ ] `npm start` 후 `/health`, `/health/ready` 확인
+- [ ] `/api/v1/auth/test` 성공
+- [ ] 상품 1개 `/validate` 성공
+- [ ] 상품 1개 `/preview` 검수
+- [ ] `NAVER_ALLOW_WRITES=true`, `ATELIER_HTTP_ALLOW_WRITES=true` 설정
+- [ ] 상품 1개 비동기 등록 및 operation 성공 확인
+- [ ] 스마트스토어센터에서 실제 등록 결과 직접 검수
+- [ ] 쓰기 잠금을 다시 false로 내리거나 소량 배치만 승인

@@ -1,21 +1,24 @@
 {
   "name": "atelier-popo-smartstore-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "아뜰리에포포 전용 퀸실버 → 네이버 스마트스토어 상품 등록 CLI/MCP",
+  "description": "아뜰리에포포 전용 퀸실버 → 네이버 스마트스토어 상품 등록 CLI/MCP/HTTP API",
   "type": "module",
   "engines": {
     "node": ">=22.5.0"
   },
   "bin": {
     "atelier-popo": "./src/cli.js",
-    "atelier-popo-mcp": "./src/mcp.js"
+    "atelier-popo-mcp": "./src/mcp.js",
+    "atelier-popo-http": "./src/http.js"
   },
   "scripts": {
+    "start": "node src/http.js",
+    "http": "node src/http.js",
     "cli": "node src/cli.js",
     "mcp": "node src/mcp.js",
     "test": "node --test",
-    "check": "node --check src/cli.js && node --check src/mcp.js",
+    "check": "node --check src/cli.js && node --check src/mcp.js && node --check src/http.js && node --check src/http/server.js && node --check src/http/runtime.js && node --check src/http/routes-system.js && node --check src/http/routes-products.js && node --check src/http/routes-ledger.js && node --check src/http/openapi.js",
     "inspect:mcp": "npx @modelcontextprotocol/inspector node src/mcp.js"
   },
   "dependencies": {

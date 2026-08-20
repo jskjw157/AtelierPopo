@@ -57,6 +57,7 @@ export async function normalizeProductImages(productId, imagePlan, config, workD
     ));
   }
   return {
+    outputDir,
     representative: { path: representativePath, size: fs.statSync(representativePath).size },
     detail
   };
@@ -105,11 +106,17 @@ export async function uploadImages(client, files, imageConfig) {
 
 export async function prepareAndUploadProductImages(client, productId, imagePlan, config, workDir) {
   const normalized = await normalizeProductImages(productId, imagePlan, config.images || {}, workDir);
-  const representativeUrls = await uploadImages(client, [normalized.representative], config.images || {});
-  const detailUrls = await uploadImages(client, normalized.detail, config.images || {});
-  return {
-    representative: representativeUrls[0],
-    optional: detailUrls.slice(1, 1 + Number(config.images?.maxOptionalImages ?? 9)),
-    detail: detailUrls
-  };
+  try {
+    const representativeUrls = await uploadImages(client, [normalized.representative], config.images || {});
+    const detailUrls = await uploadImages(client, normalized.detail, config.images || {});
+    return {
+      representative: representativeUrls[0],
+      optional: detailUrls.slice(1, 1 + Number(config.images?.maxOptionalImages ?? 9)),
+      detail: detailUrls
+    };
+  } finally {
+    if (config.images?.cleanupNormalizedAfterUpload !== false) {
+      fs.rmSync(normalized.outputDir, { recursive: true, force: true });
+    }
+  }
 }

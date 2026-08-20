@@ -1,0 +1,16 @@
+services:
+  atelier-popo-api:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config:/app/config:ro
+      - ./work:/app/work
+      - /absolute/path/to/queensilver_all_products_20260809:/data/catalog:ro
+    environment:
+      ATELIER_CATALOG_ROOT: /data/catalog
+      ATELIER_WORK_DIR: /app/work
+      ATELIER_DATABASE_PATH: /app/work/atelier-popo.sqlite

@@ -3,6 +3,7 @@ import { NaverCommerceClient } from './naver/client.js';
 import { NaverProductsApi } from './naver/products.js';
 import { Ledger } from './infrastructure/ledger.js';
 import { ProductService } from './application/product-service.js';
+import { CatalogRepository } from './application/catalog-repository.js';
 
 export function bootstrap(configPath) {
   const config = loadConfig(configPath);
@@ -15,6 +16,7 @@ export function bootstrap(configPath) {
   });
   const productsApi = new NaverProductsApi(client);
   const ledger = new Ledger(config.databasePath);
+  const catalogRepository = new CatalogRepository(config.catalogRoot);
   const productService = new ProductService({ config, client, productsApi, ledger });
-  return { config, client, productsApi, ledger, productService };
+  return { config, client, productsApi, ledger, catalogRepository, productService };
 }

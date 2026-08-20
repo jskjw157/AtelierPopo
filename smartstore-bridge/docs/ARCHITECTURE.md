@@ -1,68 +1,78 @@
-# 아뜰리에포포 스마트스토어 브리지 아키텍처
+# 아키텍처
 
-## 목표
-
-퀸실버 수집 데이터의 `product_info.json`과 로컬 이미지를 읽어, 검증 가능한 네이버 커머스API 상품 등록 요청으로 변환한다. 같은 핵심 서비스를 CLI와 MCP가 공유한다.
+## 실행 인터페이스
 
 ```text
-퀸실버 catalog_manifest.json / product_info.json / images
-                           │
-                           ▼
-                 Source Adapter & Validator
-                           │
-                ┌──────────┴──────────┐
-                ▼                     ▼
-        Pricing / Option Mapper   Image Normalizer
-                │                     │
-                └──────────┬──────────┘
-                           ▼
-                    Payload Builder
-                           │
-          ┌────────────────┼────────────────┐
-          ▼                ▼                ▼
-       Dry-run           CLI              MCP
-          │                │                │
-          └────────────────┴────────────────┘
-                           ▼
-                  Naver Commerce Client
-                           │
-                           ▼
-                  네이버 스마트스토어
+CLI ─────────────┐
+stdio MCP ───────┼── ProductService ── NaverCommerceClient ── 네이버 커머스API
+HTTP API ────────┘           │
+                              ├─ CatalogRepository
+                              ├─ 이미지 정규화/업로드
+                              └─ SQLite Ledger
 ```
 
-## 모듈 경계
+CLI, MCP, HTTP는 상품 변환과 등록 핵심 로직을 공유합니다.
 
-- `domain/`: 외부 I/O가 없는 가격·옵션·페이로드 변환 규칙
-- `naver/`: 인증, 재시도, 상품/이미지 API
-- `application/`: 한 상품 등록 파이프라인과 배치 오케스트레이션
-- `infrastructure/`: SQLite 원장, 로그
-- `cli.js`, `mcp.js`: 얇은 인터페이스
+## HTTP 계층
 
-## 멱등성
+```text
+Hostinger HTTPS Reverse Proxy
+            │
+            ▼
+Node HTTP Server
+  ├─ Bearer API Key
+  ├─ Request ID / JSON Log
+  ├─ Body Size / Rate Limit
+  ├─ Product-ID-only Router
+  ├─ Write Safety Gate
+  └─ Async Operation Queue
+            │
+            ▼
+SQLite api_operations
+            │
+            ▼
+ProductService.create()
+```
 
-퀸실버 상품번호를 `QUEEN-<product_id>` 형태의 `sellerManagementCode`로 사용한다. 등록 전 상품 검색 API로 같은 코드를 조회하고, 존재하면 신규 등록을 중단한다. 로컬 SQLite 원장에도 상태와 응답 번호를 저장한다.
+외부 호출자는 서버 파일 경로를 전달할 수 없습니다. HTTP API는 `productId`를 받고 `CatalogRepository`가 `catalog_manifest.json`에서 내부 경로를 찾습니다.
 
-## 안전장치
+## 쓰기 안전장치
 
-1. 모든 작업은 기본적으로 dry-run이다.
-2. 실제 쓰기는 `NAVER_ALLOW_WRITES=true`와 확인문구 `REGISTER`를 동시에 요구한다.
-3. 품절 소스는 기본적으로 건너뛴다. `includeSoldOut=true`일 때만 재고 0의 품절 상품으로 등록한다.
-4. 카테고리 ID와 스토어 고유 배송/반품/A/S/상품고시 템플릿이 채워지지 않으면 실행을 차단한다.
-5. MCP는 배치 등록 도구를 노출하지 않고 1개 상품 등록만 노출한다.
-6. 시크릿과 액세스 토큰을 로그/응답에 출력하지 않는다.
+단일 등록은 다음을 모두 요구합니다.
 
-## 이미지 처리
+1. `NAVER_ALLOW_WRITES=true`
+2. `ATELIER_HTTP_ALLOW_WRITES=true`
+3. 요청 `confirmation=REGISTER`
+4. 유효한 `idempotencyKey`
+5. 페이로드 검증 통과
+6. 판매자관리코드 중복 없음
 
-- WebP를 포함한 소스 이미지를 네이버가 허용하는 JPEG로 변환한다.
-- 대표 이미지는 흰 배경 1000×1000 정사각형으로 정규화한다.
-- 상세 이미지는 최대 폭 860px로 정규화한다.
-- API 한 번당 최대 10개, 설정상 총 9.5MB 이하가 되도록 배치를 분할한다.
-- 상품 등록 페이로드에는 이미지 업로드 API가 반환한 URL만 넣는다.
+배치는 `ATELIER_HTTP_ALLOW_BATCH_WRITES=true`를 추가로 요구하고 설정상 최대 20개로 제한됩니다.
 
-## 확장 순서
+## 비동기 처리
 
-1. 단일 상품 dry-run 및 등록
-2. 20개 단위 배치 등록/실패 재시도
-3. 가격·재고 일괄 수정
-4. 주문 수집/발주/송장 처리
-5. 관리자 웹 UI
+이미지 정규화와 업로드가 오래 걸릴 수 있어 HTTP 등록 요청은 `api_operations`에 기록되고 큐에서 실행됩니다. 기본 동시성은 1입니다.
+
+```text
+queued → running → succeeded
+                 └→ failed
+서버 재시작 → interrupted
+```
+
+서버 재시작 후 작업을 자동 재등록하지 않습니다. 네이버 쪽 성공 여부가 불명확한 작업은 판매자관리코드 중복 조회 후 사용자가 다시 결정합니다.
+
+## 데이터와 영속성
+
+```text
+Catalog (read-only)
+- catalog_manifest.json
+- product_info.json
+- images/
+
+Work (persistent, writable)
+- atelier-popo.sqlite
+- previews/
+- normalized-images/ (업로드 성공 후 기본 삭제)
+```
+
+운영 서버에서는 Catalog를 읽기 전용으로 마운트하고 Work만 쓰기 가능한 영속 볼륨으로 분리하는 구성이 권장됩니다.
