@@ -7,6 +7,13 @@ on:
     paths:
       - .github/workflows/apply-v040.yml
       - .tmp/smartstore-bridge-v0.4.0-changes.tar.xz
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
@@ -17,12 +24,13 @@ concurrency:
 
 jobs:
   apply:
+    if: github.event_name == 'push' || github.head_ref == 'codex/v0.4.0-trigger'
     name: Verify and commit v0.4.0
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
-      - name: Check out main
+      - name: Check out event revision
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -58,13 +66,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -f .github/workflows/apply-v040.yml
-          rm -f .tmp/smartstore-bridge-v0.4.0-changes.tar.xz
-          rmdir .tmp 2>/dev/null || true
+          rm -rf .tmp
           git add -A smartstore-bridge .github/workflows/apply-v040.yml .tmp
           git diff --cached --check
           git commit -m "feat: add Naver Commerce full-operation gateway v0.4.0"
           git push origin HEAD:main
           echo "### Applied smartstore-bridge v0.4.0" >> "$GITHUB_STEP_SUMMARY"
           echo "Commit: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
-
-# Triggered through the GitHub contents API so the verified source is applied to main.
