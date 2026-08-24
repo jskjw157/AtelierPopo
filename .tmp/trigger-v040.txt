@@ -1,1 +1,2 @@
 Trigger the verified smartstore-bridge v0.4.0 apply workflow.
+Retry after structural archive validation update.
