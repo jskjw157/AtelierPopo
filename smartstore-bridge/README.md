@@ -2,12 +2,23 @@
 
 퀸실버 상품 카탈로그를 Google Drive에서 필요할 때 내려받아 네이버 커머스API 상품 등록·운영에 사용하고, HAAR Drive 루트 안에서 파일·폴더 생성·업로드·교체·이동·복사·휴지통·복원·삭제·공유를 수행하는 CLI + MCP + Hostinger HTTP API입니다.
 
-현재 버전은 **`0.3.0`**입니다.
+현재 버전은 **`0.4.0`**입니다.
 
 ## 구현 범위
 
-### 스마트스토어
+### 스마트스토어 / 네이버 커머스API
 
+- 공식 `llms.txt`에 endpoint 링크로 열거된 115개 operation allowlist gateway
+- 공식 가이드에는 있으나 endpoint 링크가 아직 없는 API데이터솔루션은 `specPendingDomains`로 추적
+- 상품·그룹상품·카테고리·옵션·배송·공지·검수
+- 주문·발주·발송·취소·반품·교환
+- 고객 문의·상품 문의 조회와 답변
+- 정산·수수료·부가세
+- 판매자·채널·주소록·물류·오늘출발
+- N배송 SKU와 커머스솔루션
+- 기존 상품 전체 조회와 상세페이지 HTML 백업·교체·롤백
+- API 그룹 Capability probe
+- 공식 spec sync·coverage 검사
 - 퀸실버 JSON·이미지 검증
 - 공급가 기반 판매가 계산
 - 옵션 추가금·품절 변환
@@ -127,6 +138,17 @@ ATELIER_HTTP_HOST=0.0.0.0
 PORT=3000
 ATELIER_HTTP_ALLOW_WRITES=false
 ATELIER_HTTP_ALLOW_BATCH_WRITES=false
+
+ATELIER_COMMERCE_GATEWAY_ENABLED=true
+ATELIER_COMMERCE_ALLOW_READS=true
+ATELIER_COMMERCE_ALLOW_WRITES=false
+ATELIER_COMMERCE_ALLOW_DELETES=false
+ATELIER_COMMERCE_ALLOW_ORDERS=false
+ATELIER_COMMERCE_ALLOW_CLAIMS=false
+ATELIER_COMMERCE_ALLOW_INQUIRIES=false
+ATELIER_COMMERCE_ALLOW_SOLUTIONS=false
+ATELIER_COMMERCE_ALLOW_SELLER_WRITES=false
+ATELIER_COMMERCE_ALLOW_MULTIPART_UPLOADS=false
 ```
 
 시크릿은 GitHub·채팅·캡처에 올리지 마세요.
@@ -158,6 +180,26 @@ curl \
   -H "Authorization: Bearer $ATELIER_API_KEY" \
   http://localhost:3000/api/v1/status
 ```
+
+
+## 네이버 커머스API 전체 operation
+
+```text
+GET  /api/v1/commerce/status
+GET  /api/v1/commerce/operations
+GET  /api/v1/commerce/operations/{operationId}
+POST /api/v1/commerce/operations/{operationId}/preview
+POST /api/v1/commerce/operations/{operationId}/execute
+POST /api/v1/commerce/capabilities/probe
+
+GET  /api/v1/commerce/products/channel/{channelProductNo}
+GET  /api/v1/commerce/products/origin/{originProductNo}
+POST /api/v1/commerce/products/channel/{channelProductNo}/detail/preview
+POST /api/v1/commerce/products/channel/{channelProductNo}/detail/update
+POST /api/v1/commerce/products/channel/{channelProductNo}/detail/rollback
+```
+
+전체 범위와 권한·확인 문구·Hostinger 설정은 [`docs/NAVER_COMMERCE_DEPLOY.md`](docs/NAVER_COMMERCE_DEPLOY.md)를 따르세요. 프로그램 구현과 네이버 커머스API센터의 API 그룹 승인은 별개이며, 실제 계정 권한은 Capability probe로 확인합니다.
 
 ## Drive 상태와 Canary
 
@@ -279,6 +321,7 @@ ATELIER_HTTP_ALLOW_BATCH_WRITES=true
 
 ```bash
 npm run check
+npm run commerce:coverage
 npm test
 ```
 
@@ -300,7 +343,7 @@ npm run test:remote
 상태 확인: GET /health
 ```
 
-기존 커머스 배포 절차는 [`docs/HOSTINGER_DEPLOY.md`](docs/HOSTINGER_DEPLOY.md), Drive 절차는 [`docs/GOOGLE_DRIVE_DEPLOY.md`](docs/GOOGLE_DRIVE_DEPLOY.md)를 따르세요.
+기존 커머스 배포 절차는 [`docs/HOSTINGER_DEPLOY.md`](docs/HOSTINGER_DEPLOY.md), Drive 절차는 [`docs/GOOGLE_DRIVE_DEPLOY.md`](docs/GOOGLE_DRIVE_DEPLOY.md), 전체 커머스API 절차는 [`docs/NAVER_COMMERCE_DEPLOY.md`](docs/NAVER_COMMERCE_DEPLOY.md)를 따르세요.
 
 ## 즉시 중지
 
@@ -310,6 +353,14 @@ npm run test:remote
 NAVER_ALLOW_WRITES=false
 ATELIER_HTTP_ALLOW_WRITES=false
 ATELIER_HTTP_ALLOW_BATCH_WRITES=false
+ATELIER_COMMERCE_ALLOW_WRITES=false
+ATELIER_COMMERCE_ALLOW_DELETES=false
+ATELIER_COMMERCE_ALLOW_ORDERS=false
+ATELIER_COMMERCE_ALLOW_CLAIMS=false
+ATELIER_COMMERCE_ALLOW_INQUIRIES=false
+ATELIER_COMMERCE_ALLOW_SOLUTIONS=false
+ATELIER_COMMERCE_ALLOW_SELLER_WRITES=false
+ATELIER_COMMERCE_ALLOW_MULTIPART_UPLOADS=false
 ```
 
 Drive 쓰기:

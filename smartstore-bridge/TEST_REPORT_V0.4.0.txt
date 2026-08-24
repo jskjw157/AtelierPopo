@@ -1,0 +1,355 @@
+# smartstore-bridge v0.4.0 Naver Commerce full integration test report
+
+GeneratedAt: 2026-08-24T13:33:16Z
+Node: v22.16.0
+
+## npm run check
+```text
+
+> atelier-popo-smartstore-bridge@0.4.0 check
+> node --check src/cli.js && node --check src/mcp.js && node --check src/http-v04.js && node --check src/bootstrap-v04.js && node --check src/http/server-v04.js && node --check src/http/errors-v04.js && node --check src/http/routes-system-v04.js && node --check src/http/routes-commerce.js && node --check src/http/openapi-v04.js && node --check src/naver/client.js && node --check src/naver/products.js && node --check src/naver/commerce/spec.js && node --check src/naver/commerce/config.js && node --check src/naver/commerce/gateway.js && node --check src/application/commerce/detail-content-service.js && node --check src/domain/product-update.js && node --check src/drive/config.js && node --check src/drive/auth.js && node --check src/drive/client.js && node --check src/drive/boundary.js && node --check src/drive/service.js && node --check src/drive/catalog-materializer.js && node --check src/http/routes-products-v03.js && node --check src/http/routes-ledger-v03.js && node --check src/http/routes-drive.js && node --check scripts/google-drive-oauth.mjs && node --check scripts/remote-smoke-test.mjs && node --check scripts/drive-remote-smoke.mjs && node --check scripts/naver-commerce-spec-sync.mjs && node --check scripts/naver-commerce-coverage.mjs && node --check scripts/commerce-remote-smoke.mjs
+
+```
+
+## npm run commerce:coverage
+```text
+
+> atelier-popo-smartstore-bridge@0.4.0 commerce:coverage
+> node scripts/naver-commerce-coverage.mjs
+
+{
+  "ok": true,
+  "expected": 115,
+  "actual": 115,
+  "classified": 115,
+  "unique": 115,
+  "internal": 1,
+  "read": 60,
+  "write": 54,
+  "domains": {
+    "N배송": 3,
+    "문의": 6,
+    "상품": 64,
+    "인증": 1,
+    "정산": 5,
+    "주문": 20,
+    "커머스솔루션": 8,
+    "판매자정보": 8
+  }
+}
+```
+
+## npm test
+```text
+
+> atelier-popo-smartstore-bridge@0.4.0 test
+> node --test test/*.test.js
+
+TAP version 13
+# Subtest: 상품번호로 안전하게 product_info.json 경로를 찾는다
+ok 1 - 상품번호로 안전하게 product_info.json 경로를 찾는다
+  ---
+  duration_ms: 3.536243
+  type: 'test'
+  ...
+# Subtest: 상품명과 카테고리로 검색한다
+ok 2 - 상품명과 카테고리로 검색한다
+  ---
+  duration_ms: 1.008909
+  type: 'test'
+  ...
+# Subtest: detail content service backs up, updates, verifies and rolls back
+ok 3 - detail content service backs up, updates, verifies and rolls back
+  ---
+  duration_ms: 3.860444
+  type: 'test'
+  ...
+# Subtest: gateway lists and previews all official operations without accepting arbitrary paths
+ok 4 - gateway lists and previews all official operations without accepting arbitrary paths
+  ---
+  duration_ms: 4.020522
+  type: 'test'
+  ...
+# Subtest: read operation executes synchronously and redacts personal data
+ok 5 - read operation executes synchronously and redacts personal data
+  ---
+  duration_ms: 1.120574
+  type: 'test'
+  ...
+# Subtest: write operation requires both gates and exact confirmation
+ok 6 - write operation requires both gates and exact confirmation
+  ---
+  duration_ms: 2.032609
+  type: 'test'
+  ...
+# Subtest: destructive operation requires resource-key second confirmation
+ok 7 - destructive operation requires resource-key second confirmation
+  ---
+  duration_ms: 0.847359
+  type: 'test'
+  ...
+# (node:4698) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: commerce HTTP API exposes exactly 115 official operations
+ok 8 - commerce HTTP API exposes exactly 115 official operations
+  ---
+  duration_ms: 65.357035
+  type: 'test'
+  ...
+# Subtest: generic read operation executes through the allowlisted manifest
+ok 9 - generic read operation executes through the allowlisted manifest
+  ---
+  duration_ms: 61.190316
+  type: 'test'
+  ...
+# Subtest: generic write is blocked until all write gates are enabled
+ok 10 - generic write is blocked until all write gates are enabled
+  ---
+  duration_ms: 47.354962
+  type: 'test'
+  ...
+# Subtest: enabled generic write runs asynchronously with idempotency
+ok 11 - enabled generic write runs asynchronously with idempotency
+  ---
+  duration_ms: 44.853791
+  type: 'test'
+  ...
+# Subtest: existing product detail update has preview and async write actions
+ok 12 - existing product detail update has preview and async write actions
+  ---
+  duration_ms: 67.074626
+  type: 'test'
+  ...
+# Subtest: bundled Naver Commerce manifest classifies all 115 official operations
+ok 13 - bundled Naver Commerce manifest classifies all 115 official operations
+  ---
+  duration_ms: 2.941018
+  type: 'test'
+  ...
+# Subtest: llms index parser creates stable operation ids and risk metadata
+ok 14 - llms index parser creates stable operation ids and risk metadata
+  ---
+  duration_ms: 1.450845
+  type: 'test'
+  ...
+# Subtest: service-account provider signs RS256 assertion and caches token
+ok 15 - service-account provider signs RS256 assertion and caches token
+  ---
+  duration_ms: 98.660752
+  type: 'test'
+  ...
+# Subtest: user OAuth refresh-token provider exchanges and caches access token
+ok 16 - user OAuth refresh-token provider exchanges and caches access token
+  ---
+  duration_ms: 0.651227
+  type: 'test'
+  ...
+# Subtest: boundary accepts descendants and rejects outside files
+ok 17 - boundary accepts descendants and rejects outside files
+  ---
+  duration_ms: 1.638825
+  type: 'test'
+  ...
+# Subtest: boundary prevents destructive action on configured root
+ok 18 - boundary prevents destructive action on configured root
+  ---
+  duration_ms: 0.332284
+  type: 'test'
+  ...
+# Subtest: Drive catalog materializer downloads manifest, product JSON and selected images
+ok 19 - Drive catalog materializer downloads manifest, product JSON and selected images
+  ---
+  duration_ms: 10.816896
+  type: 'test'
+  ...
+# Subtest: loadDriveConfig reads Base64 credentials and full-write flags
+ok 20 - loadDriveConfig reads Base64 credentials and full-write flags
+  ---
+  duration_ms: 2.41711
+  type: 'test'
+  ...
+# Subtest: loadDriveConfig rejects read-only scope for full-write provider
+ok 21 - loadDriveConfig rejects read-only scope for full-write provider
+  ---
+  duration_ms: 0.367596
+  type: 'test'
+  ...
+# Subtest: loadDriveConfig prefers user OAuth in auto mode for My Drive writes
+ok 22 - loadDriveConfig prefers user OAuth in auto mode for My Drive writes
+  ---
+  duration_ms: 0.27649
+  type: 'test'
+  ...
+# Subtest: Drive service requires explicit write confirmation
+ok 23 - Drive service requires explicit write confirmation
+  ---
+  duration_ms: 1.438957
+  type: 'test'
+  ...
+# Subtest: trash and permanent delete require target id as second confirmation
+ok 24 - trash and permanent delete require target id as second confirmation
+  ---
+  duration_ms: 0.712238
+  type: 'test'
+  ...
+# Subtest: internal local upload accepts only configured local roots
+ok 25 - internal local upload accepts only configured local roots
+  ---
+  duration_ms: 10.990189
+  type: 'test'
+  ...
+# Subtest: Drive service creates Google native files with an allowlisted type
+ok 26 - Drive service creates Google native files with an allowlisted type
+  ---
+  duration_ms: 1.36031
+  type: 'test'
+  ...
+# (node:4775) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: health는 공개하고 API 경로는 Bearer 키로 보호한다
+ok 27 - health는 공개하고 API 경로는 Bearer 키로 보호한다
+  ---
+  duration_ms: 76.279378
+  type: 'test'
+  ...
+# Subtest: 상품번호 기반 preview에서 서버 절대경로를 노출하지 않는다
+ok 28 - 상품번호 기반 preview에서 서버 절대경로를 노출하지 않는다
+  ---
+  duration_ms: 37.586488
+  type: 'test'
+  ...
+# Subtest: 원격 쓰기 잠금이 꺼져 있으면 상품 등록을 차단한다
+ok 29 - 원격 쓰기 잠금이 꺼져 있으면 상품 등록을 차단한다
+  ---
+  duration_ms: 57.139129
+  type: 'test'
+  ...
+# Subtest: 상품 등록은 비동기 작업으로 실행하고 같은 멱등성 키는 한 번만 처리한다
+ok 30 - 상품 등록은 비동기 작업으로 실행하고 같은 멱등성 키는 한 번만 처리한다
+  ---
+  duration_ms: 64.104339
+  type: 'test'
+  ...
+# (node:4786) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: v0.3 OpenAPI exposes Drive read/write operations
+ok 31 - v0.3 OpenAPI exposes Drive read/write operations
+  ---
+  duration_ms: 58.482008
+  type: 'test'
+  ...
+# Subtest: Drive routes require API key and return configured status
+ok 32 - Drive routes require API key and return configured status
+  ---
+  duration_ms: 36.074527
+  type: 'test'
+  ...
+# Subtest: Drive folder create forwards explicit confirmation and stays inside configured root
+ok 33 - Drive folder create forwards explicit confirmation and stays inside configured root
+  ---
+  duration_ms: 53.585872
+  type: 'test'
+  ...
+# Subtest: Drive route returns 503 when integration is disabled
+ok 34 - Drive route returns 503 when integration is disabled
+  ---
+  duration_ms: 30.003209
+  type: 'test'
+  ...
+# (node:4797) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: HTTP 작업과 멱등성 키를 SQLite에 저장한다
+ok 35 - HTTP 작업과 멱등성 키를 SQLite에 저장한다
+  ---
+  duration_ms: 21.213304
+  type: 'test'
+  ...
+# Subtest: 재시작 시 남아 있던 queued/running 작업을 interrupted로 복구한다
+ok 36 - 재시작 시 남아 있던 queued/running 작업을 interrupted로 복구한다
+  ---
+  duration_ms: 42.928361
+  type: 'test'
+  ...
+# Subtest: 옵션 추가금을 분리한다
+ok 37 - 옵션 추가금을 분리한다
+  ---
+  duration_ms: 1.477174
+  type: 'test'
+  ...
+# Subtest: 퀸실버 색상 옵션을 네이버 조합형 옵션으로 변환한다
+ok 38 - 퀸실버 색상 옵션을 네이버 조합형 옵션으로 변환한다
+  ---
+  duration_ms: 0.749363
+  type: 'test'
+  ...
+# Subtest: 등록 전 핵심 필드를 통과시킨다
+ok 39 - 등록 전 핵심 필드를 통과시킨다
+  ---
+  duration_ms: 1.609981
+  type: 'test'
+  ...
+# Subtest: 설정 플레이스홀더와 로컬 URL을 실제 실행에서 차단한다
+ok 40 - 설정 플레이스홀더와 로컬 URL을 실제 실행에서 차단한다
+  ---
+  duration_ms: 0.210833
+  type: 'test'
+  ...
+# Subtest: 900 끝자리로 올림한다
+ok 41 - 900 끝자리로 올림한다
+  ---
+  duration_ms: 1.572646
+  type: 'test'
+  ...
+# Subtest: 부가세 별도 공급가를 판매가로 계산한다
+ok 42 - 부가세 별도 공급가를 판매가로 계산한다
+  ---
+  duration_ms: 0.237673
+  type: 'test'
+  ...
+# Subtest: 원화 표시를 정수로 읽는다
+ok 43 - 원화 표시를 정수로 읽는다
+  ---
+  duration_ms: 0.618699
+  type: 'test'
+  ...
+# Subtest: 이미지 파일을 숫자 접두사 순으로 정렬한다
+ok 44 - 이미지 파일을 숫자 접두사 순으로 정렬한다
+  ---
+  duration_ms: 1.554609
+  type: 'test'
+  ...
+# Subtest: 최소 퀸실버 상품 구조를 검증한다
+ok 45 - 최소 퀸실버 상품 구조를 검증한다
+  ---
+  duration_ms: 0.196251
+  type: 'test'
+  ...
+# Subtest: 실제 퀸실버 product_info 샘플 구조를 읽는다
+ok 46 - 실제 퀸실버 product_info 샘플 구조를 읽는다
+  ---
+  duration_ms: 2.529888
+  type: 'test'
+  ...
+# Subtest: 기존 채널 상품 응답에서 동적/조회 전용 값을 제거한다
+ok 47 - 기존 채널 상품 응답에서 동적/조회 전용 값을 제거한다
+  ---
+  duration_ms: 0.657256
+  type: 'test'
+  ...
+1..47
+# tests 47
+# suites 0
+# pass 47
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 666.549827
+```
+
+## Result
+- Syntax/static checks: PASS
+- Naver Commerce endpoint-linked operation coverage: 115/115 classified
+- APIDataSolutions: spec pending (official guide lists the domain, current llms.txt has no endpoint links)
+- Unit/integration tests: 47 passed, 0 failed
+- Live Hostinger/Naver Commerce capability probe: NOT RUN (requires deployed secrets and approved Naver API groups)

@@ -7,6 +7,9 @@ export class NaverApiError extends Error {
     this.invalidInputs = details.invalidInputs;
     this.traceId = details.traceId;
     this.body = details.body;
+    this.headers = details.headers;
+    this.url = details.url;
+    this.method = details.method;
   }
 
   toJSON() {
@@ -16,7 +19,9 @@ export class NaverApiError extends Error {
       status: this.status,
       code: this.code,
       invalidInputs: this.invalidInputs,
-      traceId: this.traceId
+      traceId: this.traceId,
+      method: this.method,
+      url: this.url
     };
   }
 }

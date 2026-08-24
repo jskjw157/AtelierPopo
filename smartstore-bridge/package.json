@@ -1,8 +1,8 @@
 {
   "name": "atelier-popo-smartstore-bridge",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "HAAR/아뜰리에포포 전용 Google Drive 전체 쓰기 + 퀸실버 카탈로그 + 네이버 스마트스토어 운영 CLI/MCP/HTTP API",
+  "description": "HAAR/아뜰리에포포 전용 네이버 커머스API 전체 operation + Google Drive 전체 쓰기 + 퀸실버 카탈로그 운영 브리지",
   "type": "module",
   "engines": {
     "node": ">=22.5.0"
@@ -10,20 +10,24 @@
   "bin": {
     "atelier-popo": "./src/cli.js",
     "atelier-popo-mcp": "./src/mcp.js",
-    "atelier-popo-http": "./src/http-v03.js"
+    "atelier-popo-http": "./src/http-v04.js"
   },
   "scripts": {
-    "start": "node src/http-v03.js",
-    "http": "node src/http-v03.js",
+    "start": "node src/http-v04.js",
+    "http": "node src/http-v04.js",
     "http:legacy": "node src/http.js",
     "cli": "node src/cli.js",
     "mcp": "node src/mcp.js",
     "drive:oauth": "node scripts/google-drive-oauth.mjs",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/cli.js && node --check src/mcp.js && node --check src/http-v03.js && node --check src/bootstrap-v03.js && node --check src/drive/config.js && node --check src/drive/auth.js && node --check src/drive/client.js && node --check src/drive/boundary.js && node --check src/drive/service.js && node --check src/drive/catalog-materializer.js && node --check src/http/server-v03.js && node --check src/http/errors-v03.js && node --check src/http/routes-system-v03.js && node --check src/http/routes-products-v03.js && node --check src/http/routes-ledger-v03.js && node --check src/http/routes-drive.js && node --check src/http/openapi-v03.js && node --check scripts/google-drive-oauth.mjs && node --check scripts/remote-smoke-test.mjs && node --check scripts/drive-remote-smoke.mjs",
+    "check": "node --check src/cli.js && node --check src/mcp.js && node --check src/http-v04.js && node --check src/bootstrap-v04.js && node --check src/http/server-v04.js && node --check src/http/errors-v04.js && node --check src/http/routes-system-v04.js && node --check src/http/routes-commerce.js && node --check src/http/openapi-v04.js && node --check src/naver/client.js && node --check src/naver/products.js && node --check src/naver/commerce/spec.js && node --check src/naver/commerce/config.js && node --check src/naver/commerce/gateway.js && node --check src/application/commerce/detail-content-service.js && node --check src/domain/product-update.js && node --check src/drive/config.js && node --check src/drive/auth.js && node --check src/drive/client.js && node --check src/drive/boundary.js && node --check src/drive/service.js && node --check src/drive/catalog-materializer.js && node --check src/http/routes-products-v03.js && node --check src/http/routes-ledger-v03.js && node --check src/http/routes-drive.js && node --check scripts/google-drive-oauth.mjs && node --check scripts/remote-smoke-test.mjs && node --check scripts/drive-remote-smoke.mjs && node --check scripts/naver-commerce-spec-sync.mjs && node --check scripts/naver-commerce-coverage.mjs && node --check scripts/commerce-remote-smoke.mjs",
     "inspect:mcp": "npx @modelcontextprotocol/inspector node src/mcp.js",
     "test:remote": "node scripts/remote-smoke-test.mjs",
-    "test:drive:remote": "node scripts/drive-remote-smoke.mjs"
+    "test:drive:remote": "node scripts/drive-remote-smoke.mjs",
+    "http:v03": "node src/http-v03.js",
+    "commerce:spec:sync": "node scripts/naver-commerce-spec-sync.mjs",
+    "commerce:coverage": "node scripts/naver-commerce-coverage.mjs",
+    "test:commerce:remote": "node scripts/commerce-remote-smoke.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",

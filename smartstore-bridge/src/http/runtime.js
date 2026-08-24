@@ -154,5 +154,12 @@ export function operationStatusCode(row) {
 }
 
 export function route(method, pattern, handler, options = {}) {
-  return { method, pattern, handler, auth: options.auth !== false, write: Boolean(options.write) };
+  return {
+    method,
+    pattern,
+    handler,
+    auth: options.auth !== false,
+    write: Boolean(options.write),
+    maxBodyBytes: Number(options.maxBodyBytes || 0)
+  };
 }
