@@ -1,0 +1,251 @@
+# smartstore-bridge v0.3.0 Google Drive integration test report
+
+GeneratedAt: 2026-08-24T07:33:49Z
+Node: v22.16.0
+
+## npm run check
+```text
+
+> atelier-popo-smartstore-bridge@0.3.0 check
+> node --check src/cli.js && node --check src/mcp.js && node --check src/http-v03.js && node --check src/bootstrap-v03.js && node --check src/drive/config.js && node --check src/drive/auth.js && node --check src/drive/client.js && node --check src/drive/boundary.js && node --check src/drive/service.js && node --check src/drive/catalog-materializer.js && node --check src/http/server-v03.js && node --check src/http/errors-v03.js && node --check src/http/routes-system-v03.js && node --check src/http/routes-products-v03.js && node --check src/http/routes-ledger-v03.js && node --check src/http/routes-drive.js && node --check src/http/openapi-v03.js && node --check scripts/google-drive-oauth.mjs && node --check scripts/remote-smoke-test.mjs && node --check scripts/drive-remote-smoke.mjs
+
+```
+
+## npm test
+```text
+
+> atelier-popo-smartstore-bridge@0.3.0 test
+> node --test test/*.test.js
+
+TAP version 13
+# Subtest: 상품번호로 안전하게 product_info.json 경로를 찾는다
+ok 1 - 상품번호로 안전하게 product_info.json 경로를 찾는다
+  ---
+  duration_ms: 3.695823
+  type: 'test'
+  ...
+# Subtest: 상품명과 카테고리로 검색한다
+ok 2 - 상품명과 카테고리로 검색한다
+  ---
+  duration_ms: 1.635561
+  type: 'test'
+  ...
+# Subtest: service-account provider signs RS256 assertion and caches token
+ok 3 - service-account provider signs RS256 assertion and caches token
+  ---
+  duration_ms: 554.478839
+  type: 'test'
+  ...
+# Subtest: user OAuth refresh-token provider exchanges and caches access token
+ok 4 - user OAuth refresh-token provider exchanges and caches access token
+  ---
+  duration_ms: 0.816219
+  type: 'test'
+  ...
+# Subtest: boundary accepts descendants and rejects outside files
+ok 5 - boundary accepts descendants and rejects outside files
+  ---
+  duration_ms: 1.959201
+  type: 'test'
+  ...
+# Subtest: boundary prevents destructive action on configured root
+ok 6 - boundary prevents destructive action on configured root
+  ---
+  duration_ms: 0.470108
+  type: 'test'
+  ...
+# Subtest: Drive catalog materializer downloads manifest, product JSON and selected images
+ok 7 - Drive catalog materializer downloads manifest, product JSON and selected images
+  ---
+  duration_ms: 9.680075
+  type: 'test'
+  ...
+# Subtest: loadDriveConfig reads Base64 credentials and full-write flags
+ok 8 - loadDriveConfig reads Base64 credentials and full-write flags
+  ---
+  duration_ms: 7.812866
+  type: 'test'
+  ...
+# Subtest: loadDriveConfig rejects read-only scope for full-write provider
+ok 9 - loadDriveConfig rejects read-only scope for full-write provider
+  ---
+  duration_ms: 1.464173
+  type: 'test'
+  ...
+# Subtest: loadDriveConfig prefers user OAuth in auto mode for My Drive writes
+ok 10 - loadDriveConfig prefers user OAuth in auto mode for My Drive writes
+  ---
+  duration_ms: 0.477808
+  type: 'test'
+  ...
+# Subtest: Drive service requires explicit write confirmation
+ok 11 - Drive service requires explicit write confirmation
+  ---
+  duration_ms: 3.466409
+  type: 'test'
+  ...
+# Subtest: trash and permanent delete require target id as second confirmation
+ok 12 - trash and permanent delete require target id as second confirmation
+  ---
+  duration_ms: 1.143177
+  type: 'test'
+  ...
+# Subtest: internal local upload accepts only configured local roots
+ok 13 - internal local upload accepts only configured local roots
+  ---
+  duration_ms: 1.649482
+  type: 'test'
+  ...
+# Subtest: Drive service creates Google native files with an allowlisted type
+ok 14 - Drive service creates Google native files with an allowlisted type
+  ---
+  duration_ms: 0.621074
+  type: 'test'
+  ...
+# (node:5311) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: health는 공개하고 API 경로는 Bearer 키로 보호한다
+ok 15 - health는 공개하고 API 경로는 Bearer 키로 보호한다
+  ---
+  duration_ms: 139.227298
+  type: 'test'
+  ...
+# Subtest: 상품번호 기반 preview에서 서버 절대경로를 노출하지 않는다
+ok 16 - 상품번호 기반 preview에서 서버 절대경로를 노출하지 않는다
+  ---
+  duration_ms: 95.917812
+  type: 'test'
+  ...
+# Subtest: 원격 쓰기 잠금이 꺼져 있으면 상품 등록을 차단한다
+ok 17 - 원격 쓰기 잠금이 꺼져 있으면 상품 등록을 차단한다
+  ---
+  duration_ms: 42.692339
+  type: 'test'
+  ...
+# Subtest: 상품 등록은 비동기 작업으로 실행하고 같은 멱등성 키는 한 번만 처리한다
+ok 18 - 상품 등록은 비동기 작업으로 실행하고 같은 멱등성 키는 한 번만 처리한다
+  ---
+  duration_ms: 99.573023
+  type: 'test'
+  ...
+# (node:5332) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: v0.3 OpenAPI exposes Drive read/write operations
+ok 19 - v0.3 OpenAPI exposes Drive read/write operations
+  ---
+  duration_ms: 123.362374
+  type: 'test'
+  ...
+# Subtest: Drive routes require API key and return configured status
+ok 20 - Drive routes require API key and return configured status
+  ---
+  duration_ms: 61.068298
+  type: 'test'
+  ...
+# Subtest: Drive folder create forwards explicit confirmation and stays inside configured root
+ok 21 - Drive folder create forwards explicit confirmation and stays inside configured root
+  ---
+  duration_ms: 68.974381
+  type: 'test'
+  ...
+# Subtest: Drive route returns 503 when integration is disabled
+ok 22 - Drive route returns 503 when integration is disabled
+  ---
+  duration_ms: 32.418458
+  type: 'test'
+  ...
+# (node:5343) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: HTTP 작업과 멱등성 키를 SQLite에 저장한다
+ok 23 - HTTP 작업과 멱등성 키를 SQLite에 저장한다
+  ---
+  duration_ms: 48.236517
+  type: 'test'
+  ...
+# Subtest: 재시작 시 남아 있던 queued/running 작업을 interrupted로 복구한다
+ok 24 - 재시작 시 남아 있던 queued/running 작업을 interrupted로 복구한다
+  ---
+  duration_ms: 25.698501
+  type: 'test'
+  ...
+# Subtest: 옵션 추가금을 분리한다
+ok 25 - 옵션 추가금을 분리한다
+  ---
+  duration_ms: 2.264575
+  type: 'test'
+  ...
+# Subtest: 퀸실버 색상 옵션을 네이버 조합형 옵션으로 변환한다
+ok 26 - 퀸실버 색상 옵션을 네이버 조합형 옵션으로 변환한다
+  ---
+  duration_ms: 0.838491
+  type: 'test'
+  ...
+# Subtest: 등록 전 핵심 필드를 통과시킨다
+ok 27 - 등록 전 핵심 필드를 통과시킨다
+  ---
+  duration_ms: 4.020983
+  type: 'test'
+  ...
+# Subtest: 설정 플레이스홀더와 로컬 URL을 실제 실행에서 차단한다
+ok 28 - 설정 플레이스홀더와 로컬 URL을 실제 실행에서 차단한다
+  ---
+  duration_ms: 0.757735
+  type: 'test'
+  ...
+# Subtest: 900 끝자리로 올림한다
+ok 29 - 900 끝자리로 올림한다
+  ---
+  duration_ms: 3.421114
+  type: 'test'
+  ...
+# Subtest: 부가세 별도 공급가를 판매가로 계산한다
+ok 30 - 부가세 별도 공급가를 판매가로 계산한다
+  ---
+  duration_ms: 0.380217
+  type: 'test'
+  ...
+# Subtest: 원화 표시를 정수로 읽는다
+ok 31 - 원화 표시를 정수로 읽는다
+  ---
+  duration_ms: 1.473689
+  type: 'test'
+  ...
+# Subtest: 이미지 파일을 숫자 접두사 순으로 정렬한다
+ok 32 - 이미지 파일을 숫자 접두사 순으로 정렬한다
+  ---
+  duration_ms: 5.177447
+  type: 'test'
+  ...
+# Subtest: 최소 퀸실버 상품 구조를 검증한다
+ok 33 - 최소 퀸실버 상품 구조를 검증한다
+  ---
+  duration_ms: 0.656366
+  type: 'test'
+  ...
+# Subtest: 실제 퀸실버 product_info 샘플 구조를 읽는다
+ok 34 - 실제 퀸실버 product_info 샘플 구조를 읽는다
+  ---
+  duration_ms: 3.525078
+  type: 'test'
+  ...
+# Subtest: 기존 채널 상품 응답에서 동적/조회 전용 값을 제거한다
+ok 35 - 기존 채널 상품 응답에서 동적/조회 전용 값을 제거한다
+  ---
+  duration_ms: 1.150487
+  type: 'test'
+  ...
+1..35
+# tests 35
+# suites 0
+# pass 35
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1464.442732
+```
+
+## Result
+- Syntax/static checks: PASS
+- Unit/integration tests: 35 passed, 0 failed
+- Live Hostinger/Google OAuth canary: NOT RUN (requires Hostinger secrets and user OAuth refresh token)

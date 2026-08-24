@@ -9,3 +9,5 @@ work/*
 *.sqlite-wal
 npm-debug.log*
 .DS_Store
+.google-oauth*.json
+google-drive-oauth-refresh-token.json

@@ -1,8 +1,8 @@
 {
   "name": "atelier-popo-smartstore-bridge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "아뜰리에포포 전용 퀸실버 → 네이버 스마트스토어 상품 등록 CLI/MCP/HTTP API",
+  "description": "HAAR/아뜰리에포포 전용 Google Drive 전체 쓰기 + 퀸실버 카탈로그 + 네이버 스마트스토어 운영 CLI/MCP/HTTP API",
   "type": "module",
   "engines": {
     "node": ">=22.5.0"
@@ -10,17 +10,20 @@
   "bin": {
     "atelier-popo": "./src/cli.js",
     "atelier-popo-mcp": "./src/mcp.js",
-    "atelier-popo-http": "./src/http.js"
+    "atelier-popo-http": "./src/http-v03.js"
   },
   "scripts": {
-    "start": "node src/http.js",
-    "http": "node src/http.js",
+    "start": "node src/http-v03.js",
+    "http": "node src/http-v03.js",
+    "http:legacy": "node src/http.js",
     "cli": "node src/cli.js",
     "mcp": "node src/mcp.js",
-    "test": "node --test",
-    "check": "node --check src/cli.js && node --check src/mcp.js && node --check src/http.js && node --check src/http/server.js && node --check src/http/runtime.js && node --check src/http/routes-system.js && node --check src/http/routes-products.js && node --check src/http/routes-ledger.js && node --check src/http/openapi.js && node --check scripts/remote-smoke-test.mjs",
+    "drive:oauth": "node scripts/google-drive-oauth.mjs",
+    "test": "node --test test/*.test.js",
+    "check": "node --check src/cli.js && node --check src/mcp.js && node --check src/http-v03.js && node --check src/bootstrap-v03.js && node --check src/drive/config.js && node --check src/drive/auth.js && node --check src/drive/client.js && node --check src/drive/boundary.js && node --check src/drive/service.js && node --check src/drive/catalog-materializer.js && node --check src/http/server-v03.js && node --check src/http/errors-v03.js && node --check src/http/routes-system-v03.js && node --check src/http/routes-products-v03.js && node --check src/http/routes-ledger-v03.js && node --check src/http/routes-drive.js && node --check src/http/openapi-v03.js && node --check scripts/google-drive-oauth.mjs && node --check scripts/remote-smoke-test.mjs && node --check scripts/drive-remote-smoke.mjs",
     "inspect:mcp": "npx @modelcontextprotocol/inspector node src/mcp.js",
-    "test:remote": "node scripts/remote-smoke-test.mjs"
+    "test:remote": "node scripts/remote-smoke-test.mjs",
+    "test:drive:remote": "node scripts/drive-remote-smoke.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
