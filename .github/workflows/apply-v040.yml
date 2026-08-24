@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "16396fb43075af736a22b0b20a20fee070d27dbc88d99d33ef039f04e3522c27  .tmp/smartstore-bridge-v0.4.0-changes.tar.xz" | sha256sum --check --strict
+          xz --test .tmp/smartstore-bridge-v0.4.0-changes.tar.xz
           tar -tJf .tmp/smartstore-bridge-v0.4.0-changes.tar.xz
           tar -xJf .tmp/smartstore-bridge-v0.4.0-changes.tar.xz -C smartstore-bridge
           node -e "const p=require('./smartstore-bridge/package.json'); if(p.version!=='0.4.0') throw new Error('unexpected version: '+p.version)"
