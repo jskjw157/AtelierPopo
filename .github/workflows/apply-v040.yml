@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   apply:
-    if: github.event_name == 'push' || github.head_ref == 'codex/v0.4.0-trigger'
+    if: github.event_name == 'push' || startsWith(github.head_ref, 'codex/v0.4.0-trigger')
     name: Verify and commit v0.4.0
     runs-on: ubuntu-latest
     timeout-minutes: 20
