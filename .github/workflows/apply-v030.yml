@@ -1,0 +1,80 @@
+name: Apply smartstore-bridge v0.3.0
+
+on:
+  push:
+    branches:
+      - codex/v0.3.0-drive-upload
+    paths:
+      - .github/workflows/apply-v030.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-smartstore-bridge-v030
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Verify and push v0.3.0 to main
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out staging branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Reconstruct and verify source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find smartstore-bridge/.v030 -maxdepth 1 -name 'archive.part.*' -type f | wc -l)" -eq 7
+          cat smartstore-bridge/.v030/archive.part.* \
+            | tr -d '\r\n ' \
+            | base64 --decode \
+            > /tmp/smartstore-bridge-v0.3.0.tar.xz
+          echo "0f30a2b3cc53279105acad0968d56241a89ba6610b8e1d486c8d78815c2b9b23  /tmp/smartstore-bridge-v0.3.0.tar.xz" \
+            | sha256sum --check --strict
+          tar -tJf /tmp/smartstore-bridge-v0.3.0.tar.xz
+
+      - name: Apply v0.3.0 on top of current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout --detach origin/main
+          tar -xJf /tmp/smartstore-bridge-v0.3.0.tar.xz -C smartstore-bridge
+          node -e "const p=require('./smartstore-bridge/package.json'); if(p.version!=='0.3.0') throw new Error('unexpected version: '+p.version)"
+
+      - name: Install and test
+        working-directory: smartstore-bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-package-lock --no-audit --no-fund
+          npm run check
+          npm test
+
+      - name: Commit and push main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A smartstore-bridge
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "No changes to commit; main may already contain v0.3.0."
+            exit 0
+          fi
+          git commit -m "feat: add Google Drive full-write integration v0.3.0"
+          git push origin HEAD:main
+          echo "### Applied smartstore-bridge v0.3.0" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
