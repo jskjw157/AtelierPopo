@@ -1,0 +1,68 @@
+name: Apply smartstore-bridge v0.4.0
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/apply-v040.yml
+      - .tmp/smartstore-bridge-v0.4.0-changes.tar.xz
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-smartstore-bridge-v040
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Verify and commit v0.4.0
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify and apply source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "16396fb43075af736a22b0b20a20fee070d27dbc88d99d33ef039f04e3522c27  .tmp/smartstore-bridge-v0.4.0-changes.tar.xz" | sha256sum --check --strict
+          tar -tJf .tmp/smartstore-bridge-v0.4.0-changes.tar.xz
+          tar -xJf .tmp/smartstore-bridge-v0.4.0-changes.tar.xz -C smartstore-bridge
+          node -e "const p=require('./smartstore-bridge/package.json'); if(p.version!=='0.4.0') throw new Error('unexpected version: '+p.version)"
+
+      - name: Install and verify
+        working-directory: smartstore-bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-package-lock --no-audit --no-fund
+          npm run check
+          npm test
+          npm run commerce:coverage
+
+      - name: Commit verified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/apply-v040.yml
+          rm -f .tmp/smartstore-bridge-v0.4.0-changes.tar.xz
+          rmdir .tmp 2>/dev/null || true
+          git add -A smartstore-bridge .github/workflows/apply-v040.yml .tmp
+          git diff --cached --check
+          git commit -m "feat: add Naver Commerce full-operation gateway v0.4.0"
+          git push origin HEAD:main
+          echo "### Applied smartstore-bridge v0.4.0" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
