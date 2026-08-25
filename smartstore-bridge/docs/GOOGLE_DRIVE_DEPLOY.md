@@ -62,11 +62,11 @@ GOOGLE_DRIVE_ROOT_FOLDER_ID=1tPsrn29CjAkIg9oloSn5ftwQKyjEPzQD
 GOOGLE_DRIVE_CATALOG_FOLDER_ID=1OxlupopKo8BR-8_fDE72LEknRbWIoGoS
 GOOGLE_DRIVE_FINAL_DETAIL_FOLDER_ID=1YKzTg8rGoyRFGihPAvybKjkaZpk56y3Y
 
-ATELIER_DRIVE_ALLOW_WRITES=true
-ATELIER_DRIVE_ALLOW_MOVES=true
-ATELIER_DRIVE_ALLOW_TRASH=true
-ATELIER_DRIVE_ALLOW_PERMANENT_DELETE=true
-ATELIER_DRIVE_ALLOW_PERMISSION_CHANGES=true
+ATELIER_DRIVE_ALLOW_WRITES=false
+ATELIER_DRIVE_ALLOW_MOVES=false
+ATELIER_DRIVE_ALLOW_TRASH=false
+ATELIER_DRIVE_ALLOW_PERMANENT_DELETE=false
+ATELIER_DRIVE_ALLOW_PERMISSION_CHANGES=false
 ATELIER_DRIVE_REQUIRE_USER_OAUTH_FOR_MY_DRIVE_CREATES=true
 
 ATELIER_DRIVE_MAX_UPLOAD_BYTES=1073741824
@@ -90,12 +90,12 @@ GOOGLE_DRIVE_AUTH_MODE=service-account
 
 ```text
 애플리케이션 루트: smartstore-bridge
-설치 명령: npm install
+설치 명령: npm ci
 시작 명령: npm start
-Health Check: GET /health
+Health Check: GET /health/ready
 ```
 
-`package.json`의 `npm start`는 v0.3.0 Drive 통합 서버를 실행한다.
+`package.json`의 `npm start`는 v0.4.0 Commerce + Drive 통합 HTTP 서버를 실행한다.
 
 ## 5. 배포 후 읽기 확인
 
@@ -131,7 +131,7 @@ curl -X POST \
   -H "Authorization: Bearer $ATELIER_API_KEY" \
   -H "Content-Type: application/json" \
   https://YOUR_DOMAIN/api/v1/drive/capabilities/probe \
-  -d '{"confirmation":"RUN_DRIVE_WRITE_CANARY"}'
+  -d '{"confirmation":"RUN_DRIVE_WRITE_CANARY","idempotencyKey":"drive-canary-001"}'
 ```
 
 합격 기준:
@@ -213,7 +213,8 @@ curl -X POST \
   -d '{
     "name":"API_테스트",
     "parentId":"1YKzTg8rGoyRFGihPAvybKjkaZpk56y3Y",
-    "confirmation":"WRITE_DRIVE_ITEM"
+    "confirmation":"WRITE_DRIVE_ITEM",
+    "idempotencyKey":"drive-folder-test-001"
   }'
 ```
 
@@ -229,7 +230,8 @@ curl -X POST \
     "parentId":"FOLDER_ID",
     "mimeType":"text/plain",
     "text":"HAAR Drive API test",
-    "confirmation":"WRITE_DRIVE_ITEM"
+    "confirmation":"WRITE_DRIVE_ITEM",
+    "idempotencyKey":"drive-upload-test-001"
   }'
 ```
 
@@ -242,7 +244,8 @@ curl -X POST \
   https://YOUR_DOMAIN/api/v1/drive/files/FILE_ID/trash \
   -d '{
     "confirmation":"TRASH_DRIVE_ITEM",
-    "secondConfirmation":"FILE_ID"
+    "secondConfirmation":"FILE_ID",
+    "idempotencyKey":"drive-trash-test-001"
   }'
 ```
 

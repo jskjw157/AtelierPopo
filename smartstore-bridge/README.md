@@ -1,6 +1,6 @@
 # HAAR / 아뜰리에포포 스마트스토어·Google Drive 브리지
 
-퀸실버 상품 카탈로그를 Google Drive에서 필요할 때 내려받아 네이버 커머스API 상품 등록·운영에 사용하고, HAAR Drive 루트 안에서 파일·폴더 생성·업로드·교체·이동·복사·휴지통·복원·삭제·공유를 수행하는 CLI + MCP + Hostinger HTTP API입니다.
+퀸실버 상품 카탈로그를 Google Drive에서 필요할 때 내려받아 네이버 커머스API 상품 등록·운영에 사용하고, HAAR Drive 루트 안에서 파일·폴더 생성·업로드·교체·이동·복사·휴지통·복원·삭제·공유를 수행하는 Hostinger HTTP API입니다. CLI와 MCP는 기존 상품 등록 기능만 제공합니다.
 
 현재 버전은 **`0.4.0`**입니다.
 
@@ -8,7 +8,7 @@
 
 ### 스마트스토어 / 네이버 커머스API
 
-- 공식 `llms.txt`에 endpoint 링크로 열거된 115개 operation allowlist gateway
+- 공식 `llms.txt`에 endpoint 링크로 열거된 116개 operation allowlist gateway
 - 공식 가이드에는 있으나 endpoint 링크가 아직 없는 API데이터솔루션은 `specPendingDomains`로 추적
 - 상품·그룹상품·카테고리·옵션·배송·공지·검수
 - 주문·발주·발송·취소·반품·교환
@@ -61,7 +61,7 @@ Drive 원본 규모는 상품 1,515개, 이미지 31,473개, 약 12.89GB이며 �
 ```bash
 git clone https://github.com/jskjw157/AtelierPopo.git
 cd AtelierPopo/smartstore-bridge
-npm install
+npm ci
 cp .env.example .env
 cp config/atelier-popo.example.json config/atelier-popo.json
 ```
@@ -127,11 +127,11 @@ GOOGLE_DRIVE_ROOT_FOLDER_ID=1tPsrn29CjAkIg9oloSn5ftwQKyjEPzQD
 GOOGLE_DRIVE_CATALOG_FOLDER_ID=1OxlupopKo8BR-8_fDE72LEknRbWIoGoS
 GOOGLE_DRIVE_FINAL_DETAIL_FOLDER_ID=1YKzTg8rGoyRFGihPAvybKjkaZpk56y3Y
 
-ATELIER_DRIVE_ALLOW_WRITES=true
-ATELIER_DRIVE_ALLOW_MOVES=true
-ATELIER_DRIVE_ALLOW_TRASH=true
-ATELIER_DRIVE_ALLOW_PERMANENT_DELETE=true
-ATELIER_DRIVE_ALLOW_PERMISSION_CHANGES=true
+ATELIER_DRIVE_ALLOW_WRITES=false
+ATELIER_DRIVE_ALLOW_MOVES=false
+ATELIER_DRIVE_ALLOW_TRASH=false
+ATELIER_DRIVE_ALLOW_PERMANENT_DELETE=false
+ATELIER_DRIVE_ALLOW_PERMISSION_CHANGES=false
 
 ATELIER_API_KEY=
 ATELIER_HTTP_HOST=0.0.0.0
@@ -149,6 +149,7 @@ ATELIER_COMMERCE_ALLOW_INQUIRIES=false
 ATELIER_COMMERCE_ALLOW_SOLUTIONS=false
 ATELIER_COMMERCE_ALLOW_SELLER_WRITES=false
 ATELIER_COMMERCE_ALLOW_MULTIPART_UPLOADS=false
+ATELIER_COMMERCE_ALLOW_UNVERIFIED_OPERATIONS=false
 ```
 
 시크릿은 GitHub·채팅·캡처에 올리지 마세요.
@@ -214,7 +215,7 @@ curl -X POST \
   -H "Authorization: Bearer $ATELIER_API_KEY" \
   -H "Content-Type: application/json" \
   http://localhost:3000/api/v1/drive/capabilities/probe \
-  -d '{"confirmation":"RUN_DRIVE_WRITE_CANARY"}'
+  -d '{"confirmation":"RUN_DRIVE_WRITE_CANARY","idempotencyKey":"drive-canary-001"}'
 ```
 
 ## Drive 카탈로그
@@ -273,7 +274,7 @@ POST /api/v1/drive/files/{fileId}/permissions/{permissionId}/delete
 POST /api/v1/drive/verify-tree
 ```
 
-모든 대상은 `HAAR 상세페이지` 허용 루트의 하위인지 확인합니다. 루트 밖 작업은 `DRIVE_PATH_OUTSIDE_ALLOWED_ROOT`로 차단합니다.
+모든 대상과 카탈로그 폴더는 `HAAR 상세페이지` 허용 루트의 하위인지 확인합니다. 루트 밖 작업은 `DRIVE_PATH_OUTSIDE_ALLOWED_ROOT`로 차단합니다. 모든 Drive 쓰기는 `ATELIER_HTTP_ALLOW_WRITES=true`, operation별 확인 문구, 8~128자의 `idempotencyKey`가 필요하며 `202` 작업으로 접수됩니다.
 
 ## Drive 확인 문구
 
@@ -338,9 +339,9 @@ npm run test:remote
 
 ```text
 애플리케이션 루트: smartstore-bridge
-설치 명령: npm install
+설치 명령: npm ci
 시작 명령: npm start
-상태 확인: GET /health
+상태 확인: GET /health/ready
 ```
 
 기존 커머스 배포 절차는 [`docs/HOSTINGER_DEPLOY.md`](docs/HOSTINGER_DEPLOY.md), Drive 절차는 [`docs/GOOGLE_DRIVE_DEPLOY.md`](docs/GOOGLE_DRIVE_DEPLOY.md), 전체 커머스API 절차는 [`docs/NAVER_COMMERCE_DEPLOY.md`](docs/NAVER_COMMERCE_DEPLOY.md)를 따르세요.
@@ -366,6 +367,7 @@ ATELIER_COMMERCE_ALLOW_MULTIPART_UPLOADS=false
 Drive 쓰기:
 
 ```dotenv
+ATELIER_HTTP_ALLOW_WRITES=false
 ATELIER_DRIVE_ALLOW_WRITES=false
 ATELIER_DRIVE_ALLOW_MOVES=false
 ATELIER_DRIVE_ALLOW_TRASH=false

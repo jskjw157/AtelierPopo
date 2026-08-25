@@ -2,11 +2,11 @@
 
 ## 1. 구현 범위
 
-`smartstore-bridge v0.4.0`은 네이버 공식 `llms.txt` 인덱스 기준 115개 operation을 allowlist manifest로 번들합니다.
+`smartstore-bridge v0.4.0`은 네이버 공식 `llms.txt` 인덱스 기준 116개 operation을 allowlist manifest로 번들합니다.
 
 | 도메인 | 수 |
 |---|---:|
-| N배송 | 3 |
+| N배송 | 4 |
 | 문의 | 6 |
 | 상품 | 64 |
 | 인증 | 1 |
@@ -14,7 +14,7 @@
 | 주문 | 20 |
 | 커머스솔루션 | 8 |
 | 판매자정보 | 8 |
-| 합계 | 115 |
+| 합계 | 116 |
 
 인증 토큰 발급은 내부 모듈에서 처리하며 generic gateway로 직접 노출하지 않습니다. 상품 이미지 업로드는 multipart/base64 파일 입력을 지원합니다. 나머지 공식 operation은 manifest의 `operationId`를 통해 호출할 수 있습니다. 공식 AI 활용 가이드에는 API데이터솔루션이 포함 범위로 안내되지만 현재 `llms.txt`에는 endpoint 링크가 열거되지 않아, 프로그램은 이를 `specPendingDomains`로 표시하고 공식 endpoint가 추가되면 spec sync로 편입합니다.
 
@@ -65,7 +65,7 @@ ATELIER_COMMERCE_ALLOW_INQUIRIES=false
 ATELIER_COMMERCE_ALLOW_SOLUTIONS=false
 ATELIER_COMMERCE_ALLOW_SELLER_WRITES=false
 ATELIER_COMMERCE_ALLOW_MULTIPART_UPLOADS=false
-ATELIER_COMMERCE_ALLOW_UNVERIFIED_OPERATIONS=true
+ATELIER_COMMERCE_ALLOW_UNVERIFIED_OPERATIONS=false
 ATELIER_COMMERCE_EXPOSE_PERSONAL_DATA=false
 
 ATELIER_COMMERCE_MAX_JSON_BODY_BYTES=16777216
@@ -118,7 +118,7 @@ curl \
 ```json
 {
   "commerce": {
-    "operationCount": 115
+    "operationCount": 116
   }
 }
 ```
@@ -151,8 +151,8 @@ npm run commerce:coverage
 현재 기준 Coverage:
 
 ```text
-공식 operation: 115
-분류 operation: 115
+공식 operation: 116
+분류 operation: 116
 중복 operationId: 0
 미분류 operation: 0
 ```
