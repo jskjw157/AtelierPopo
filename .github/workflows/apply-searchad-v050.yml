@@ -107,7 +107,18 @@ jobs:
           rm -rf .tmp
           rm -f .github/workflows/apply-searchad-v050.yml
           git add -A -- smartstore-bridge .tmp .github/workflows/apply-searchad-v050.yml
-          git diff --cached --check
+          # Official pinned Swagger files are preserved byte-for-byte and contain upstream trailing whitespace.
+          # Check only project-authored source, tests, scripts, docs, migrations, package metadata and corrections.
+          git diff --cached --check -- \
+            smartstore-bridge/src \
+            smartstore-bridge/scripts \
+            smartstore-bridge/test \
+            smartstore-bridge/docs \
+            smartstore-bridge/migrations \
+            smartstore-bridge/package.json \
+            smartstore-bridge/.env.example \
+            smartstore-bridge/specs/naver-searchad/corrections \
+            smartstore-bridge/specs/naver-searchad/source-manifest.json
           if git diff --cached --quiet; then
             echo "No source changes to commit."
             exit 0
