@@ -1,0 +1,93 @@
+version: 1
+reviewedAt: 2026-08-25
+reviewedBy: OpenAI
+
+rules:
+  - id: path-parameters-are-required
+    match:
+      parameterLocation: path
+      pathContainsParameter: true
+    override:
+      required: true
+    reason: URI path에 포함된 식별자는 Swagger의 required 값과 무관하게 실제 요청에 필수다.
+    officialEvidence:
+      - https://raw.githubusercontent.com/naver/searchad-apidoc/gh-pages/assets/json/ncc-heroes-ncc.json
+    status: active
+
+  - id: selector-enum
+    match:
+      parameterName: selector
+      normalizedPaths:
+        - /ncc/campaigns
+        - /ncc/adgroups
+        - /ncc/keywords
+    override:
+      enum:
+        - PREVIOUS
+        - NEXT
+      default: NEXT
+    reason: 공식 릴리스 노트의 페이지 탐색 계약을 반영한다.
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/release/2016/06/29/release-note/
+    effectiveFrom: 2016-06-29
+    status: active
+
+  - id: inspect-history-batch-limit
+    match:
+      normalizedPath: /ncc/inspect-history
+      method: POST
+    override:
+      maxItems: 100
+      emptyObjectIsNotError: true
+      retentionDays: 90
+    reason: 최근 3개월, 다건 최대 100개, 사유 없음/없는 ID는 빈 객체라는 공식 계약을 반영한다.
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/release/2025/12/03/release-note/
+    effectiveFrom: 2025-12-03
+    status: active
+
+  - id: ad-extension-image-data-uri
+    match:
+      normalizedPath: /ncc/ad-extensions/create
+      method: POST
+      field: imagePath
+    override:
+      acceptedMimeTypes:
+        - image/jpeg
+        - image/jpg
+        - image/png
+      maxDecodedBytes: 5242880
+      width: 214
+      height: 214
+      headerPattern: '^data:image/(jpeg|jpg|png);filename:[^;,]+;base64,'
+    reason: 이미지 확장소재 공식 등록 규칙을 반영한다.
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/release/2025/06/25/release-note/
+    effectiveFrom: 2025-06-25
+    status: active
+
+  - id: power-link-image-count
+    match:
+      normalizedPath: /ncc/ad-extensions/create
+      method: POST
+      extensionType: POWER_LINK_IMAGE
+    override:
+      minItems: 1
+      maxItems: 1
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/release/2025/06/25/release-note/
+    effectiveFrom: 2025-06-25
+    status: active
+
+  - id: image-sub-links-count
+    match:
+      normalizedPath: /ncc/ad-extensions/create
+      method: POST
+      extensionType: IMAGE_SUB_LINKS
+    override:
+      minItems: 1
+      maxItems: 3
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/release/2025/06/25/release-note/
+    effectiveFrom: 2025-06-25
+    status: active
