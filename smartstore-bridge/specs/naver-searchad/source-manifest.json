@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "repository": "naver/searchad-apidoc",
+  "ref": "8e250490ab748367a627213f7d7a2917e005cb10",
+  "branch": "gh-pages",
+  "baseRawUrl": "https://raw.githubusercontent.com/naver/searchad-apidoc/8e250490ab748367a627213f7d7a2917e005cb10/assets/json",
+  "sources": [
+    { "id": "ncc", "file": "ncc-heroes-ncc.json", "gitBlobSha": "f8e577b7fdeb17aab520f1ec73528795b3c50833", "size": 286559 },
+    { "id": "tool", "file": "ncc-heroes-tool.json", "gitBlobSha": "13f37bd805be398fd5ad3a7d2673f9cfd29372eb", "size": 23380 },
+    { "id": "billing", "file": "ncc-heroes-billing.json", "gitBlobSha": "45f3dc9058d1f43cca5690a8d056031787f957e1", "size": 12676 },
+    { "id": "account", "file": "atower.json", "gitBlobSha": "6e3985e498c17e9390854e7555ede9991bd8bf97", "size": 54711 },
+    { "id": "report", "file": "ncc-report.json", "gitBlobSha": "79cdd5fb46a964c57f3b6a9d24a7f36b1f6b7ac9", "size": 28786 },
+    { "id": "master-report", "file": "master-report.json", "gitBlobSha": "a995b82d0f4f28409224b30a067bc3f913ca183d", "size": 10778 },
+    { "id": "keyword-tool", "file": "ncc-keywordstool.json", "gitBlobSha": "db3468d5636a943ce5ae5144b2772ff5f6ddf266", "size": 5613 },
+    { "id": "estimate", "file": "estimate.json", "gitBlobSha": "746bad184198ee553e8570aaa15bfa12e2416296", "size": 28750 },
+    { "id": "inspect-history", "file": "ncc-inspect-history.json", "gitBlobSha": "01cbe369d0bf4ac827c1032a2fcdb9af98db929d", "size": 3799 }
+  ]
+}

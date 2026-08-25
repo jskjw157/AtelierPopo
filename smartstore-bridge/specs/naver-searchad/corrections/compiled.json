@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-08-25",
+  "baseUrl": "https://api.searchad.naver.com",
+  "pathRules": {
+    "stripApiPrefix": true,
+    "expandQueryTemplate": true,
+    "preserveReportDownloadQuery": true
+  },
+  "initiallyQuarantinedTags": [
+    "accesscontrol",
+    "advancedreportcontroller",
+    "apiapikey",
+    "apicustomerauth",
+    "apihistory",
+    "apikeys",
+    "apilicenses",
+    "apimyclientscontroller",
+    "auth",
+    "columncontroller",
+    "customer",
+    "customerauth",
+    "customerlinks",
+    "history",
+    "managercandidates",
+    "nccmanagedkeyword",
+    "managedkeyword"
+  ],
+  "quarantinedTagPatterns": [
+    "controller$",
+    "endpoint$",
+    "^l7",
+    "^basicerror"
+  ],
+  "deprecatedReports": {
+    "NAVERPAY_CONVERSION": {
+      "state": "deprecated",
+      "dataEndDate": "2025-04-08",
+      "updateEndDate": "2025-04-09",
+      "accessEndDate": "2025-05-09",
+      "newJobAllowed": false,
+      "historicalDownloadAllowed": false
+    }
+  },
+  "operationFamilyOverrides": [
+    {
+      "tag": "ManagedKeyword",
+      "state": "internal_quarantined",
+      "runtimeAllowlisted": false
+    }
+  ],
+  "reportStates": [
+    "provisional",
+    "stabilized_by_policy",
+    "changed_after_generation",
+    "quarantined",
+    "failed"
+  ]
+}

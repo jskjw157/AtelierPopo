@@ -1,0 +1,431 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "description": "Heroes 서비스에서 제공하는 billing api 목록",
+    "version": "2.0",
+    "title": "Heroes New Clickchoice 빌링 API",
+    "termsOfService": "http://searchad.naver.com"
+  },
+  "host": "10.99.163.35:10001",
+  "basePath": "/",
+  "tags": [
+    {
+      "name": "Bizmoney",
+      "description": "Api Billing Controller"
+    }
+  ],
+  "paths": {
+    "/api/billing/bizmoney": {
+      "get": {
+        "tags": [
+          "Bizmoney"
+        ],
+        "summary": "get",
+        "description": "Returns amount of bizmoney and a status of locks.",
+        "operationId": "getBizmoneyUsingGET",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "*/*"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/Bizmoney"
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/billing/bizmoney/histories/charge{?searchStartDt,searchEndDt}": {
+      "get": {
+        "tags": [
+          "Bizmoney"
+        ],
+        "summary": "get(charge)",
+        "description": "bizmoney charging history",
+        "operationId": "getChargeHistoryUsingGET",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "*/*"
+        ],
+        "parameters": [
+          {
+            "name": "searchStartDt",
+            "in": "query",
+            "description": "Period start date (KST, YYYYMMDD)",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "searchEndDt",
+            "in": "query",
+            "description": "Period end date (KST, YYYYMMDD)",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/BillingHistoryForChargeApi"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/billing/bizmoney/histories/exhaust{?searchStartDt,searchEndDt}": {
+      "get": {
+        "tags": [
+          "Bizmoney"
+        ],
+        "summary": "get(exhaust)",
+        "description": "bizmoney deduction history",
+        "operationId": "getHistoryForExhaustUsingGET",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "*/*"
+        ],
+        "parameters": [
+          {
+            "name": "searchStartDt",
+            "in": "query",
+            "description": "Period start date (KST, YYYYMMDD)",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "searchEndDt",
+            "in": "query",
+            "description": "Period end date (KST, YYYYMMDD)",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/BillingStatActivityApi"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/billing/bizmoney/histories/period{?searchStartDt,searchEndDt}": {
+      "get": {
+        "tags": [
+          "Bizmoney"
+        ],
+        "summary": "get(period)",
+        "description": "Daily BizMoney Status",
+        "operationId": "getBillingHistoryForPeriodUsingGET",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "*/*"
+        ],
+        "parameters": [
+          {
+            "name": "searchStartDt",
+            "in": "query",
+            "description": "Period start date(KST, YYYYMMDD)",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "searchEndDt",
+            "in": "query",
+            "description": "Period end date(KST, YYYYMMDD)",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/BillingStatAccountApi"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "BillingHistoryForChargeApi": {
+      "type": "object",
+      "properties": {
+        "displayCd": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Charge type classification code. #hidden-create #hidden-update"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Charge Type Description(Korean). #hidden-create #hidden-update"
+        },
+        "newNonRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Free chared bizmoney amount. #hidden-create #hidden-update"
+        },
+        "newRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Purchased bizmoney amount. #hidden-create #hidden-update"
+        },
+        "statDt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "unixtimestamp, Used after removing the last 3 digits. #hidden-create #hidden-update"
+        }
+      }
+    },
+    "BillingStatAccountApi": {
+      "type": "object",
+      "properties": {
+        "addNonRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Free chared bizmoney amount. #hidden-create #hidden-update"
+        },
+        "addRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Purchased bizmoney amount. #hidden-create #hidden-update"
+        },
+        "customerId": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The unique ID of the customer. #hidden-create #hidden-update"
+        },
+        "nonRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "balance of free charged amount, VAT included. #hidden-create #hidden-update"
+        },
+        "refundNonRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Refunded to free charged bizmoney amount, VAT included. #hidden-create #hidden-update"
+        },
+        "refundRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Refunded to purchased bizmoney amount, VAT included. #hidden-create #hidden-update"
+        },
+        "refundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "balance of Purchased amount, VAT included. #hidden-create #hidden-update"
+        },
+        "returnRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Amount of refunded by cash or canceled card payment, VAT included, VAT included. #hidden-create #hidden-update"
+        },
+        "settleDt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "unixtimestamp, Used after removing the last 3 digits. #hidden-create #hidden-update"
+        },
+        "useNonRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Used free charged amount, VAT included. #hidden-create #hidden-update"
+        },
+        "useRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Used Purchased amount, VAT included. #hidden-create #hidden-update"
+        }
+      }
+    },
+    "BillingStatActivityApi": {
+      "type": "object",
+      "properties": {
+        "activityCd": {
+          "type": "integer",
+          "format": "int64",
+          "description": "0: BizMoney exhaust(deductions). #hidden-create #hidden-update"
+        },
+        "campaignTp": {
+          "type": "integer",
+          "format": "int64",
+          "description": "1 : 'Powerlink (WEB_SITE)', 2 : 'Shoppping search AD. (Shopping)', 3 : 'Contents search AD', 4 : 'Brand search AD', 6 : 'Small business DA'  #hidden-create #hidden-update"
+        },
+        "customerId": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The unique ID of the customer. #hidden-create #hidden-update"
+        },
+        "prodInfoCd": {
+          "type": "string",
+          "description": "Search ad product code. #hidden-create #hidden-update"
+        },
+        "settleDt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "unixtimestamp, Used after removing the last 3 digits. #hidden-create #hidden-update"
+        },
+        "useNonrefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Used free charged amount, VAT included. #hidden-create #hidden-update"
+        },
+        "useRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Used Purchased amount, VAT included. #hidden-create #hidden-update"
+        }
+      }
+    },
+    "Bizmoney": {
+      "type": "object",
+      "properties": {
+        "bizmoney": {
+          "type": "integer",
+          "format": "int64",
+          "description": "the balance of bizmoney"
+        },
+        "budgetLock": {
+          "type": "boolean",
+          "example": false,
+          "description": "the value which indicates a lock for budget"
+        },
+        "customerId": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The unique ID of the customer #hidden-request"
+        },
+        "refundLock": {
+          "type": "boolean",
+          "example": false,
+          "description": "the value which indicates a lock for refund"
+        }
+      }
+    },
+    "BizmoneyCost": {
+      "type": "object",
+      "properties": {
+        "adjustedNonRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "amount of adjusted non-refundable bizmoney"
+        },
+        "adjustedRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "amount of adjusted refundable bizmoney"
+        },
+        "customerId": {
+          "type": "integer",
+          "format": "int64",
+          "description": "The unique ID of the customer #hidden-request"
+        },
+        "date": {
+          "type": "string",
+          "description": "The time at which the spend of money that date(RFC 3339 date-time)"
+        },
+        "device": {
+          "type": "string",
+          "description": "This value indicates what device used",
+          "enum": [
+            "NONE",
+            "PC",
+            "MOBILE"
+          ]
+        },
+        "networkType": {
+          "type": "string",
+          "description": "This value indicates that ad where exposure",
+          "enum": [
+            "NONE",
+            "NAVER",
+            "EXTERNAL"
+          ]
+        },
+        "nonRefundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "amount of non-refundable bizmoney for the account"
+        },
+        "productCode": {
+          "type": "string",
+          "description": "The Product Code",
+          "enum": [
+            "CPC",
+            "CC_WEB",
+            "BRND",
+            "CCP",
+            "PLA",
+            "SHOPPING",
+            "POWER_CONTENTS",
+            "BRAND_SEARCH",
+            "PLACE",
+            "BRAND_SEARCH_NOMINAL"
+          ]
+        },
+        "refundableAmt": {
+          "type": "integer",
+          "format": "int64",
+          "description": "amount of refundable bizmoney for the account"
+        }
+      }
+    }
+  }
+}

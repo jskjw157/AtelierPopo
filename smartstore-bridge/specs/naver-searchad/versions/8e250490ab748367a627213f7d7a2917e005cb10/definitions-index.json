@@ -1,0 +1,3941 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-25T23:19:37.467Z",
+  "specRef": "8e250490ab748367a627213f7d7a2917e005cb10",
+  "definitions": {
+    "ncc:Ad": {
+      "sourceId": "ncc",
+      "name": "Ad",
+      "type": "object",
+      "properties": [
+        "ad",
+        "adAttr",
+        "assets",
+        "customerId",
+        "editTm",
+        "enable",
+        "inspectStatus",
+        "nccAdId",
+        "nccAdgroupId",
+        "nccQi",
+        "regTm",
+        "status",
+        "statusReason",
+        "type",
+        "userLock"
+      ],
+      "required": []
+    },
+    "ncc:AdAssetRequest": {
+      "sourceId": "ncc",
+      "name": "AdAssetRequest",
+      "type": "object",
+      "properties": [
+        "assetData",
+        "linkType",
+        "pin",
+        "inspectRequestMsg"
+      ],
+      "required": []
+    },
+    "ncc:AdAssetResponse": {
+      "sourceId": "ncc",
+      "name": "AdAssetResponse",
+      "type": "object",
+      "properties": [
+        "assetData",
+        "assetType",
+        "customerId",
+        "editTm",
+        "inspectStatus",
+        "linkType",
+        "nccAdAssetLinkId",
+        "nccAdId",
+        "nccAssetId",
+        "pin",
+        "regTm"
+      ],
+      "required": [
+        "assetData",
+        "assetType",
+        "customerId",
+        "editTm",
+        "inspectStatus",
+        "linkType",
+        "nccAdAssetLinkId",
+        "nccAdId",
+        "nccAssetId",
+        "regTm"
+      ]
+    },
+    "ncc:AdExtension": {
+      "sourceId": "ncc",
+      "name": "AdExtension",
+      "type": "object",
+      "properties": [
+        "adExtension",
+        "customerId",
+        "editTm",
+        "enable",
+        "inspectStatus",
+        "mobileChannelId",
+        "nccAdExtensionId",
+        "ownerId",
+        "pcChannelId",
+        "periodEndDt",
+        "periodStartDt",
+        "regTm",
+        "schedule",
+        "status",
+        "statusReason",
+        "type",
+        "usePeriod",
+        "userLock"
+      ],
+      "required": []
+    },
+    "ncc:AdExtensionRequest": {
+      "sourceId": "ncc",
+      "name": "AdExtensionRequest",
+      "type": "object",
+      "properties": [
+        "adExtension",
+        "enable",
+        "inspectRequestMsg",
+        "mobileChannelId",
+        "nccAdExtensionId",
+        "ownerId",
+        "pcChannelId",
+        "periodEndDt",
+        "periodStartDt",
+        "preNccAdExtensionId",
+        "schedule",
+        "type",
+        "usePeriod",
+        "userLock"
+      ],
+      "required": [
+        "enable"
+      ]
+    },
+    "ncc:AdKeyword": {
+      "sourceId": "ncc",
+      "name": "AdKeyword",
+      "type": "object",
+      "properties": [
+        "adRelevanceScore",
+        "attr",
+        "bidAmt",
+        "customerId",
+        "editTm",
+        "expectedClickScore",
+        "inspectRequestMsg",
+        "inspectStatus",
+        "keyword",
+        "links",
+        "nccAdgroupId",
+        "nccCampaignId",
+        "nccKeywordId",
+        "nccQi",
+        "regTm",
+        "resultStatus",
+        "status",
+        "statusReason",
+        "useGroupBidAmt",
+        "userLock"
+      ],
+      "required": []
+    },
+    "ncc:AdRequest": {
+      "sourceId": "ncc",
+      "name": "AdRequest",
+      "type": "object",
+      "properties": [
+        "ad",
+        "adAttr",
+        "assets",
+        "customerId",
+        "nccAdId",
+        "nccAdgroupId",
+        "type",
+        "userLock"
+      ],
+      "required": []
+    },
+    "ncc:AdTemplate": {
+      "sourceId": "ncc",
+      "name": "AdTemplate",
+      "type": "object",
+      "properties": [
+        "attributes",
+        "name",
+        "previewImage",
+        "templateId"
+      ],
+      "required": []
+    },
+    "ncc:AdTemplateAttributes": {
+      "sourceId": "ncc",
+      "name": "AdTemplateAttributes",
+      "type": "object",
+      "properties": [
+        "adgroupType",
+        "contractableMaxDays",
+        "description",
+        "maxExposingPeriod",
+        "media",
+        "minimumPrice",
+        "periodOfUnitPrice",
+        "prices",
+        "productType",
+        "source",
+        "templateId",
+        "templateSellType",
+        "type",
+        "useFlag"
+      ],
+      "required": []
+    },
+    "ncc:AdditionalProperties": {
+      "sourceId": "ncc",
+      "name": "AdditionalProperties",
+      "type": "object",
+      "properties": [
+        "channelSequence",
+        "keepCount",
+        "purchaseCount",
+        "reviewCount",
+        "standardPurchaseOptions",
+        "todayReceive"
+      ],
+      "required": []
+    },
+    "ncc:Adgroup": {
+      "sourceId": "ncc",
+      "name": "Adgroup",
+      "type": "object",
+      "properties": [
+        "adRollingType",
+        "adgroupAttrJson",
+        "adgroupType",
+        "autobidStrategy",
+        "bidAmt",
+        "budgetLock",
+        "contentsNetworkBidAmt",
+        "contentsNetworkBidWeight",
+        "customerId",
+        "dailyBudget",
+        "editTm",
+        "expSearchBudgetRatio",
+        "mobileChannelId",
+        "mobileNetworkBidWeight",
+        "name",
+        "nccAdgroupId",
+        "nccCampaignId",
+        "numberInUse",
+        "pcChannelId",
+        "pcNetworkBidWeight",
+        "productGroup",
+        "regTm",
+        "sharedBudgetExpectCost",
+        "sharedBudgetId",
+        "sharedBudgetLock",
+        "sharedBudgetName",
+        "sharedDailyBudget",
+        "sharedExpSearchBudgetRatio",
+        "status",
+        "statusReason",
+        "systemBiddingType",
+        "targets",
+        "useCntsNetworkBidAmt",
+        "useCntsNetworkBidWeight",
+        "useDailyBudget",
+        "useExpSearch",
+        "aiAdsOptIn",
+        "userLock"
+      ],
+      "required": []
+    },
+    "ncc:AdgroupRequest": {
+      "sourceId": "ncc",
+      "name": "AdgroupRequest",
+      "type": "object",
+      "properties": [
+        "adRollingType",
+        "adgroupAttrJson",
+        "adgroupType",
+        "autobidStrategy",
+        "bidAmt",
+        "contentsNetworkBidAmt",
+        "contentsNetworkBidWeight",
+        "customerId",
+        "dailyBudget",
+        "expSearchBudgetRatio",
+        "keywordGroup",
+        "keywordGroupCategoryId",
+        "mobileChannelId",
+        "mobileNetworkBidWeight",
+        "name",
+        "nccAdgroupId",
+        "nccCampaignId",
+        "nccProductGroupId",
+        "pcChannelId",
+        "pcNetworkBidWeight",
+        "sharedBudgetId",
+        "sharedBudgetName",
+        "sharedDailyBudget",
+        "sharedExpSearchBudgetRatio",
+        "systemBiddingType",
+        "targets",
+        "useCntsNetworkBidAmt",
+        "useCntsNetworkBidWeight",
+        "useDailyBudget",
+        "useExpSearch",
+        "aiAdsOptIn",
+        "userLock"
+      ],
+      "required": []
+    },
+    "ncc:AdgroupRestrictKwd": {
+      "sourceId": "ncc",
+      "name": "AdgroupRestrictKwd",
+      "type": "object",
+      "properties": [
+        "delFlag",
+        "description",
+        "keyword",
+        "nccAdgroupId",
+        "nccAdgroupRestrictKwdId",
+        "regTm",
+        "resultStatus",
+        "type"
+      ],
+      "required": []
+    },
+    "ncc:AssetRequest": {
+      "sourceId": "ncc",
+      "name": "AssetRequest",
+      "type": "object",
+      "properties": [
+        "nccAssetId",
+        "customerId",
+        "assetType",
+        "assetData",
+        "inspectRequestMsg"
+      ],
+      "required": []
+    },
+    "ncc:AssetResponse": {
+      "sourceId": "ncc",
+      "name": "AssetResponse",
+      "type": "object",
+      "properties": [
+        "assetData",
+        "assetType",
+        "customerId",
+        "inspectStatus",
+        "nccAssetId"
+      ],
+      "required": []
+    },
+    "ncc:AttachImageInfoResponse": {
+      "sourceId": "ncc",
+      "name": "AttachImageInfoResponse",
+      "type": "object",
+      "properties": [
+        "imageCount",
+        "imageUrls",
+        "representImage"
+      ],
+      "required": []
+    },
+    "ncc:AutobidStrategyRequest": {
+      "sourceId": "ncc",
+      "name": "AutobidStrategyRequest",
+      "type": "object",
+      "properties": [
+        "autobidBidGoal",
+        "autobidBidStrategy",
+        "autobidBidStrategyValue",
+        "autobidBidType",
+        "autobidTargetId",
+        "autobidTargetType",
+        "customerId",
+        "isAutobidActive",
+        "nccAutobidStrategyId"
+      ],
+      "required": []
+    },
+    "ncc:BlackMarketLastSuccessfulBidPriceResponse": {
+      "sourceId": "ncc",
+      "name": "BlackMarketLastSuccessfulBidPriceResponse",
+      "type": "object",
+      "properties": [
+        "categoryId",
+        "knockDownPrice"
+      ],
+      "required": [
+        "categoryId",
+        "knockDownPrice"
+      ]
+    },
+    "ncc:BrandCatalogSearchResult": {
+      "sourceId": "ncc",
+      "name": "BrandCatalogSearchResult",
+      "type": "object",
+      "properties": [
+        "apply_TM",
+        "brndNm",
+        "brndSeq",
+        "catId",
+        "catalogTitle",
+        "catalogUrl",
+        "certifiedLowestPrc",
+        "certifiedProdCnt",
+        "del_FLAG",
+        "imgUrl",
+        "isAdded",
+        "isBrandCatalog",
+        "isChangedToBrandCatalog",
+        "isChangedToNormalCatalog",
+        "isRemoved",
+        "lnchYmd",
+        "lowestPrc",
+        "makerNm",
+        "makerSeq",
+        "mdlySeasn",
+        "modifyTimeMillis",
+        "nvMid",
+        "officialCertifiedLowestPrc",
+        "officialCertifiedProdCnt",
+        "officialLowestPrc",
+        "officialProdCnt",
+        "order",
+        "prodNm",
+        "prodTpCd",
+        "prvdrId",
+        "prvdrTpCd",
+        "rgstYmdt",
+        "srsSeq",
+        "svcYn"
+      ],
+      "required": [
+        "del_FLAG",
+        "nvMid",
+        "order"
+      ]
+    },
+    "ncc:BrandNewCategory": {
+      "sourceId": "ncc",
+      "name": "BrandNewCategory",
+      "type": "object",
+      "properties": [
+        "depth",
+        "dittoSchemaId",
+        "gccSchemaId",
+        "id",
+        "isSaUse",
+        "isUse",
+        "name",
+        "parentCategoryId",
+        "path"
+      ],
+      "required": [
+        "depth",
+        "gccSchemaId",
+        "id",
+        "name",
+        "parentCategoryId",
+        "path"
+      ]
+    },
+    "ncc:BrandNewContract": {
+      "sourceId": "ncc",
+      "name": "BrandNewContract",
+      "type": "object",
+      "properties": [
+        "adgroupName",
+        "adgroupTemplateName",
+        "bidAmt",
+        "biddingRound",
+        "biddingStatus",
+        "brandNewContractId",
+        "cancelCustomerId",
+        "cancelLoginId",
+        "cancelTm",
+        "contractAmt",
+        "contractCustomerId",
+        "contractEndDt",
+        "contractLoginId",
+        "contractName",
+        "contractStartDt",
+        "contractStatus",
+        "customerId",
+        "editTm",
+        "exposureEndDt",
+        "exposureStartDt",
+        "keywordGroupCategoryName",
+        "nccAdgroupId",
+        "paymentAmt",
+        "refundAmt",
+        "regTm",
+        "winningBidDt"
+      ],
+      "required": []
+    },
+    "ncc:BrandNewContractDto": {
+      "sourceId": "ncc",
+      "name": "BrandNewContractDto",
+      "type": "object",
+      "properties": [
+        "adgroupName",
+        "adgroupTemplateName",
+        "bidAmt",
+        "biddingRound",
+        "biddingStatus",
+        "brandNewContractId",
+        "cancelBillingId",
+        "cancelCustomerId",
+        "cancelLoginId",
+        "cancelTm",
+        "contractAmt",
+        "contractBillingId",
+        "contractCustomerId",
+        "contractEndDt",
+        "contractLoginId",
+        "contractName",
+        "contractStartDt",
+        "contractStatus",
+        "customerId",
+        "delFlag",
+        "delTm",
+        "editTm",
+        "exposureEndDt",
+        "exposureStartDt",
+        "keywordGroupCategoryId",
+        "keywordGroupCategoryName",
+        "mediaType",
+        "nccAdgroupId",
+        "paymentAmt",
+        "penaltyDt",
+        "refundAmt",
+        "regTm",
+        "templateId",
+        "winningBidDt"
+      ],
+      "required": [
+        "adgroupName",
+        "adgroupTemplateName",
+        "bidAmt",
+        "biddingRound",
+        "biddingStatus",
+        "brandNewContractId",
+        "cancelBillingId",
+        "cancelLoginId",
+        "cancelTm",
+        "contractAmt",
+        "contractBillingId",
+        "contractCustomerId",
+        "contractEndDt",
+        "contractLoginId",
+        "contractName",
+        "contractStartDt",
+        "contractStatus",
+        "customerId",
+        "delFlag",
+        "editTm",
+        "keywordGroupCategoryId",
+        "keywordGroupCategoryName",
+        "mediaType",
+        "nccAdgroupId",
+        "paymentAmt",
+        "penaltyDt",
+        "refundAmt",
+        "regTm",
+        "templateId",
+        "winningBidDt"
+      ]
+    },
+    "ncc:BrandNewContractRefundAmt": {
+      "sourceId": "ncc",
+      "name": "BrandNewContractRefundAmt",
+      "type": "object",
+      "properties": [
+        "nonRefundableAmt",
+        "refundAmt",
+        "refundableAmt"
+      ],
+      "required": [
+        "nonRefundableAmt",
+        "refundAmt",
+        "refundableAmt"
+      ]
+    },
+    "ncc:BrandNewContractRequest": {
+      "sourceId": "ncc",
+      "name": "BrandNewContractRequest",
+      "type": "object",
+      "properties": [
+        "nccAdgroupId",
+        "customerId",
+        "contractName",
+        "biddingRound",
+        "isRebidding",
+        "bidAmt"
+      ],
+      "required": []
+    },
+    "ncc:BrandNewContractSummary": {
+      "sourceId": "ncc",
+      "name": "BrandNewContractSummary",
+      "type": "object",
+      "properties": [
+        "connectedCount",
+        "currentTimeContract",
+        "nccAdgroupId",
+        "waitingCount"
+      ],
+      "required": [
+        "connectedCount",
+        "nccAdgroupId",
+        "waitingCount"
+      ]
+    },
+    "ncc:BrandNewRound": {
+      "sourceId": "ncc",
+      "name": "BrandNewRound",
+      "type": "object",
+      "properties": [
+        "bidDates",
+        "expEndDate",
+        "expStartDate",
+        "lastKnockDownDate",
+        "penaltyDate",
+        "round"
+      ],
+      "required": [
+        "bidDates",
+        "expEndDate",
+        "expStartDate",
+        "lastKnockDownDate",
+        "penaltyDate",
+        "round"
+      ]
+    },
+    "ncc:BrandNewRoundBidDate": {
+      "sourceId": "ncc",
+      "name": "BrandNewRoundBidDate",
+      "type": "object",
+      "properties": [
+        "bidEndDate",
+        "bidRound",
+        "bidStartDate",
+        "isMainBid",
+        "knockDownDate"
+      ],
+      "required": [
+        "bidEndDate",
+        "bidRound",
+        "bidStartDate",
+        "isMainBid",
+        "knockDownDate"
+      ]
+    },
+    "ncc:BrandNewRoundKeywords": {
+      "sourceId": "ncc",
+      "name": "BrandNewRoundKeywords",
+      "type": "object",
+      "properties": [
+        "categories",
+        "round"
+      ],
+      "required": [
+        "categories",
+        "round"
+      ]
+    },
+    "ncc:BrandNewRoundKeywordsCategory": {
+      "sourceId": "ncc",
+      "name": "BrandNewRoundKeywordsCategory",
+      "type": "object",
+      "properties": [
+        "baseQc",
+        "categoryId",
+        "expUnitPrice",
+        "keywords",
+        "knockDownBidPrice",
+        "minBidPriceByAdmin",
+        "minBidPriceByQc",
+        "minBidPriceType"
+      ],
+      "required": [
+        "baseQc",
+        "categoryId",
+        "keywords",
+        "knockDownBidPrice",
+        "minBidPriceByAdmin",
+        "minBidPriceByQc",
+        "minBidPriceType"
+      ]
+    },
+    "ncc:BrandProductSearchResult": {
+      "sourceId": "ncc",
+      "name": "BrandProductSearchResult",
+      "type": "object",
+      "properties": [
+        "brandName",
+        "brandNo",
+        "category1Id",
+        "category1Name",
+        "category2Id",
+        "category2Name",
+        "category3Id",
+        "category3Name",
+        "category4Id",
+        "category4Name",
+        "del_FLAG",
+        "imageUrl",
+        "lowPrice",
+        "makerName",
+        "makerNo",
+        "mallId",
+        "mallName",
+        "mallNo",
+        "mallPcUrl",
+        "mallProdMblUrl",
+        "mallProductId",
+        "mallProductUrl",
+        "mobileLowPrice",
+        "nvMid",
+        "order",
+        "productName",
+        "productTitle",
+        "rcvYn",
+        "svcYn"
+      ],
+      "required": [
+        "brandNo",
+        "nvMid",
+        "order"
+      ]
+    },
+    "ncc:BrandProvider": {
+      "sourceId": "ncc",
+      "name": "BrandProvider",
+      "type": "object",
+      "properties": [
+        "additionalProperties",
+        "additionalType",
+        "creator",
+        "identifier",
+        "name",
+        "url"
+      ],
+      "required": [
+        "additionalProperties",
+        "additionalType",
+        "creator",
+        "identifier",
+        "name",
+        "url"
+      ]
+    },
+    "ncc:BrandProviderAdditionalProperty": {
+      "sourceId": "ncc",
+      "name": "BrandProviderAdditionalProperty",
+      "type": "object",
+      "properties": [
+        "additionalType",
+        "propertyID",
+        "value"
+      ],
+      "required": [
+        "additionalType",
+        "propertyID",
+        "value"
+      ]
+    },
+    "ncc:BrandProviderCreator": {
+      "sourceId": "ncc",
+      "name": "BrandProviderCreator",
+      "type": "object",
+      "properties": [
+        "memberOf"
+      ],
+      "required": []
+    },
+    "ncc:BrandProviderCreatorMemberOf": {
+      "sourceId": "ncc",
+      "name": "BrandProviderCreatorMemberOf",
+      "type": "object",
+      "properties": [
+        "additionalType",
+        "alternateName",
+        "name",
+        "sequence"
+      ],
+      "required": [
+        "additionalType",
+        "alternateName",
+        "name",
+        "sequence"
+      ]
+    },
+    "ncc:BusinessChannel": {
+      "sourceId": "ncc",
+      "name": "BusinessChannel",
+      "type": "object",
+      "properties": [
+        "adultStatus",
+        "blackStatus",
+        "businessInfo",
+        "channelKey",
+        "channelTp",
+        "customerId",
+        "editTm",
+        "firstChargeTm",
+        "inspectRequestMsg",
+        "inspectRequestTm",
+        "inspectTm",
+        "mobileInspectStatus",
+        "name",
+        "nccBusinessChannelId",
+        "pcInspectStatus",
+        "regTm",
+        "status",
+        "statusReason"
+      ],
+      "required": []
+    },
+    "ncc:Campaign": {
+      "sourceId": "ncc",
+      "name": "Campaign",
+      "type": "object",
+      "properties": [
+        "campaignTp",
+        "customerId",
+        "dailyBudget",
+        "deliveryMethod",
+        "editTm",
+        "name",
+        "nccCampaignId",
+        "numberInUse",
+        "periodEndDt",
+        "periodStartDt",
+        "regTm",
+        "sharedBudgetDeliveryMethod",
+        "sharedBudgetExpectCost",
+        "sharedBudgetId",
+        "sharedBudgetLock",
+        "sharedBudgetName",
+        "sharedDailyBudget",
+        "status",
+        "statusReason",
+        "trackingMode",
+        "trackingUrl",
+        "trackingUrlCustomParams",
+        "useDailyBudget",
+        "usePeriod",
+        "userLock"
+      ],
+      "required": []
+    },
+    "ncc:CampaignRequest": {
+      "sourceId": "ncc",
+      "name": "CampaignRequest",
+      "type": "object",
+      "properties": [
+        "campaignTp",
+        "customerId",
+        "dailyBudget",
+        "deliveryMethod",
+        "name",
+        "nccCampaignId",
+        "periodEndDt",
+        "periodStartDt",
+        "sharedBudgetDeliveryMethod",
+        "sharedBudgetId",
+        "sharedBudgetName",
+        "sharedDailyBudget",
+        "trackingMode",
+        "trackingUrl",
+        "trackingUrlCustomParams",
+        "useDailyBudget",
+        "usePeriod",
+        "userLock"
+      ],
+      "required": []
+    },
+    "ncc:Category": {
+      "sourceId": "ncc",
+      "name": "Category",
+      "type": "object",
+      "properties": [
+        "alternateName",
+        "fullCategoryIdentifier",
+        "identifier"
+      ],
+      "required": []
+    },
+    "ncc:ContentsCampaignKeyword": {
+      "sourceId": "ncc",
+      "name": "ContentsCampaignKeyword",
+      "type": "object",
+      "properties": [
+        "adgroupType",
+        "categoryId1",
+        "categoryId2",
+        "keyword",
+        "monthlyMobileQcCnt",
+        "monthlyPcQcCnt"
+      ],
+      "required": []
+    },
+    "ncc:ContentsCampaignKeywordCategory": {
+      "sourceId": "ncc",
+      "name": "ContentsCampaignKeywordCategory",
+      "type": "object",
+      "properties": [
+        "adgroupType",
+        "depth",
+        "id",
+        "name",
+        "parentCategoryId"
+      ],
+      "required": []
+    },
+    "ncc:Criterion": {
+      "sourceId": "ncc",
+      "name": "Criterion",
+      "type": "object",
+      "properties": [
+        "bidWeight",
+        "codeName",
+        "customerId",
+        "delFlag",
+        "delTm",
+        "dictionaryCode",
+        "editTm",
+        "enable",
+        "negative",
+        "ownerId",
+        "regTm",
+        "type",
+        "value"
+      ],
+      "required": [
+        "delFlag",
+        "editTm"
+      ]
+    },
+    "ncc:CriterionDictionary": {
+      "sourceId": "ncc",
+      "name": "CriterionDictionary",
+      "type": "object",
+      "properties": [
+        "delFlag",
+        "delTm",
+        "dictionaryCode",
+        "editTm",
+        "name",
+        "regTm",
+        "type",
+        "value"
+      ],
+      "required": [
+        "delFlag",
+        "editTm",
+        "regTm"
+      ]
+    },
+    "ncc:CriterionRequest": {
+      "sourceId": "ncc",
+      "name": "CriterionRequest",
+      "type": "object",
+      "properties": [
+        "bidWeight",
+        "customerId",
+        "dictionaryCode",
+        "enable",
+        "negative",
+        "ownerId",
+        "type",
+        "value"
+      ],
+      "required": []
+    },
+    "ncc:CtsNaAccountInfo": {
+      "sourceId": "ncc",
+      "name": "CtsNaAccountInfo",
+      "type": "object",
+      "properties": [
+        "naAccountId",
+        "status",
+        "url"
+      ],
+      "required": [
+        "naAccountId",
+        "url"
+      ]
+    },
+    "ncc:DeliveryFee": {
+      "sourceId": "ncc",
+      "name": "DeliveryFee",
+      "type": "object",
+      "properties": [
+        "price"
+      ],
+      "required": []
+    },
+    "ncc:DemoFilter": {
+      "sourceId": "ncc",
+      "name": "DemoFilter",
+      "type": "object",
+      "properties": [
+        "filterData",
+        "naver",
+        "shopping"
+      ],
+      "required": []
+    },
+    "ncc:EstimateBidding": {
+      "sourceId": "ncc",
+      "name": "EstimateBidding",
+      "type": "object",
+      "properties": [
+        "bidAmt",
+        "keyword",
+        "nccKeywordId"
+      ],
+      "required": []
+    },
+    "ncc:ExposureStatusAdExtension": {
+      "sourceId": "ncc",
+      "name": "ExposureStatusAdExtension",
+      "type": "object",
+      "properties": [
+        "adExtensionId",
+        "clickUrl",
+        "description",
+        "imageUrl",
+        "title",
+        "type"
+      ],
+      "required": []
+    },
+    "ncc:ExposureStatusProduct": {
+      "sourceId": "ncc",
+      "name": "ExposureStatusProduct",
+      "type": "object",
+      "properties": [
+        "categoryNames",
+        "clickUrl",
+        "imageUrl",
+        "lowPrice",
+        "name",
+        "nvMid"
+      ],
+      "required": []
+    },
+    "ncc:Filter": {
+      "sourceId": "ncc",
+      "name": "Filter",
+      "type": "object",
+      "properties": [
+        "exposureName",
+        "gender",
+        "startAge"
+      ],
+      "required": []
+    },
+    "ncc:Image": {
+      "sourceId": "ncc",
+      "name": "Image",
+      "type": "object",
+      "properties": [
+        "contentUrl",
+        "statusCode"
+      ],
+      "required": []
+    },
+    "ncc:ItemOffered": {
+      "sourceId": "ncc",
+      "name": "ItemOffered",
+      "type": "object",
+      "properties": [
+        "image",
+        "isFamilyFriendly",
+        "name"
+      ],
+      "required": []
+    },
+    "ncc:JsonNode": {
+      "sourceId": "ncc",
+      "name": "JsonNode",
+      "type": "object",
+      "properties": [],
+      "required": []
+    },
+    "ncc:KeywordOccupationStatus": {
+      "sourceId": "ncc",
+      "name": "KeywordOccupationStatus",
+      "type": "object",
+      "properties": [
+        "availableStartDt",
+        "isOccupiable",
+        "keyword",
+        "mediaType"
+      ],
+      "required": []
+    },
+    "ncc:KeywordRequest": {
+      "sourceId": "ncc",
+      "name": "KeywordRequest",
+      "type": "object",
+      "properties": [
+        "attr",
+        "bidAmt",
+        "customerId",
+        "inspectRequestMsg",
+        "inspectStatus",
+        "keyword",
+        "links",
+        "nccAdgroupId",
+        "nccCampaignId",
+        "nccKeywordId",
+        "useGroupBidAmt",
+        "userLock"
+      ],
+      "required": []
+    },
+    "ncc:Label": {
+      "sourceId": "ncc",
+      "name": "Label",
+      "type": "object",
+      "properties": [
+        "color",
+        "customerId",
+        "editTm",
+        "name",
+        "nccLabelId",
+        "regTm"
+      ],
+      "required": []
+    },
+    "ncc:LabelRef": {
+      "sourceId": "ncc",
+      "name": "LabelRef",
+      "type": "object",
+      "properties": [
+        "customerId",
+        "editTm",
+        "enable",
+        "nccLabelId",
+        "refId",
+        "refTp",
+        "regTm"
+      ],
+      "required": []
+    },
+    "ncc:MainImage": {
+      "sourceId": "ncc",
+      "name": "MainImage",
+      "type": "object",
+      "properties": [
+        "fileSizeByte",
+        "height",
+        "sequence",
+        "signature",
+        "thumbnailUrl",
+        "width"
+      ],
+      "required": []
+    },
+    "ncc:MallCategory": {
+      "sourceId": "ncc",
+      "name": "MallCategory",
+      "type": "object",
+      "properties": [
+        "mallCatId",
+        "mallCatLvl",
+        "mallFullCatNm"
+      ],
+      "required": []
+    },
+    "ncc:ManagedKeyword": {
+      "sourceId": "ncc",
+      "name": "ManagedKeyword",
+      "type": "object",
+      "properties": [
+        "editTm",
+        "expUiType",
+        "isAdult",
+        "isLowSearchVolume",
+        "isRestricted",
+        "isSeason",
+        "isSellProhibit",
+        "keyword",
+        "regTm"
+      ],
+      "required": []
+    },
+    "ncc:ManagedKeywordResponse": {
+      "sourceId": "ncc",
+      "name": "ManagedKeywordResponse",
+      "type": "object",
+      "properties": [
+        "campaignAttributes",
+        "keyword",
+        "managedKeyword"
+      ],
+      "required": []
+    },
+    "ncc:MassJobCloneAdgroup": {
+      "sourceId": "ncc",
+      "name": "MassJobCloneAdgroup",
+      "type": "object",
+      "properties": [
+        "description",
+        "message",
+        "nccAdgroupId",
+        "nccAdgroupName",
+        "nccCampaignId",
+        "nccCampaignName",
+        "result"
+      ],
+      "required": []
+    },
+    "ncc:MobilePrice": {
+      "sourceId": "ncc",
+      "name": "MobilePrice",
+      "type": "object",
+      "properties": [
+        "price"
+      ],
+      "required": []
+    },
+    "ncc:NaverBookingResponse": {
+      "sourceId": "ncc",
+      "name": "NaverBookingResponse",
+      "type": "object",
+      "properties": [
+        "copnyName",
+        "id",
+        "reprName",
+        "state",
+        "url"
+      ],
+      "required": [
+        "copnyName",
+        "id",
+        "reprName",
+        "state",
+        "url"
+      ]
+    },
+    "ncc:NaverCategory": {
+      "sourceId": "ncc",
+      "name": "NaverCategory",
+      "type": "object",
+      "properties": [
+        "catId",
+        "catLvl",
+        "catNm",
+        "expsOrd",
+        "lastLvlYn",
+        "parentCatId"
+      ],
+      "required": []
+    },
+    "ncc:NaverPlaceBeauty": {
+      "sourceId": "ncc",
+      "name": "NaverPlaceBeauty",
+      "type": "object",
+      "properties": [
+        "hairShopStyles",
+        "nailShopStyles",
+        "sid"
+      ],
+      "required": [
+        "hairShopStyles",
+        "nailShopStyles",
+        "sid"
+      ]
+    },
+    "ncc:NaverPlaceBeautyImage": {
+      "sourceId": "ncc",
+      "name": "NaverPlaceBeautyImage",
+      "type": "object",
+      "properties": [
+        "height",
+        "imageUrl",
+        "imagesDesc",
+        "width"
+      ],
+      "required": [
+        "imageUrl"
+      ]
+    },
+    "ncc:NaverPlaceBeautyStyle": {
+      "sourceId": "ncc",
+      "name": "NaverPlaceBeautyStyle",
+      "type": "object",
+      "properties": [
+        "images",
+        "styleNum",
+        "title"
+      ],
+      "required": [
+        "images",
+        "styleNum",
+        "title"
+      ]
+    },
+    "ncc:NaverPlaceClipGroupResponse": {
+      "sourceId": "ncc",
+      "name": "NaverPlaceClipGroupResponse",
+      "type": "object",
+      "properties": [
+        "clips",
+        "groupId"
+      ],
+      "required": [
+        "clips",
+        "groupId"
+      ]
+    },
+    "ncc:NaverPlaceClipGroupsResponse": {
+      "sourceId": "ncc",
+      "name": "NaverPlaceClipGroupsResponse",
+      "type": "object",
+      "properties": [
+        "clipGroups",
+        "placeId",
+        "totalCount"
+      ],
+      "required": [
+        "clipGroups",
+        "placeId",
+        "totalCount"
+      ]
+    },
+    "ncc:NaverPlaceClipResponse": {
+      "sourceId": "ncc",
+      "name": "NaverPlaceClipResponse",
+      "type": "object",
+      "properties": [
+        "clipSeq",
+        "orientationType",
+        "thumbnailUrl",
+        "videoId"
+      ],
+      "required": [
+        "clipSeq",
+        "orientationType",
+        "thumbnailUrl",
+        "videoId"
+      ]
+    },
+    "ncc:NaverPlaceInfo": {
+      "sourceId": "ncc",
+      "name": "NaverPlaceInfo",
+      "type": "object",
+      "properties": [
+        "address",
+        "id",
+        "name",
+        "phone",
+        "roadAddr",
+        "siteId"
+      ],
+      "required": [
+        "address",
+        "id",
+        "name",
+        "phone",
+        "siteId"
+      ]
+    },
+    "ncc:NaverShoppingBrandStoreAuthorityBrands": {
+      "sourceId": "ncc",
+      "name": "NaverShoppingBrandStoreAuthorityBrands",
+      "type": "object",
+      "properties": [
+        "catalog",
+        "channelKeyMallSeq",
+        "channelNo",
+        "identifier",
+        "isBrandStore",
+        "isOfficialMall",
+        "mainEntityOfPage",
+        "mallId",
+        "mallNm",
+        "mallSeq",
+        "memberId",
+        "modifiedDateTime",
+        "name",
+        "providers",
+        "prvdId",
+        "registeredDateTime",
+        "url"
+      ],
+      "required": [
+        "catalog",
+        "channelKeyMallSeq",
+        "channelNo",
+        "identifier",
+        "isBrandStore",
+        "isOfficialMall",
+        "mallId",
+        "mallNm",
+        "mallSeq",
+        "memberId",
+        "modifiedDateTime",
+        "name",
+        "providers",
+        "prvdId",
+        "registeredDateTime",
+        "url"
+      ]
+    },
+    "ncc:NaverShoppingBrandStoreMainEntityOfPage": {
+      "sourceId": "ncc",
+      "name": "NaverShoppingBrandStoreMainEntityOfPage",
+      "type": "object",
+      "properties": [
+        "additionalType",
+        "name",
+        "potentialActions",
+        "url"
+      ],
+      "required": [
+        "additionalType",
+        "name",
+        "potentialActions",
+        "url"
+      ]
+    },
+    "ncc:NaverShoppingMaker": {
+      "sourceId": "ncc",
+      "name": "NaverShoppingMaker",
+      "type": "object",
+      "properties": [
+        "brandType",
+        "catId",
+        "makerName",
+        "makerSeq",
+        "modelName",
+        "nvMid"
+      ],
+      "required": []
+    },
+    "ncc:NaverShoppingProduct": {
+      "sourceId": "ncc",
+      "name": "NaverShoppingProduct",
+      "type": "object",
+      "properties": [
+        "additionalProperties",
+        "additionalType",
+        "businessFunction",
+        "catalogIdentifier",
+        "category",
+        "createdDateTime",
+        "deliveryFee",
+        "identifier",
+        "inProductGroupWithID",
+        "itemCondition",
+        "itemOffered",
+        "mobilePrice",
+        "mobileUrl",
+        "name",
+        "nsin",
+        "nsinCatalogIdentifier",
+        "offeredBy",
+        "potentialActions",
+        "salePrice",
+        "status",
+        "url"
+      ],
+      "required": [
+        "identifier",
+        "name"
+      ]
+    },
+    "ncc:NaverShoppingProductPageInfo": {
+      "sourceId": "ncc",
+      "name": "NaverShoppingProductPageInfo",
+      "type": "object",
+      "properties": [
+        "pageNumber",
+        "pageSize"
+      ],
+      "required": [
+        "pageNumber",
+        "pageSize"
+      ]
+    },
+    "ncc:NccAdgroupCopyJobRequest": {
+      "sourceId": "ncc",
+      "name": "NccAdgroupCopyJobRequest",
+      "type": "object",
+      "properties": [
+        "nccAdgroupIds",
+        "nccAdgroupNames",
+        "nccCampaignId",
+        "nccCampaignName",
+        "originNccCampaignId",
+        "originNccCampaignName",
+        "userLock"
+      ],
+      "required": []
+    },
+    "ncc:NccAdgroupRestrictKwdResponse": {
+      "sourceId": "ncc",
+      "name": "NccAdgroupRestrictKwdResponse",
+      "type": "object",
+      "properties": [
+        "delFlag",
+        "description",
+        "keyword",
+        "nccAdgroupId",
+        "nccAdgroupRestrictKwdId",
+        "resultStatus",
+        "type"
+      ],
+      "required": []
+    },
+    "ncc:NccAttachImage": {
+      "sourceId": "ncc",
+      "name": "NccAttachImage",
+      "type": "object",
+      "properties": [
+        "imageUrls"
+      ],
+      "required": []
+    },
+    "ncc:NccBusinessChannelResponse": {
+      "sourceId": "ncc",
+      "name": "NccBusinessChannelResponse",
+      "type": "object",
+      "properties": [
+        "adultStatus",
+        "blackStatus",
+        "businessInfo",
+        "channelKey",
+        "channelTp",
+        "customerId",
+        "delFlag",
+        "enabled",
+        "inspectRequestMsg",
+        "mobileInspectStatus",
+        "name",
+        "nccBusinessChannelId",
+        "pcInspectStatus",
+        "referenceKey",
+        "status",
+        "statusReason",
+        "unitedCatId"
+      ],
+      "required": []
+    },
+    "ncc:NccMassJob": {
+      "sourceId": "ncc",
+      "name": "NccMassJob",
+      "type": "object",
+      "properties": [
+        "bulkJson",
+        "cancelLoginId",
+        "cancelTm",
+        "customerId",
+        "endTm",
+        "inputJson",
+        "inputJson1",
+        "inputJson2",
+        "lineCount",
+        "loginCustomerId",
+        "loginId",
+        "name",
+        "nccMassJobId",
+        "outputJson",
+        "outputJson1",
+        "outputJson2",
+        "regTm",
+        "startTm",
+        "state",
+        "type",
+        "typeCd"
+      ],
+      "required": []
+    },
+    "ncc:NccNewQi": {
+      "sourceId": "ncc",
+      "name": "NccNewQi",
+      "type": "object",
+      "properties": [
+        "qiGrade"
+      ],
+      "required": []
+    },
+    "ncc:NccProfileImage": {
+      "sourceId": "ncc",
+      "name": "NccProfileImage",
+      "type": "object",
+      "properties": [
+        "url"
+      ],
+      "required": []
+    },
+    "ncc:NccShoppingCollectionProduct": {
+      "sourceId": "ncc",
+      "name": "NccShoppingCollectionProduct",
+      "type": "object",
+      "properties": [
+        "APPLY_TM",
+        "DEL_FLAG",
+        "DEL_TM",
+        "adCustomerId",
+        "brand",
+        "catId",
+        "category1Id",
+        "category1Name",
+        "category2Id",
+        "category2Name",
+        "category3Id",
+        "category3Name",
+        "category4Id",
+        "category4Name",
+        "displayNx",
+        "dvlryFeeCont",
+        "fullMallCatNm",
+        "hasDvlryFeeCont",
+        "id",
+        "imageUrl",
+        "imgStatusCd",
+        "isLgtModelMat",
+        "keepCnt",
+        "lowPrice",
+        "maker",
+        "mallChnlSeq",
+        "mallName",
+        "mallNo",
+        "mallProdMblUrl",
+        "mallProductId",
+        "mallProductUrl",
+        "mblProdUrl",
+        "mobilePrice",
+        "mpTp",
+        "notAvailableReason",
+        "openDate",
+        "parentId",
+        "priceUnit",
+        "prodStatusCd",
+        "prodTypeCd",
+        "productName",
+        "productTitle",
+        "purchaseCnt",
+        "rcvYn",
+        "referenceKey",
+        "registrable",
+        "reviewCountSum",
+        "saleTp",
+        "scoreInfo",
+        "stdGrpId",
+        "stdPrchCondInfoUpper",
+        "stdPrchCondVals",
+        "stdPrchOptValNames",
+        "stdPrchOptValNms"
+      ],
+      "required": []
+    },
+    "ncc:NccShoppingMall": {
+      "sourceId": "ncc",
+      "name": "NccShoppingMall",
+      "type": "object",
+      "properties": [
+        "accountId",
+        "adCustomerId",
+        "adsrTypeCd",
+        "bizplAddr",
+        "channels",
+        "hstcNm",
+        "mallBno",
+        "mallId",
+        "mallNm",
+        "mallSeq",
+        "mallTp",
+        "mallTpCd",
+        "mallUrl",
+        "npayMblYn",
+        "npayYn",
+        "onmktRegNo",
+        "regmStatCd",
+        "reprNm",
+        "storeFarmDI",
+        "talkYn",
+        "trdnnNm"
+      ],
+      "required": []
+    },
+    "ncc:NccShoppingMallChannel": {
+      "sourceId": "ncc",
+      "name": "NccShoppingMallChannel",
+      "type": "object",
+      "properties": [
+        "wdChnlNm",
+        "wdChnlSeq",
+        "wdChnlUrl",
+        "wdNm",
+        "wdTp"
+      ],
+      "required": []
+    },
+    "ncc:NccShoppingProductImage": {
+      "sourceId": "ncc",
+      "name": "NccShoppingProductImage",
+      "type": "object",
+      "properties": [
+        "productImageInfo"
+      ],
+      "required": []
+    },
+    "ncc:NccShoppingSearchProductFendiResponse": {
+      "sourceId": "ncc",
+      "name": "NccShoppingSearchProductFendiResponse",
+      "type": "object",
+      "properties": [
+        "code",
+        "errorMsg",
+        "mallSeq",
+        "numFound",
+        "pageInfo",
+        "products",
+        "results",
+        "totalCount"
+      ],
+      "required": [
+        "code",
+        "mallSeq",
+        "numFound",
+        "pageInfo",
+        "totalCount"
+      ]
+    },
+    "ncc:NccShortToRealUrl": {
+      "sourceId": "ncc",
+      "name": "NccShortToRealUrl",
+      "type": "object",
+      "properties": [
+        "realUrl",
+        "shortUrl"
+      ],
+      "required": []
+    },
+    "ncc:Number": {
+      "sourceId": "ncc",
+      "name": "Number",
+      "type": "object",
+      "properties": [],
+      "required": []
+    },
+    "ncc:OfferedBy": {
+      "sourceId": "ncc",
+      "name": "OfferedBy",
+      "type": "object",
+      "properties": [
+        "alternateName",
+        "identifier",
+        "name"
+      ],
+      "required": []
+    },
+    "ncc:Optional«TimeContract»": {
+      "sourceId": "ncc",
+      "name": "Optional«TimeContract»",
+      "type": "object",
+      "properties": [
+        "empty",
+        "present"
+      ],
+      "required": []
+    },
+    "ncc:Page": {
+      "sourceId": "ncc",
+      "name": "Page",
+      "type": "object",
+      "properties": [
+        "content",
+        "empty",
+        "first",
+        "last",
+        "number",
+        "numberOfElements",
+        "pageable",
+        "size",
+        "sort",
+        "totalElements",
+        "totalPages"
+      ],
+      "required": []
+    },
+    "ncc:Pageable": {
+      "sourceId": "ncc",
+      "name": "Pageable",
+      "type": "object",
+      "properties": [
+        "offset",
+        "pageNumber",
+        "pageSize",
+        "paged",
+        "sort",
+        "unpaged"
+      ],
+      "required": []
+    },
+    "ncc:Page«AssetResponse»": {
+      "sourceId": "ncc",
+      "name": "Page«AssetResponse»",
+      "type": "object",
+      "properties": [
+        "content",
+        "empty",
+        "first",
+        "last",
+        "number",
+        "numberOfElements",
+        "pageable",
+        "size",
+        "sort",
+        "totalElements",
+        "totalPages"
+      ],
+      "required": []
+    },
+    "ncc:ProductGroup": {
+      "sourceId": "ncc",
+      "name": "ProductGroup",
+      "type": "object",
+      "properties": [
+        "attrJson",
+        "brandName",
+        "brandNo",
+        "customerId",
+        "editTm",
+        "mallId",
+        "mallName",
+        "name",
+        "nccBusinessChannelId",
+        "nccProductGroupId",
+        "numberOfAdgroups",
+        "regTm",
+        "registeredProductType",
+        "registrationMethod"
+      ],
+      "required": []
+    },
+    "ncc:ProductGroupRequest": {
+      "sourceId": "ncc",
+      "name": "ProductGroupRequest",
+      "type": "object",
+      "properties": [
+        "nccProductGroupId",
+        "customerId",
+        "nccBusinessChannelId",
+        "name",
+        "registrationMethod",
+        "registeredProductType",
+        "mallId",
+        "mallName",
+        "brandNo",
+        "brandName",
+        "attrJson"
+      ],
+      "required": []
+    },
+    "ncc:ProductImageInfo": {
+      "sourceId": "ncc",
+      "name": "ProductImageInfo",
+      "type": "object",
+      "properties": [
+        "mainImage",
+        "subImageList"
+      ],
+      "required": []
+    },
+    "ncc:Qi": {
+      "sourceId": "ncc",
+      "name": "Qi",
+      "type": "object",
+      "properties": [
+        "qiGrade"
+      ],
+      "required": []
+    },
+    "ncc:ResultStatus": {
+      "sourceId": "ncc",
+      "name": "ResultStatus",
+      "type": "object",
+      "properties": [
+        "code",
+        "message"
+      ],
+      "required": []
+    },
+    "ncc:RollingBanner": {
+      "sourceId": "ncc",
+      "name": "RollingBanner",
+      "type": "object",
+      "properties": [
+        "content",
+        "editTm",
+        "exposureArea",
+        "exposureEndTm",
+        "exposureStartTm",
+        "hasTarget",
+        "isUse",
+        "noticeTp",
+        "readCount",
+        "regTm",
+        "regUserLoginId",
+        "regUserName",
+        "rollingNoticeId",
+        "sendCompletedSms",
+        "sendCompletedStatus",
+        "title"
+      ],
+      "required": [
+        "content",
+        "editTm",
+        "exposureArea",
+        "exposureEndTm",
+        "exposureStartTm",
+        "hasTarget",
+        "isUse",
+        "noticeTp",
+        "readCount",
+        "regTm",
+        "regUserLoginId",
+        "regUserName",
+        "rollingNoticeId",
+        "sendCompletedSms",
+        "sendCompletedStatus",
+        "title"
+      ]
+    },
+    "ncc:SalePrice": {
+      "sourceId": "ncc",
+      "name": "SalePrice",
+      "type": "object",
+      "properties": [
+        "price",
+        "priceCurrency"
+      ],
+      "required": []
+    },
+    "ncc:SearchResultAd": {
+      "sourceId": "ncc",
+      "name": "SearchResultAd",
+      "type": "object",
+      "properties": [
+        "categoryNames",
+        "fmpBrand",
+        "fmpMaker",
+        "imageUrl",
+        "isOwn",
+        "lowPrice",
+        "mobileLowPrice",
+        "productTitle",
+        "rank"
+      ],
+      "required": []
+    },
+    "ncc:SharedBudget": {
+      "sourceId": "ncc",
+      "name": "SharedBudget",
+      "type": "object",
+      "properties": [
+        "budgetLock",
+        "customerId",
+        "dailyBudget",
+        "deliveryMethod",
+        "editTm",
+        "expSearchBudgetRatio",
+        "expectCost",
+        "name",
+        "numberInUse",
+        "ownerType",
+        "regTm",
+        "sharedBudgetId",
+        "status",
+        "statusReason"
+      ],
+      "required": []
+    },
+    "ncc:SharedBudgetRequest": {
+      "sourceId": "ncc",
+      "name": "SharedBudgetRequest",
+      "type": "object",
+      "properties": [
+        "adgroupList",
+        "budgetLock",
+        "campaignList",
+        "customerId",
+        "dailyBudget",
+        "deliveryMethod",
+        "editTm",
+        "expSearchBudgetRatio",
+        "name",
+        "numberInUse",
+        "ownerType",
+        "regTm",
+        "sharedBudgetId"
+      ],
+      "required": []
+    },
+    "ncc:ShoppingBrandExposureStatusAd": {
+      "sourceId": "ncc",
+      "name": "ShoppingBrandExposureStatusAd",
+      "type": "object",
+      "properties": [
+        "adExtensionList",
+        "brandName",
+        "isOwn",
+        "placement",
+        "productList",
+        "rank",
+        "subChannelRank",
+        "type"
+      ],
+      "required": []
+    },
+    "ncc:ShoppingBrandExposureStatusKeywordInfo": {
+      "sourceId": "ncc",
+      "name": "ShoppingBrandExposureStatusKeywordInfo",
+      "type": "object",
+      "properties": [
+        "brandTopReserveRi",
+        "shoppingBrandKeywordTypes"
+      ],
+      "required": []
+    },
+    "ncc:ShoppingBrandExposureStatusResponse": {
+      "sourceId": "ncc",
+      "name": "ShoppingBrandExposureStatusResponse",
+      "type": "object",
+      "properties": [
+        "adList",
+        "keywordInfo"
+      ],
+      "required": []
+    },
+    "ncc:ShoppingBrandKeywordRecommend": {
+      "sourceId": "ncc",
+      "name": "ShoppingBrandKeywordRecommend",
+      "type": "object",
+      "properties": [
+        "keyword",
+        "rank"
+      ],
+      "required": [
+        "keyword",
+        "rank"
+      ]
+    },
+    "ncc:ShoppingBrandKeywordRecommends": {
+      "sourceId": "ncc",
+      "name": "ShoppingBrandKeywordRecommends",
+      "type": "object",
+      "properties": [
+        "keywords"
+      ],
+      "required": [
+        "keywords"
+      ]
+    },
+    "ncc:ShoppingExposureStatusDiagnosisAccount": {
+      "sourceId": "ncc",
+      "name": "ShoppingExposureStatusDiagnosisAccount",
+      "type": "object",
+      "properties": [
+        "account",
+        "reason"
+      ],
+      "required": [
+        "reason"
+      ]
+    },
+    "ncc:ShoppingExposureStatusDiagnosisDemoFilter": {
+      "sourceId": "ncc",
+      "name": "ShoppingExposureStatusDiagnosisDemoFilter",
+      "type": "object",
+      "properties": [
+        "filterData",
+        "naver",
+        "shopping"
+      ],
+      "required": [
+        "filterData"
+      ]
+    },
+    "ncc:ShoppingExposureStatusDiagnosisExposureReasons": {
+      "sourceId": "ncc",
+      "name": "ShoppingExposureStatusDiagnosisExposureReasons",
+      "type": "object",
+      "properties": [
+        "brand",
+        "category",
+        "color",
+        "exclusionTerms",
+        "restrictAd",
+        "restrictAd2",
+        "restrictKeyword",
+        "saleTp",
+        "shoppingKeyword"
+      ],
+      "required": []
+    },
+    "ncc:ShoppingExposureStatusDiagnosisFilter": {
+      "sourceId": "ncc",
+      "name": "ShoppingExposureStatusDiagnosisFilter",
+      "type": "object",
+      "properties": [
+        "exposureName",
+        "gender",
+        "startAge"
+      ],
+      "required": []
+    },
+    "ncc:ShoppingExposureStatusDiagnosisInnerAccount": {
+      "sourceId": "ncc",
+      "name": "ShoppingExposureStatusDiagnosisInnerAccount",
+      "type": "object",
+      "properties": [
+        "loginId"
+      ],
+      "required": []
+    },
+    "ncc:ShoppingExposureStatusDiagnosisKeywordInfo": {
+      "sourceId": "ncc",
+      "name": "ShoppingExposureStatusDiagnosisKeywordInfo",
+      "type": "object",
+      "properties": [
+        "demoFilter",
+        "searchKeyword"
+      ],
+      "required": []
+    },
+    "ncc:ShoppingExposureStatusDiagnosisResponse": {
+      "sourceId": "ncc",
+      "name": "ShoppingExposureStatusDiagnosisResponse",
+      "type": "object",
+      "properties": [
+        "account",
+        "exposureReasons",
+        "keywordInfo",
+        "rank"
+      ],
+      "required": []
+    },
+    "ncc:ShoppingExposureStatusResponse": {
+      "sourceId": "ncc",
+      "name": "ShoppingExposureStatusResponse",
+      "type": "object",
+      "properties": [
+        "adList",
+        "demoFilter"
+      ],
+      "required": []
+    },
+    "ncc:Sort": {
+      "sourceId": "ncc",
+      "name": "Sort",
+      "type": "object",
+      "properties": [
+        "empty",
+        "sorted",
+        "unsorted"
+      ],
+      "required": []
+    },
+    "ncc:StandardPurchaseOption": {
+      "sourceId": "ncc",
+      "name": "StandardPurchaseOption",
+      "type": "object",
+      "properties": [
+        "identifier",
+        "value"
+      ],
+      "required": []
+    },
+    "ncc:StandardPurchaseOptionIdentifier": {
+      "sourceId": "ncc",
+      "name": "StandardPurchaseOptionIdentifier",
+      "type": "object",
+      "properties": [
+        "name",
+        "sequence"
+      ],
+      "required": []
+    },
+    "ncc:StandardPurchaseOptionValue": {
+      "sourceId": "ncc",
+      "name": "StandardPurchaseOptionValue",
+      "type": "object",
+      "properties": [
+        "name",
+        "sequence"
+      ],
+      "required": []
+    },
+    "ncc:SubImage": {
+      "sourceId": "ncc",
+      "name": "SubImage",
+      "type": "object",
+      "properties": [
+        "fileSizeByte",
+        "height",
+        "sequence",
+        "signature",
+        "svcYn",
+        "thumbnailUrl",
+        "width"
+      ],
+      "required": []
+    },
+    "ncc:Target": {
+      "sourceId": "ncc",
+      "name": "Target",
+      "type": "object",
+      "properties": [
+        "editTm",
+        "nccTargetId",
+        "ownerId",
+        "regTm",
+        "target",
+        "targetTp"
+      ],
+      "required": []
+    },
+    "ncc:TargetRequest": {
+      "sourceId": "ncc",
+      "name": "TargetRequest",
+      "type": "object",
+      "properties": [
+        "nccTargetId",
+        "ownerId",
+        "target",
+        "targetTp"
+      ],
+      "required": []
+    },
+    "ncc:TemplateQcPrice": {
+      "sourceId": "ncc",
+      "name": "TemplateQcPrice",
+      "type": "object",
+      "properties": [
+        "lowerBoundQc",
+        "price",
+        "upperBoundQc"
+      ],
+      "required": []
+    },
+    "ncc:TimeContract": {
+      "sourceId": "ncc",
+      "name": "TimeContract",
+      "type": "object",
+      "properties": [
+        "adgroupName",
+        "adgroupTemplateName",
+        "cancelCustomerId",
+        "cancelLoginId",
+        "cancelTm",
+        "contractAmt",
+        "contractCustomerId",
+        "contractEndDt",
+        "contractLoginId",
+        "contractName",
+        "contractQc",
+        "contractStartDt",
+        "contractStatus",
+        "customerId",
+        "editTm",
+        "exposureEndDt",
+        "exposureStartDt",
+        "nccAdgroupId",
+        "nccTimeContractId",
+        "paymentAmt",
+        "refundAmt",
+        "regTm",
+        "templateId",
+        "totalKeywordQc"
+      ],
+      "required": []
+    },
+    "ncc:TimeContractAmt": {
+      "sourceId": "ncc",
+      "name": "TimeContractAmt",
+      "type": "object",
+      "properties": [
+        "contractAmt",
+        "contractAmtWithVat"
+      ],
+      "required": []
+    },
+    "ncc:TimeContractItem": {
+      "sourceId": "ncc",
+      "name": "TimeContractItem",
+      "type": "object",
+      "properties": [
+        "editTm",
+        "enable",
+        "keyword",
+        "keywordQc",
+        "nccTimeContractId",
+        "nccTimeContractItemId",
+        "regTm"
+      ],
+      "required": []
+    },
+    "ncc:TimeContractKeywordQc": {
+      "sourceId": "ncc",
+      "name": "TimeContractKeywordQc",
+      "type": "object",
+      "properties": [
+        "keyword",
+        "nccTimeContractItemId",
+        "qc"
+      ],
+      "required": []
+    },
+    "ncc:TimeContractKeywordsAdditionStatus": {
+      "sourceId": "ncc",
+      "name": "TimeContractKeywordsAdditionStatus",
+      "type": "object",
+      "properties": [
+        "exceededKeywordQcList",
+        "exceededQc",
+        "exceededQcTimeContract",
+        "keywordOccupationStatusList"
+      ],
+      "required": []
+    },
+    "ncc:TimeContractRefundAmt": {
+      "sourceId": "ncc",
+      "name": "TimeContractRefundAmt",
+      "type": "object",
+      "properties": [
+        "nonRefundableAmt",
+        "refundAmt",
+        "refundableAmt"
+      ],
+      "required": []
+    },
+    "ncc:TimeContractSummary": {
+      "sourceId": "ncc",
+      "name": "TimeContractSummary",
+      "type": "object",
+      "properties": [
+        "currentTimeContract",
+        "nccAdgroupId",
+        "waitingCount"
+      ],
+      "required": []
+    },
+    "ncc:adgroupMappedChannelCnt": {
+      "sourceId": "ncc",
+      "name": "adgroupMappedChannelCnt",
+      "type": "object",
+      "properties": [
+        "adgroupMappedChannelCnt",
+        "campaignTp",
+        "useNaChannelCnt"
+      ],
+      "required": []
+    },
+    "tool:NccFile": {
+      "sourceId": "tool",
+      "name": "NccFile",
+      "type": "object",
+      "properties": [
+        "fileExt",
+        "fileName",
+        "filePath",
+        "fileSize",
+        "fileType",
+        "image",
+        "imageHeight",
+        "imageWidth",
+        "savedFileName",
+        "tmpIssuedFileId"
+      ],
+      "required": []
+    },
+    "tool:IpExclusion": {
+      "sourceId": "tool",
+      "name": "IpExclusion",
+      "type": "object",
+      "properties": [
+        "customerId",
+        "filterIp",
+        "ipFilterId",
+        "loginId",
+        "memo",
+        "regTm",
+        "userId"
+      ],
+      "required": []
+    },
+    "tool:BillRecipientHis": {
+      "sourceId": "tool",
+      "name": "BillRecipientHis",
+      "type": "object",
+      "properties": [
+        "applyDt",
+        "billRecipientHisId",
+        "customerId",
+        "opUserId",
+        "preRecvAgencyId",
+        "preRecvBillTp",
+        "recvAgencyId",
+        "recvBillTp",
+        "regTm"
+      ],
+      "required": []
+    },
+    "tool:Document": {
+      "sourceId": "tool",
+      "name": "Document",
+      "type": "object",
+      "properties": [
+        "businessChannelId",
+        "customerId",
+        "filePath",
+        "inputTp",
+        "nccFile",
+        "regTm",
+        "regUserId",
+        "regUserName",
+        "savedFileName",
+        "siteName",
+        "tmpIssuedFileId",
+        "urlDocId",
+        "urlDoctpId",
+        "urlDoctpName",
+        "urlId",
+        "userFileName",
+        "userName",
+        "userTp"
+      ],
+      "required": []
+    },
+    "tool:Analytics": {
+      "sourceId": "tool",
+      "name": "Analytics",
+      "type": "object",
+      "properties": [
+        "adviceStatus",
+        "analyticsId",
+        "analyticsIntallType",
+        "analyticsMallType",
+        "analyticsStatus",
+        "businessInfo",
+        "convertDays",
+        "convertTp",
+        "convertTp1",
+        "convertTp2",
+        "convertTp3",
+        "convertTp4",
+        "convertTp5",
+        "ctsUrlJobDesc",
+        "ctsUrlJobDt",
+        "customerId",
+        "editTm",
+        "extraDesc",
+        "finishTm",
+        "installTp",
+        "isMobileFarms",
+        "isPossibleApply",
+        "mallId",
+        "mallTp",
+        "naAccountId",
+        "nccBusinessChannelId",
+        "partnerId",
+        "partnerName",
+        "partnerPhone",
+        "picEmail",
+        "picName",
+        "picPhone",
+        "regTm",
+        "resultCode",
+        "siteName",
+        "statusTp",
+        "tmpAccountId",
+        "viewUrl"
+      ],
+      "required": []
+    },
+    "tool:IpExclusionHistory": {
+      "sourceId": "tool",
+      "name": "IpExclusionHistory",
+      "type": "object",
+      "properties": [
+        "filterIp",
+        "filterType",
+        "historyType",
+        "loginId",
+        "memo",
+        "regTm",
+        "totalRecords",
+        "userName"
+      ],
+      "required": []
+    },
+    "billing:BillingHistoryForChargeApi": {
+      "sourceId": "billing",
+      "name": "BillingHistoryForChargeApi",
+      "type": "object",
+      "properties": [
+        "displayCd",
+        "displayName",
+        "newNonRefundableAmt",
+        "newRefundableAmt",
+        "statDt"
+      ],
+      "required": []
+    },
+    "billing:BillingStatAccountApi": {
+      "sourceId": "billing",
+      "name": "BillingStatAccountApi",
+      "type": "object",
+      "properties": [
+        "addNonRefundableAmt",
+        "addRefundableAmt",
+        "customerId",
+        "nonRefundableAmt",
+        "refundNonRefundableAmt",
+        "refundRefundableAmt",
+        "refundableAmt",
+        "returnRefundableAmt",
+        "settleDt",
+        "useNonRefundableAmt",
+        "useRefundableAmt"
+      ],
+      "required": []
+    },
+    "billing:BillingStatActivityApi": {
+      "sourceId": "billing",
+      "name": "BillingStatActivityApi",
+      "type": "object",
+      "properties": [
+        "activityCd",
+        "campaignTp",
+        "customerId",
+        "prodInfoCd",
+        "settleDt",
+        "useNonrefundableAmt",
+        "useRefundableAmt"
+      ],
+      "required": []
+    },
+    "billing:Bizmoney": {
+      "sourceId": "billing",
+      "name": "Bizmoney",
+      "type": "object",
+      "properties": [
+        "bizmoney",
+        "budgetLock",
+        "customerId",
+        "refundLock"
+      ],
+      "required": []
+    },
+    "billing:BizmoneyCost": {
+      "sourceId": "billing",
+      "name": "BizmoneyCost",
+      "type": "object",
+      "properties": [
+        "adjustedNonRefundableAmt",
+        "adjustedRefundableAmt",
+        "customerId",
+        "date",
+        "device",
+        "networkType",
+        "nonRefundableAmt",
+        "productCode",
+        "refundableAmt"
+      ],
+      "required": []
+    },
+    "account:AccessRule": {
+      "sourceId": "account",
+      "name": "AccessRule",
+      "type": "object",
+      "properties": [
+        "accessLevel",
+        "accessUri",
+        "regTm",
+        "resourceId",
+        "resourceName",
+        "roleId",
+        "roleName",
+        "ruleId"
+      ],
+      "required": []
+    },
+    "account:Account": {
+      "sourceId": "account",
+      "name": "Account",
+      "type": "object",
+      "properties": [
+        "accountId",
+        "bankAccountNum",
+        "bankCd",
+        "bankName",
+        "billingMinBalance",
+        "customerId",
+        "editTm",
+        "minBalance",
+        "nonRefundableAmt",
+        "orgAmountBid",
+        "orgAmountCc",
+        "orgAmountCcReal",
+        "orgAmountKshop",
+        "orgAmountPp",
+        "orgAmountPpFinal",
+        "refundableAmt",
+        "regTm",
+        "totalCashAmt",
+        "totalCashRepaymentAmt"
+      ],
+      "required": []
+    },
+    "account:AdAccount": {
+      "sourceId": "account",
+      "name": "AdAccount",
+      "type": "object",
+      "properties": [
+        "adAccount",
+        "adAccountNo",
+        "createdAt",
+        "favorite",
+        "lastAccessTime",
+        "naverId",
+        "roleName"
+      ],
+      "required": []
+    },
+    "account:AdAccountAccessResponse": {
+      "sourceId": "account",
+      "name": "AdAccountAccessResponse",
+      "type": "object",
+      "properties": [
+        "accessible",
+        "roleId"
+      ],
+      "required": []
+    },
+    "account:AdAccountCustomerMemberResponse": {
+      "sourceId": "account",
+      "name": "AdAccountCustomerMemberResponse",
+      "type": "object",
+      "properties": [
+        "loginId",
+        "roleId"
+      ],
+      "required": []
+    },
+    "account:AdAccountCustomersResponse": {
+      "sourceId": "account",
+      "name": "AdAccountCustomersResponse",
+      "type": "object",
+      "properties": [
+        "customerId",
+        "nickname",
+        "roleId"
+      ],
+      "required": []
+    },
+    "account:AdAccountDetail": {
+      "sourceId": "account",
+      "name": "AdAccountDetail",
+      "type": "object",
+      "properties": [
+        "country",
+        "createdAt",
+        "currency",
+        "deleted",
+        "deletedAt",
+        "disabled",
+        "masterCustomerId",
+        "name",
+        "no",
+        "penalty",
+        "timezone",
+        "timezoneId",
+        "updatedAt"
+      ],
+      "required": []
+    },
+    "account:AdAccountMember": {
+      "sourceId": "account",
+      "name": "AdAccountMember",
+      "type": "object",
+      "properties": [
+        "adAccountNo",
+        "createdAt",
+        "naverId",
+        "roleName"
+      ],
+      "required": []
+    },
+    "account:AdAccountsResponse": {
+      "sourceId": "account",
+      "name": "AdAccountsResponse",
+      "type": "object",
+      "properties": [
+        "content",
+        "empty",
+        "first",
+        "last",
+        "number",
+        "numberOfElements",
+        "pageable",
+        "size",
+        "sort",
+        "totalElements",
+        "totalPages"
+      ],
+      "required": []
+    },
+    "account:AdsAccountResponse": {
+      "sourceId": "account",
+      "name": "AdsAccountResponse",
+      "type": "object",
+      "properties": [
+        "customer",
+        "naverId"
+      ],
+      "required": []
+    },
+    "account:AdsAccountsResponse": {
+      "sourceId": "account",
+      "name": "AdsAccountsResponse",
+      "type": "object",
+      "properties": [
+        "customers",
+        "naverId",
+        "size"
+      ],
+      "required": []
+    },
+    "account:AdsUserClientTokenRequest": {
+      "sourceId": "account",
+      "name": "AdsUserClientTokenRequest",
+      "type": "object",
+      "properties": [
+        "adUserId",
+        "customerId"
+      ],
+      "required": []
+    },
+    "account:ApiCredentials": {
+      "sourceId": "account",
+      "name": "ApiCredentials",
+      "type": "object",
+      "properties": [
+        "apiKey",
+        "secretKey"
+      ],
+      "required": []
+    },
+    "account:ApiToken": {
+      "sourceId": "account",
+      "name": "ApiToken",
+      "type": "object",
+      "properties": [
+        "token"
+      ],
+      "required": []
+    },
+    "account:AuthToken": {
+      "sourceId": "account",
+      "name": "AuthToken",
+      "type": "object",
+      "properties": [
+        "token"
+      ],
+      "required": []
+    },
+    "account:AuthorizeClient": {
+      "sourceId": "account",
+      "name": "AuthorizeClient",
+      "type": "object",
+      "properties": [
+        "additionalInformation",
+        "clientId",
+        "clientName",
+        "customerId",
+        "grantType",
+        "granted",
+        "regTm",
+        "resourceIds",
+        "scope"
+      ],
+      "required": []
+    },
+    "account:ChildAdAccount": {
+      "sourceId": "account",
+      "name": "ChildAdAccount",
+      "type": "object",
+      "properties": [
+        "accountRole",
+        "adAccountName",
+        "adAccountNo",
+        "customerId",
+        "ownerNaverId"
+      ],
+      "required": []
+    },
+    "account:ChildAdAccountResponse": {
+      "sourceId": "account",
+      "name": "ChildAdAccountResponse",
+      "type": "object",
+      "properties": [
+        "content",
+        "empty",
+        "first",
+        "last",
+        "number",
+        "numberOfElements",
+        "pageable",
+        "size",
+        "sort",
+        "totalElements",
+        "totalPages"
+      ],
+      "required": []
+    },
+    "account:ClientCustomersResponse": {
+      "sourceId": "account",
+      "name": "ClientCustomersResponse",
+      "type": "object",
+      "properties": [
+        "clientCustomers",
+        "totalCount"
+      ],
+      "required": []
+    },
+    "account:CreateAccessRuleRequest": {
+      "sourceId": "account",
+      "name": "CreateAccessRuleRequest",
+      "type": "object",
+      "properties": [
+        "accessLevel",
+        "accessUri",
+        "resourceId",
+        "roleId"
+      ],
+      "required": []
+    },
+    "account:Credentials": {
+      "sourceId": "account",
+      "name": "Credentials",
+      "type": "object",
+      "properties": [
+        "captchaKey",
+        "captchaType",
+        "captchaValue",
+        "loginId",
+        "loginPwd",
+        "md5EncodedPwd",
+        "nnb",
+        "sha256EncodedPwd",
+        "type"
+      ],
+      "required": []
+    },
+    "account:Customer": {
+      "sourceId": "account",
+      "name": "Customer",
+      "type": "object",
+      "properties": [
+        "account",
+        "accountId",
+        "adAccountNo",
+        "addr1",
+        "addr2",
+        "adsUserId",
+        "agreeAutopay",
+        "agreeAutopayTm",
+        "bidStatus",
+        "birthdate",
+        "blackList",
+        "bmAgree",
+        "canInviteManagerAccount",
+        "canManageClients",
+        "cpcBudgetLock",
+        "cpcRefundLock",
+        "customerAttr",
+        "customerCo",
+        "customerCoId",
+        "customerId",
+        "customerLevel",
+        "delFlag",
+        "delTm",
+        "department",
+        "dupInfo",
+        "editTm",
+        "email",
+        "emailCertSt",
+        "encryptedSsn",
+        "extraCustomerName",
+        "featureImg",
+        "isAdsUser",
+        "isDormant",
+        "mobilePhone",
+        "mpCertSt",
+        "nickname",
+        "pausedReason",
+        "phone",
+        "position",
+        "recvBillTp",
+        "recvEmailCfg",
+        "recvSmsCfg",
+        "regAuthKey",
+        "regTm",
+        "roleId",
+        "sex",
+        "siteMergeLock",
+        "smsNotifyAmt",
+        "smsNotifyFlag",
+        "user",
+        "userId",
+        "zipCode"
+      ],
+      "required": []
+    },
+    "account:CustomerAttr": {
+      "sourceId": "account",
+      "name": "CustomerAttr",
+      "type": "object",
+      "properties": [
+        "canUseCpcMass",
+        "canUseForeignCard",
+        "cpcCnt",
+        "cpcDiscountRate",
+        "customerId",
+        "enableOnlineTransfer",
+        "enableTransferQuota",
+        "isCpcDiscountable",
+        "isMassive",
+        "isPostpayAccount",
+        "isSaleRightPermanent",
+        "mainUrlId",
+        "maxCpcCntPerAccount",
+        "maxCpcCntPerGroup",
+        "maxCpcGroupCntPerAccount",
+        "maxNccAdgroupPerAccount",
+        "maxNccAdgroupPerCampaign",
+        "maxNccCampaignPerAccount",
+        "maxNccKeywordPerAccount",
+        "maxNccKeywordPerAdgroup",
+        "maxNccKeywordPerCampaign",
+        "maxNccVphonePerAccount",
+        "maxUrlCntPerAccount",
+        "penaltySt",
+        "unlimitCpcCountPerAccount",
+        "unlimitCpcCountPerGroup",
+        "useTrackingUrl"
+      ],
+      "required": []
+    },
+    "account:CustomerCo": {
+      "sourceId": "account",
+      "name": "CustomerCo",
+      "type": "object",
+      "properties": [
+        "bizRegCertId",
+        "customerCoId",
+        "customerCoName",
+        "customerCoSt",
+        "delFlag",
+        "delTm",
+        "editTm",
+        "fax",
+        "hasTaxNum",
+        "isDormant",
+        "isMassive",
+        "phone",
+        "regTm"
+      ],
+      "required": []
+    },
+    "account:CustomerLinkBlack": {
+      "sourceId": "account",
+      "name": "CustomerLinkBlack",
+      "type": "object",
+      "properties": [
+        "customerId",
+        "regTm"
+      ],
+      "required": []
+    },
+    "account:CustomerLinkResponse": {
+      "sourceId": "account",
+      "name": "CustomerLinkResponse",
+      "type": "object",
+      "properties": [
+        "customerId",
+        "loginId",
+        "roleName"
+      ],
+      "required": []
+    },
+    "account:CustomerResponse": {
+      "sourceId": "account",
+      "name": "CustomerResponse",
+      "type": "object",
+      "properties": [
+        "adAccountNo",
+        "customerId",
+        "nickname",
+        "roleId"
+      ],
+      "required": []
+    },
+    "account:LoginToken": {
+      "sourceId": "account",
+      "name": "LoginToken",
+      "type": "object",
+      "properties": [
+        "isAdsUserToken",
+        "refreshToken",
+        "token"
+      ],
+      "required": []
+    },
+    "account:ManagedAccount": {
+      "sourceId": "account",
+      "name": "ManagedAccount",
+      "type": "object",
+      "properties": [
+        "accountId",
+        "customerId",
+        "editTm",
+        "nonRefundableAmt",
+        "refundableAmt",
+        "regTm"
+      ],
+      "required": []
+    },
+    "account:ManagedCustomer": {
+      "sourceId": "account",
+      "name": "ManagedCustomer",
+      "type": "object",
+      "properties": [
+        "account",
+        "accountId",
+        "adAccountNo",
+        "agreeAutopay",
+        "agreeAutopayTm",
+        "bidStatus",
+        "blackList",
+        "canManageClients",
+        "cpcBudgetLock",
+        "cpcRefundLock",
+        "customerAttr",
+        "customerCo",
+        "customerCoId",
+        "customerId",
+        "delFlag",
+        "delTm",
+        "editTm",
+        "isDormant",
+        "nickname",
+        "pausedReason",
+        "regTm",
+        "roleId",
+        "smsNotifyFlag",
+        "user",
+        "userId"
+      ],
+      "required": []
+    },
+    "account:ManagedCustomerCo": {
+      "sourceId": "account",
+      "name": "ManagedCustomerCo",
+      "type": "object",
+      "properties": [
+        "bizRegCertId",
+        "customerCoId",
+        "customerCoSt",
+        "delFlag",
+        "delTm",
+        "editTm",
+        "hasTaxNum",
+        "isDormant",
+        "isMassive",
+        "regTm"
+      ],
+      "required": []
+    },
+    "account:ManagedCustomerLink": {
+      "sourceId": "account",
+      "name": "ManagedCustomerLink",
+      "type": "object",
+      "properties": [
+        "clientAdAccountNo",
+        "clientCustomerDelFlag",
+        "clientCustomerId",
+        "clientEnable",
+        "clientLoginId",
+        "clientNickname",
+        "clientPenaltySt",
+        "clientProvider",
+        "customerLinkId",
+        "description",
+        "editTm",
+        "isProxyAgency",
+        "linkStatus",
+        "managerCompanyName",
+        "managerCustomerDelFlag",
+        "managerCustomerId",
+        "managerEnable",
+        "managerLoginId",
+        "managerName",
+        "managerNickname",
+        "managerPenaltySt",
+        "regTm",
+        "roleId"
+      ],
+      "required": []
+    },
+    "account:ManagedCustomersResponse": {
+      "sourceId": "account",
+      "name": "ManagedCustomersResponse",
+      "type": "object",
+      "properties": [
+        "managedCustomers",
+        "totalCount"
+      ],
+      "required": []
+    },
+    "account:ManagedUser": {
+      "sourceId": "account",
+      "name": "ManagedUser",
+      "type": "object",
+      "properties": [
+        "delFlag",
+        "editTm",
+        "enable",
+        "isDormant",
+        "loginId",
+        "provider",
+        "recentLoginTm",
+        "regTm",
+        "userId"
+      ],
+      "required": []
+    },
+    "account:ManagerAccount": {
+      "sourceId": "account",
+      "name": "ManagerAccount",
+      "type": "object",
+      "properties": [
+        "createdAt",
+        "favorite",
+        "lastAccessTime",
+        "managerAccount",
+        "managerAccountNo",
+        "naverId",
+        "roleName"
+      ],
+      "required": []
+    },
+    "account:ManagerAccountDetail": {
+      "sourceId": "account",
+      "name": "ManagerAccountDetail",
+      "type": "object",
+      "properties": [
+        "childAdAccountCount",
+        "country",
+        "createdAt",
+        "currency",
+        "deleted",
+        "deletedAt",
+        "disabled",
+        "name",
+        "no",
+        "timezone",
+        "timezoneId",
+        "updatedAt"
+      ],
+      "required": []
+    },
+    "account:ManagerAccountsResponse": {
+      "sourceId": "account",
+      "name": "ManagerAccountsResponse",
+      "type": "object",
+      "properties": [
+        "content",
+        "empty",
+        "first",
+        "last",
+        "number",
+        "numberOfElements",
+        "pageable",
+        "size",
+        "sort",
+        "totalElements",
+        "totalPages"
+      ],
+      "required": []
+    },
+    "account:ManagerCustomer": {
+      "sourceId": "account",
+      "name": "ManagerCustomer",
+      "type": "object",
+      "properties": [
+        "canInviteManagerAccount",
+        "canManageClients",
+        "customerId",
+        "customerName",
+        "isAdsUser"
+      ],
+      "required": []
+    },
+    "account:MyAccountResponse": {
+      "sourceId": "account",
+      "name": "MyAccountResponse",
+      "type": "object",
+      "properties": [
+        "customers",
+        "naverId",
+        "size"
+      ],
+      "required": []
+    },
+    "account:NaverIdentification": {
+      "sourceId": "account",
+      "name": "NaverIdentification",
+      "type": "object",
+      "properties": [
+        "nid_id",
+        "nid_id_no"
+      ],
+      "required": []
+    },
+    "account:OauthAccessToken": {
+      "sourceId": "account",
+      "name": "OauthAccessToken",
+      "type": "object",
+      "properties": [
+        "access_token",
+        "clientId",
+        "customerId",
+        "expiresIn",
+        "loginId",
+        "refreshToken",
+        "refresh_token",
+        "resourceIds",
+        "scope",
+        "token",
+        "tokenType"
+      ],
+      "required": []
+    },
+    "account:OauthAuthorizationCode": {
+      "sourceId": "account",
+      "name": "OauthAuthorizationCode",
+      "type": "object",
+      "properties": [
+        "code",
+        "scope",
+        "state"
+      ],
+      "required": []
+    },
+    "account:OauthCustomer": {
+      "sourceId": "account",
+      "name": "OauthCustomer",
+      "type": "object",
+      "properties": [
+        "customerId",
+        "loginId",
+        "nickname"
+      ],
+      "required": []
+    },
+    "account:Pageable": {
+      "sourceId": "account",
+      "name": "Pageable",
+      "type": "object",
+      "properties": [
+        "offset",
+        "pageNumber",
+        "pageSize",
+        "paged",
+        "sort",
+        "unpaged"
+      ],
+      "required": []
+    },
+    "account:Penalty": {
+      "sourceId": "account",
+      "name": "Penalty",
+      "type": "object",
+      "properties": [
+        "penalized"
+      ],
+      "required": []
+    },
+    "account:PerfAdResponse": {
+      "sourceId": "account",
+      "name": "PerfAdResponse",
+      "type": "object",
+      "properties": [
+        "code",
+        "message",
+        "status",
+        "success"
+      ],
+      "required": []
+    },
+    "account:Resource": {
+      "sourceId": "account",
+      "name": "Resource",
+      "type": "object",
+      "properties": [
+        "regTm",
+        "resourceId",
+        "resourceName"
+      ],
+      "required": []
+    },
+    "account:Role": {
+      "sourceId": "account",
+      "name": "Role",
+      "type": "object",
+      "properties": [
+        "regTm",
+        "roleId",
+        "roleName"
+      ],
+      "required": []
+    },
+    "account:Sort": {
+      "sourceId": "account",
+      "name": "Sort",
+      "type": "object",
+      "properties": [
+        "empty",
+        "sorted",
+        "unsorted"
+      ],
+      "required": []
+    },
+    "account:User": {
+      "sourceId": "account",
+      "name": "User",
+      "type": "object",
+      "properties": [
+        "acceptOauthTm",
+        "apiUserKey",
+        "certKey",
+        "certKeyIssueTm",
+        "delFlag",
+        "delTm",
+        "editTm",
+        "employeeId",
+        "enable",
+        "isDormant",
+        "isStaff",
+        "loginId",
+        "loginPasswd",
+        "oauthEmail",
+        "otp",
+        "otpExpireTm",
+        "passwdCvrtSt",
+        "passwdEditTm",
+        "posLoginId",
+        "preLoginId",
+        "preLoginPasswd",
+        "provider",
+        "providerId",
+        "recentLoginTm",
+        "regTm",
+        "useOauth",
+        "userCaptcha",
+        "userDesc",
+        "userGroup",
+        "userGroupId",
+        "userId",
+        "userKey",
+        "userName",
+        "userTp"
+      ],
+      "required": []
+    },
+    "account:UserGroup": {
+      "sourceId": "account",
+      "name": "UserGroup",
+      "type": "object",
+      "properties": [
+        "userGroupDesc",
+        "userGroupId",
+        "userGroupName"
+      ],
+      "required": []
+    },
+    "report:ReportJobResponse": {
+      "sourceId": "report",
+      "name": "ReportJobResponse",
+      "type": "object",
+      "properties": [
+        "downloadUrl",
+        "reportJobId",
+        "reportTp",
+        "statDt",
+        "status",
+        "updateTm"
+      ],
+      "required": []
+    },
+    "report:pivotResponse": {
+      "sourceId": "report",
+      "name": "pivotResponse",
+      "type": "object",
+      "properties": [
+        "body",
+        "head",
+        "timeRange"
+      ],
+      "required": []
+    },
+    "report:DailyStatMap": {
+      "sourceId": "report",
+      "name": "DailyStatMap",
+      "type": "object",
+      "properties": [
+        "avgRnk",
+        "ccnt",
+        "clkCnt",
+        "cpc",
+        "ctr",
+        "dateEnd",
+        "dateStart",
+        "drtCrto",
+        "impCnt",
+        "salesAmt",
+        "viewCnt",
+        "purchaseCcnt",
+        "purchaseConvAmt",
+        "purchaseRor"
+      ],
+      "required": []
+    },
+    "report:DailyStatResponse": {
+      "sourceId": "report",
+      "name": "DailyStatResponse",
+      "type": "object",
+      "properties": [
+        "data",
+        "summary",
+        "cycleBaseTm"
+      ],
+      "required": []
+    },
+    "report:BreakdownStat": {
+      "sourceId": "report",
+      "name": "BreakdownStat",
+      "type": "object",
+      "properties": [
+        "avgRnk",
+        "ccnt",
+        "clkCnt",
+        "cpc",
+        "ctr",
+        "drtCrto",
+        "impCnt",
+        "name",
+        "salesAmt",
+        "viewCnt",
+        "purchaseCcnt",
+        "purchaseConvAmt",
+        "purchaseRor"
+      ],
+      "required": []
+    },
+    "report:SummaryStatMap": {
+      "sourceId": "report",
+      "name": "SummaryStatMap",
+      "type": "object",
+      "properties": [
+        "avgRnk",
+        "breakdowns",
+        "ccnt",
+        "clkCnt",
+        "cpc",
+        "ctr",
+        "drtCrto",
+        "id",
+        "impCnt",
+        "salesAmt",
+        "viewCnt"
+      ],
+      "required": []
+    },
+    "report:TimeRange": {
+      "sourceId": "report",
+      "name": "TimeRange",
+      "type": "object",
+      "properties": [
+        "since",
+        "until"
+      ],
+      "required": []
+    },
+    "report:StatResponse": {
+      "sourceId": "report",
+      "name": "StatResponse",
+      "type": "object",
+      "properties": [
+        "dailyStatResponse",
+        "summaryStatResponse"
+      ],
+      "required": []
+    },
+    "report:SummaryStatResponse": {
+      "sourceId": "report",
+      "name": "SummaryStatResponse",
+      "type": "object",
+      "properties": [
+        "data",
+        "cycleBaseTm"
+      ],
+      "required": []
+    },
+    "report:Number": {
+      "sourceId": "report",
+      "name": "Number",
+      "type": "object",
+      "properties": [],
+      "required": []
+    },
+    "report:Summary": {
+      "sourceId": "report",
+      "name": "Summary",
+      "type": "object",
+      "properties": [
+        "dateEnd",
+        "dateStart"
+      ],
+      "required": []
+    },
+    "report:StatTypeResponse": {
+      "sourceId": "report",
+      "name": "StatTypeResponse",
+      "type": "object",
+      "properties": [
+        "impCnt",
+        "clkCnt",
+        "drtCrto",
+        "salesAmt",
+        "schKeyword"
+      ],
+      "required": []
+    },
+    "report:columnResponse": {
+      "sourceId": "report",
+      "name": "columnResponse",
+      "type": "object",
+      "properties": [
+        "category",
+        "dataType",
+        "exclusive",
+        "name",
+        "type"
+      ],
+      "required": []
+    },
+    "report:StatReportJob": {
+      "sourceId": "report",
+      "name": "StatReportJob",
+      "type": "object",
+      "properties": [
+        "reportTp",
+        "statDt"
+      ],
+      "required": []
+    },
+    "master-report:MasterReportJob": {
+      "sourceId": "master-report",
+      "name": "MasterReportJob",
+      "type": "object",
+      "properties": [
+        "id",
+        "item",
+        "fromTime",
+        "updateTime",
+        "status",
+        "downloadUrl"
+      ],
+      "required": []
+    },
+    "master-report:RequestJob": {
+      "sourceId": "master-report",
+      "name": "RequestJob",
+      "type": "object",
+      "properties": [
+        "item",
+        "fromTime"
+      ],
+      "required": []
+    },
+    "master-report:Error": {
+      "sourceId": "master-report",
+      "name": "Error",
+      "type": "object",
+      "properties": [
+        "code",
+        "message",
+        "details"
+      ],
+      "required": []
+    },
+    "keyword-tool:RelKwdStat": {
+      "sourceId": "keyword-tool",
+      "name": "RelKwdStat",
+      "type": "object",
+      "properties": [
+        "relKeyword",
+        "monthlyPcQcCnt",
+        "monthlyMobileQcCnt",
+        "monthlyAvePcClkCnt",
+        "monthlyAveMobileClkCnt",
+        "monthlyAvePcCtr",
+        "monthlyAveMobileCtr",
+        "plAvgDepth",
+        "compIdx"
+      ],
+      "required": []
+    },
+    "estimate:RequestWithPosition": {
+      "sourceId": "estimate",
+      "name": "RequestWithPosition",
+      "type": "object",
+      "properties": [
+        "device",
+        "items"
+      ],
+      "required": []
+    },
+    "estimate:KeyAndPosition": {
+      "sourceId": "estimate",
+      "name": "KeyAndPosition",
+      "type": "object",
+      "properties": [
+        "key",
+        "position"
+      ],
+      "required": []
+    },
+    "estimate:EstimateBidWithPostion": {
+      "sourceId": "estimate",
+      "name": "EstimateBidWithPostion",
+      "type": "object",
+      "properties": [
+        "device",
+        "estimate"
+      ],
+      "required": []
+    },
+    "estimate:EstimateBidByPosition": {
+      "sourceId": "estimate",
+      "name": "EstimateBidByPosition",
+      "type": "object",
+      "properties": [
+        "keyword",
+        "position",
+        "nccKeywordId",
+        "bid"
+      ],
+      "required": []
+    },
+    "estimate:NPLAEstimateBidByPosition": {
+      "sourceId": "estimate",
+      "name": "NPLAEstimateBidByPosition",
+      "type": "object",
+      "properties": [
+        "product",
+        "position",
+        "nccAdId",
+        "bid"
+      ],
+      "required": []
+    },
+    "estimate:Request": {
+      "sourceId": "estimate",
+      "name": "Request",
+      "type": "object",
+      "properties": [
+        "device",
+        "period",
+        "items"
+      ],
+      "required": []
+    },
+    "estimate:NPLARequest": {
+      "sourceId": "estimate",
+      "name": "NPLARequest",
+      "type": "object",
+      "properties": [
+        "device",
+        "items"
+      ],
+      "required": []
+    },
+    "estimate:EstimateBid": {
+      "sourceId": "estimate",
+      "name": "EstimateBid",
+      "type": "object",
+      "properties": [
+        "device",
+        "period",
+        "estimate"
+      ],
+      "required": []
+    },
+    "estimate:NPLAEstimateBid": {
+      "sourceId": "estimate",
+      "name": "NPLAEstimateBid",
+      "type": "object",
+      "properties": [
+        "device",
+        "estimate"
+      ],
+      "required": []
+    },
+    "estimate:Bid": {
+      "sourceId": "estimate",
+      "name": "Bid",
+      "type": "object",
+      "properties": [
+        "keyword",
+        "nccKeywordId",
+        "bid"
+      ],
+      "required": []
+    },
+    "estimate:NPLABid": {
+      "sourceId": "estimate",
+      "name": "NPLABid",
+      "type": "object",
+      "properties": [
+        "product",
+        "nccAdId",
+        "bid"
+      ],
+      "required": []
+    },
+    "estimate:RequestPerformance": {
+      "sourceId": "estimate",
+      "name": "RequestPerformance",
+      "type": "object",
+      "properties": [
+        "device",
+        "key",
+        "bids"
+      ],
+      "required": []
+    },
+    "estimate:ResponsePerformance": {
+      "sourceId": "estimate",
+      "name": "ResponsePerformance",
+      "type": "object",
+      "properties": [
+        "device",
+        "keyword",
+        "nccKeywordId",
+        "estimate"
+      ],
+      "required": []
+    },
+    "estimate:Performance": {
+      "sourceId": "estimate",
+      "name": "Performance",
+      "type": "object",
+      "properties": [
+        "bid",
+        "clicks",
+        "impressions",
+        "cost"
+      ],
+      "required": []
+    },
+    "estimate:Error": {
+      "sourceId": "estimate",
+      "name": "Error",
+      "type": "object",
+      "properties": [
+        "code",
+        "message",
+        "details"
+      ],
+      "required": []
+    },
+    "estimate:RequestPerformanceBulk": {
+      "sourceId": "estimate",
+      "name": "RequestPerformanceBulk",
+      "type": "object",
+      "properties": [
+        "items"
+      ],
+      "required": []
+    },
+    "estimate:RequestPerformanceBulkItem": {
+      "sourceId": "estimate",
+      "name": "RequestPerformanceBulkItem",
+      "type": "object",
+      "properties": [
+        "device",
+        "keyword",
+        "bid"
+      ],
+      "required": []
+    },
+    "estimate:ResponsePerformanceBulk": {
+      "sourceId": "estimate",
+      "name": "ResponsePerformanceBulk",
+      "type": "object",
+      "properties": [
+        "items"
+      ],
+      "required": []
+    },
+    "estimate:ResponsePerformanceBulkItem": {
+      "sourceId": "estimate",
+      "name": "ResponsePerformanceBulkItem",
+      "type": "object",
+      "properties": [
+        "device",
+        "keyword",
+        "bid",
+        "clicks",
+        "impressions",
+        "cost"
+      ],
+      "required": []
+    },
+    "estimate:NpcKeyAndPosition": {
+      "sourceId": "estimate",
+      "name": "NpcKeyAndPosition",
+      "type": "object",
+      "properties": [
+        "key",
+        "position"
+      ],
+      "required": []
+    },
+    "estimate:NpcRequestAveragePositionBid": {
+      "sourceId": "estimate",
+      "name": "NpcRequestAveragePositionBid",
+      "type": "object",
+      "properties": [
+        "device",
+        "items"
+      ],
+      "required": []
+    },
+    "estimate:NpcRequestMinMaxBid": {
+      "sourceId": "estimate",
+      "name": "NpcRequestMinMaxBid",
+      "type": "object",
+      "properties": [
+        "device",
+        "items"
+      ],
+      "required": []
+    },
+    "estimate:NpcExpect": {
+      "sourceId": "estimate",
+      "name": "NpcExpect",
+      "type": "object",
+      "properties": [
+        "bid",
+        "keyword",
+        "nccKeywordId",
+        "position"
+      ],
+      "required": []
+    },
+    "estimate:NpcEstimateBid": {
+      "sourceId": "estimate",
+      "name": "NpcEstimateBid",
+      "type": "object",
+      "properties": [
+        "device",
+        "estimate"
+      ],
+      "required": []
+    },
+    "estimate:NpcRequestPerformance": {
+      "sourceId": "estimate",
+      "name": "NpcRequestPerformance",
+      "type": "object",
+      "properties": [
+        "device",
+        "keywords",
+        "level"
+      ],
+      "required": []
+    },
+    "estimate:NpcResponsePerformance": {
+      "sourceId": "estimate",
+      "name": "NpcResponsePerformance",
+      "type": "object",
+      "properties": [
+        "device",
+        "items",
+        "level"
+      ],
+      "required": []
+    },
+    "estimate:NpcPerformance": {
+      "sourceId": "estimate",
+      "name": "NpcPerformance",
+      "type": "object",
+      "properties": [
+        "clicks",
+        "cost",
+        "impressions",
+        "keyword"
+      ],
+      "required": []
+    },
+    "inspect-history:CommentResponse": {
+      "sourceId": "inspect-history",
+      "name": "CommentResponse",
+      "type": "object",
+      "properties": [
+        "title",
+        "comment",
+        "content",
+        "faq"
+      ],
+      "required": []
+    },
+    "inspect-history:InspectCommentResponse": {
+      "sourceId": "inspect-history",
+      "name": "InspectCommentResponse",
+      "type": "object",
+      "properties": [
+        "id",
+        "pcInspectComments",
+        "mobileInspectComments"
+      ],
+      "required": [
+        "id"
+      ]
+    }
+  }
+}
