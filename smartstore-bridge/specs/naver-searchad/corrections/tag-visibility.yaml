@@ -1,0 +1,45 @@
+version: 1
+reviewedAt: 2026-08-25
+reviewedBy: OpenAI
+
+source:
+  file: app/config.js
+  ref: 8e250490ab748367a627213f7d7a2917e005cb10
+  url: https://github.com/naver/searchad-apidoc/blob/gh-pages/app/config.js
+
+initiallyQuarantinedTags:
+  - accesscontrol
+  - advancedreportcontroller
+  - apiapikey
+  - apicustomerauth
+  - apihistory
+  - apikeys
+  - apilicenses
+  - apimyclientscontroller
+  - auth
+  - columncontroller
+  - customer
+  - customerauth
+  - customerlinks
+  - history
+  - managercandidates
+  - nccmanagedkeyword
+
+patternExclusions:
+  - 'l7~'
+  - 'basicerror~'
+  - '~endpoint'
+  - 'endpoint~'
+  - '~controller'
+
+policy:
+  defaultState: internal_quarantined
+  runtimeAllowlisted: false
+  activationRequires:
+    - publicDocumentationVerified
+    - schemaReviewed
+    - liveCapabilityVerified
+  notes:
+    - Raw Swagger coverage에는 포함한다.
+    - 공개 operation coverage와 런타임 allowlist에서는 분리한다.
+    - 공식 릴리스 노트·도움말·실계정 근거가 확보된 operation만 개별 승격한다.
