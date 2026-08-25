@@ -1,0 +1,72 @@
+version: 1
+reviewedAt: 2026-08-25
+reviewedBy: OpenAI
+
+reports:
+  - reportType: NAVERPAY_CONVERSION
+    state: deprecated
+    dataEndDate: 2025-04-08
+    updateEndDate: 2025-04-09
+    accessEndDate: 2025-05-09
+    newJobAllowed: false
+    historicalDownloadAllowed: false
+    reason: 네이버페이 전환 보고서의 업데이트와 과거 조회가 공식 종료됐다.
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/notice/2025/04/02/notice1/
+
+operationFamilies:
+  - id: managed-keyword
+    tag: ManagedKeyword
+    state: internal_quarantined
+    runtimeAllowlisted: false
+    reason: 공식 문서 UI 설정에서 nccmanagedkeyword 태그가 제외돼 있다.
+    activationCondition:
+      - publicDocumentationVerified
+      - liveCapabilityVerified
+    officialEvidence:
+      - https://github.com/naver/searchad-apidoc/blob/gh-pages/app/config.js
+
+  - id: shopping-brand-business-channel-create
+    entityType: BusinessChannel
+    subtype: SHOPPING_BRAND
+    operation: create
+    state: unsupported
+    runtimeAllowlisted: false
+    reason: 공식 릴리스 노트에서 API 등록 불가로 명시됐다.
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/release/2021/03/17/release-note/
+
+  - id: shopping-brand-ad-create
+    entityType: Ad
+    subtype: SHOPPING_BRAND_AD
+    operation: create
+    state: unsupported
+    runtimeAllowlisted: false
+    reason: 공식 릴리스 노트에서 API 등록 불가로 명시됐다.
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/release/2021/03/17/release-note/
+
+  - id: shopping-brand-extension-create
+    entityType: AdExtension
+    subtypes:
+      - SHOPPING_BRAND_VIDEO
+      - SHOPPING_BRAND_IMAGE
+      - SHOPPING_BROADCAST
+    operation: create
+    state: unsupported
+    runtimeAllowlisted: false
+    reason: 공식 릴리스 노트에서 추가 유형의 API 등록 불가로 명시됐다.
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/release/2021/03/17/release-note/
+
+  - id: ai-ads-write
+    entityType: Adgroup
+    feature: AI_ADS
+    state: public_documentation_pending
+    runtimeAllowlisted: false
+    reason: Adgroup Master에 조회 필드가 추가됐으나 전체 쓰기 계약은 별도 확인이 필요하다.
+    activationCondition:
+      - publicWriteDocumentationVerified
+      - liveCapabilityVerified
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/notice/2026/06/16/notice1/
