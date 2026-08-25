@@ -1,0 +1,292 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "title": "Master API",
+        "description": "Master Data API",
+        "version": "1.0.0"
+    },
+    "host": "api.naver.com",
+    "schemes": [
+        "https"
+    ],
+    "basePath": "/",
+    "produces": [
+        "application/json"
+    ],
+    "paths": {
+        "/master-reports": {
+            "get": {
+                "tags": [
+                    "MasterReport"
+                ],
+                "summary": "list",
+                "operationId": "getAllMasterReports",
+                "description": "Get all list of \"Master Report\" Jobs LIST (maximum 100 jobs) which recently created \n",
+                "responses": {
+                    "200": {
+                        "description": "list of \"Master Report\" Jobs",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/MasterReportJob"
+                            }
+                        }
+                    },
+                    "default": {
+                        "description": "response message",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "MasterReport"
+                ],
+                "summary": "delete all",
+                "operationId": "deleteAllMasterReports",
+                "description": "Delete all \"Master Report\" jobs.",
+                "responses": {
+                    "204": {
+                        "description": "response message"
+                    },
+                    "default": {
+                        "description": "response message",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "MasterReport"
+                ],
+                "summary": "create",
+                "operationId": "createMasterReport",
+                "description": "Create \"Master Report\" job",
+                "consumes": [
+                    "application/json"
+                ],
+                "parameters": [
+                    {
+                        "name": "Job",
+                        "in": "body",
+                        "description": "\"item\" is mandatory parameter. \"fromTime\" is optional parameter. the others aren't required. \"fromTime\" is a specific period of time at starts (ISO 8601 UTC). If \"fromTime\" is input, the Delta master report is generated between \"fromTime\" and now. If \"fromTime\" is not input, the master report is generated without Delta data.\n",
+                        "schema": {
+                            "$ref": "#/definitions/RequestJob"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "responses a created Master Report Job details.",
+                        "schema": {
+                            "$ref": "#/definitions/MasterReportJob"
+                        }
+                    },
+                    "default": {
+                        "description": "response message",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/master-reports/{id}": {
+            "delete": {
+                "tags": [
+                    "MasterReport"
+                ],
+                "summary": "delete (by id)",
+                "operationId": "deleteMasterReport",
+                "description": "Delete by \"Master Report\" job id.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "type": "string",
+                        "description": "Valid Master Report Job Id",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "response message"
+                    },
+                    "default": {
+                        "description": "Unexpected error",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            },
+            "get": {
+                "tags": [
+                    "MasterReport"
+                ],
+                "summary": "get (by id)",
+                "operationId": "getMasterReport",
+                "description": "Get a \"Master Report\" Job details by specific ID.\n",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "type": "string",
+                        "description": "Valid Master Report Job Id.",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "\"Master Report\" Job details.\n",
+                        "schema": {
+                            "$ref": "#/definitions/MasterReportJob"
+                        }
+                    },
+                    "default": {
+                        "description": "Unexpected error",
+                        "schema": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "MasterReportJob": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Master Report Job id."
+                },
+                "item": {
+                    "type": "string",
+                    "enum": [
+                        "Campaign",
+                        "CampaignBudget",
+                        "BusinessChannel",
+                        "Adgroup",
+                        "AdgroupBudget",
+                        "Keyword",
+                        "Ad",
+                        "AdExtension",
+                        "Qi",
+                        "Label",
+                        "LabelRef",
+                        "Media",
+                        "Biz",
+                        "SeasonalEvent",
+                        "ShoppingProduct",
+                        "ContentsAd",
+                        "PlaceAd",
+                        "CatalogAd",
+                        "AdQi",
+                        "ProductGroup",
+                        "ProductGroupRel",
+                        "BrandAd",
+                        "BrandThumbnailAd",
+                        "BrandBannerAd",
+                        "Criterion",
+                        "SharedBudget",
+                        "Asset",
+                        "AdAssetLink",
+                        "RsaAd",
+                        "HospitalAd"
+                    ],
+                    "description": "Master Report Item. Campaign, Campaign Budget, Business Channel, Ad group, Ad group Budget, Ad Keyword, Ad(creative), Ad Extension, Qi grade, Label, LabelRef, Media info.\n"
+                },
+                "fromTime": {
+                    "type": "string",
+                    "format": "dateTime",
+                    "description": "The time at which the \"Delta\"(entity changed during a specific period of time) starts (ISO 8601 UTC)\n"
+                },
+                "updateTime": {
+                    "type": "string",
+                    "format": "dateTime",
+                    "description": "Time of report generation (ISO 8601 UTC)\n"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "REGIST",
+                        "RUNNING",
+                        "BUILT",
+                        "NONE",
+                        "ERROR"
+                    ],
+                    "description": "Job status., REGIST, RUNNING, BUILT, NONE, ERROR"
+                },
+                "downloadUrl": {
+                    "type": "string",
+                    "description": "Address of a report file."
+                }
+            }
+        },
+        "RequestJob": {
+            "type": "object",
+            "properties": {
+                "item": {
+                    "type": "string",
+                    "enum": [
+                        "Campaign",
+                        "CampaignBudget",
+                        "BusinessChannel",
+                        "Adgroup",
+                        "AdgroupBudget",
+                        "Keyword",
+                        "Ad",
+                        "AdExtension",
+                        "Qi",
+                        "Label",
+                        "LabelRef",
+                        "Media",
+                        "Biz",
+                        "SeasonalEvent",
+                        "ShoppingProduct",
+                        "ContentsAd",
+                        "PlaceAd",
+                        "CatalogAd",
+                        "AdQi",
+                        "ProductGroup",
+                        "ProductGroupRel",
+                        "BrandAd",
+                        "BrandThumbnailAd",
+                        "BrandBannerAd",
+                        "Criterion",
+                        "SharedBudget",
+                        "Asset",
+                        "AdAssetLink",
+                        "RsaAd",
+                        "HospitalAd"
+                    ],
+                    "description": "Master Report Item. Campaign, Campaign Budget, Business Channel, Ad group, Ad group Budget, Ad Keyword, Ad(creative), Ad Extension, Qi grade, Label, LabelRef, Media info.\n#required-request\n"
+                },
+                "fromTime": {
+                    "type": "string",
+                    "format": "dateTime",
+                    "description": "The time at which the \"Delta\"(entity changed during a specific period of time) starts (ISO 8601 UTC)\n"
+                }
+            }
+        },
+        "Error": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "details": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}
