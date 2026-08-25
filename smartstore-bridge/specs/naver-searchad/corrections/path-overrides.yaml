@@ -1,0 +1,59 @@
+version: 1
+reviewedAt: 2026-08-25
+reviewedBy: OpenAI
+
+baseUrl:
+  value: https://api.searchad.naver.com
+  reason: >-
+    공식 Swagger 번들의 host 값은 빈 문자열, localhost, 사설 IP, demo 도메인 등으로
+    일관되지 않으므로 실제 요청 Base URL로 사용하지 않는다.
+  officialEvidence:
+    - https://github.com/naver/searchad-apidoc/tree/master/python-sample
+    - https://naver.github.io/searchad-apidoc/
+  status: active
+
+normalizationRules:
+  - id: strip-api-prefix
+    rawPattern: ^/api/
+    normalizedPrefix: /
+    example:
+      rawPath: /api/ncc/campaigns
+      normalizedPath: /ncc/campaigns
+    reason: 공식 문서 UI의 uriReplace 규칙과 실제 API 호출 경로를 일치시킨다.
+    officialEvidence:
+      - https://github.com/naver/searchad-apidoc/blob/gh-pages/app/config.js
+    effectiveFrom: null
+    effectiveTo: null
+    status: active
+
+  - id: expand-query-uri-template
+    rawPattern: '\{\?([^}]+)\}$'
+    action: remove-template-and-register-query-parameters
+    example:
+      rawPath: /api/ncc/campaigns{?baseSearchId,recordSize,selector}
+      normalizedPath: /ncc/campaigns
+      queryParameters:
+        - baseSearchId
+        - recordSize
+        - selector
+    reason: Swagger의 비표준 URI template을 표준 path/query 모델로 변환한다.
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/release/2016/06/29/release-note/
+    effectiveFrom: null
+    effectiveTo: null
+    status: active
+
+  - id: preserve-report-download-query
+    rawPattern: /report-download
+    action: preserve-authorized-url-query
+    requiredQueryParameters:
+      - authtoken
+    optionalQueryParameters:
+      - fileversion
+      - fileVersion
+    reason: 보고서 다운로드 URL의 fileversion 파라미터를 제거하거나 재조립하지 않는다.
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/notice/2025/10/20/notice1/
+    effectiveFrom: 2025-10-19
+    effectiveTo: null
+    status: active
