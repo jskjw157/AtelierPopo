@@ -1,0 +1,111 @@
+version: 1
+reviewedAt: 2026-08-25
+reviewedBy: OpenAI
+
+boundaries:
+  - id: naverpay-conversion-data-end
+    reportTypes:
+      - NAVERPAY_CONVERSION
+    selectionBasis: statDate
+    effectiveFrom: 2025-04-09T00:00:00+09:00
+    action: deprecated-no-new-data
+    details:
+      lastDataDate: 2025-04-08
+      accessEndDate: 2025-05-09
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/notice/2025/04/02/notice1/
+
+  - id: search-term-report-aggregation-change
+    reportTypes:
+      - EXPKEYWORD
+      - SHOPPINGKEYWORD_DETAIL
+      - SHOPPINGKEYWORD_CONVERSION_DETAIL
+    selectionBasis: statDate
+    effectiveFrom: 2025-07-01T00:00:00+09:00
+    action: use-search-media-aggregation-and-new-keyword-type-map
+    valueMappings:
+      SearchKeywordType:
+        '0': exact
+        '1': extended
+        '2': exact_similar
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/notice/2025/06/02/notice1/
+
+  - id: master-report-fileversion
+    reportFamilies:
+      - MASTER_REPORT
+    selectionBasis: reportCreatedAt
+    effectiveFrom: 2025-10-19T00:00:00+09:00
+    action: preserve-download-url-fileversion
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/notice/2025/10/20/notice1/
+
+  - id: stat-report-fileversion-and-recollection
+    reportFamilies:
+      - STAT_REPORT
+    selectionBasis: reportCreatedAt
+    effectiveFrom: 2025-10-27T00:00:00+09:00
+    action: preserve-fileversion-and-enable-d1-d2-d3
+    stabilizationPolicy:
+      provisionalHours: 48
+      stableStateName: stabilized_by_policy
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/notice/2025/10/20/notice1/
+
+  - id: cost-vat-basis-change
+    reportFamilies:
+      - STAT_REPORT
+    selectionBasis: statDate
+    effectiveFrom: 2026-03-30T00:00:00+09:00
+    action: treat-cost-as-vat-included
+    beforeEffectiveDate:
+      costVatBasis: excluded
+    fromEffectiveDate:
+      costVatBasis: included
+    fallback:
+      costVatBasis: unknown
+
+  - id: adgroup-master-ai-ads-field
+    reportTypes:
+      - Adgroup
+    reportFamily: MASTER_REPORT
+    selectionBasis: reportCreatedAt
+    effectiveFrom: 2026-07-16T00:00:00+09:00
+    action: append-column
+    column:
+      position: 19
+      name: Using Ai Ads
+      type: int
+      values:
+        '0': disabled
+        '1': enabled
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/notice/2026/06/16/notice1/
+
+  - id: ad-extension-business-channel-column-removal
+    reportTypes:
+      - ADEXTENSION
+      - ADEXTENSION_CONVERSION
+    selectionBasis: reportCreatedAt
+    effectiveFrom: 2026-11-16T00:00:00+09:00
+    action: remove-column-and-shift-following-columns
+    removedColumn: AD extension Business Channel ID
+    expectedColumnCounts:
+      ADEXTENSION: 14
+      ADEXTENSION_CONVERSION: 13
+    notes:
+      - statDate가 과거여도 reportCreatedAt이 경계 이후면 새 스키마를 사용한다.
+    officialEvidence:
+      - https://github.com/naver/searchad-apidoc/blob/gh-pages/_posts/2026-08-14-notice1.md
+
+parserPolicy:
+  mismatchAction: quarantine
+  inferUnknownColumns: false
+  preserveRawFile: true
+  preserveChecksum: true
+  states:
+    - provisional
+    - stabilized_by_policy
+    - changed_after_generation
+    - quarantined
+    - failed
