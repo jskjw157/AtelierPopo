@@ -142,15 +142,33 @@ export function operationResponse(row, { reused = false, redactionRoots = [] } =
   };
 }
 
-export function ensureSameIdempotentOperation(existing, { operationType, sourceProductId }) {
+export function ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request }) {
   if (!existing) return;
-  if (existing.operation_type !== operationType || String(existing.source_product_id || '') !== String(sourceProductId || '')) {
+  let storedRequest;
+  try {
+    storedRequest = existing.request_json ? JSON.parse(existing.request_json) : null;
+  } catch {
+    storedRequest = null;
+  }
+  const requestChanged = request !== undefined && jsonStringify(storedRequest) !== jsonStringify(request);
+  if (existing.operation_type !== operationType
+    || String(existing.source_product_id || '') !== String(sourceProductId || '')
+    || requestChanged) {
     throw new HttpError(409, 'IDEMPOTENCY_KEY_REUSED', '동일한 idempotencyKey가 다른 작업에 이미 사용되었습니다.');
   }
 }
 
 export function operationStatusCode(row) {
   return ['succeeded', 'failed', 'interrupted', 'cancelled'].includes(row.status) ? 200 : 202;
+}
+
+export function closeLedgerWhenQueueIdle(ledger, idle) {
+  if (!idle) {
+    const error = new Error('활성 작업이 남아 있어 작업 원장을 안전하게 닫을 수 없습니다.');
+    error.code = 'OPERATION_QUEUE_SHUTDOWN_TIMEOUT';
+    throw error;
+  }
+  ledger.close();
 }
 
 export function route(method, pattern, handler, options = {}) {

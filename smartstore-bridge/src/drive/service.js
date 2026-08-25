@@ -58,11 +58,11 @@ function decodeInlineContent({ contentBase64, text, encoding = 'utf8' }) {
     throw new DriveServiceError('DRIVE_MULTIPLE_CONTENT_SOURCES', 'contentBase64와 text는 동시에 사용할 수 없습니다.');
   }
   if (contentBase64 !== undefined) {
-    try {
-      return Buffer.from(String(contentBase64), 'base64');
-    } catch {
+    const encoded = String(contentBase64).replace(/\s+/g, '');
+    if (encoded.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
       throw new DriveServiceError('DRIVE_INVALID_BASE64', 'contentBase64가 올바르지 않습니다.');
     }
+    return Buffer.from(encoded, 'base64');
   }
   if (text !== undefined) return Buffer.from(String(text), encoding);
   throw new DriveServiceError('DRIVE_CONTENT_REQUIRED', 'contentBase64 또는 text가 필요합니다.');
@@ -84,7 +84,9 @@ function publicFile(file) {
     createdTime: file.createdTime || null,
     modifiedTime: file.modifiedTime || null,
     webViewLink: file.webViewLink || null,
-    shortcutDetails: file.shortcutDetails || null,
+    shortcutDetails: file.shortcutDetails
+      ? { targetMimeType: file.shortcutDetails.targetMimeType || null }
+      : null,
     capabilities: file.capabilities || null
   };
 }
@@ -331,7 +333,7 @@ export class GoogleDriveService {
     this.assertWriteFlag('allowWrites', 'DRIVE_WRITES_DISABLED', 'ATELIER_DRIVE_ALLOW_WRITES=false라 Drive 쓰기가 차단되어 있습니다.');
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.WRITE);
     const safeName = normalizeName(name, '폴더명');
-    await this.boundary.assertDestination(parentId, { operation: 'create-folder' });
+    await this.boundary.assertDestination(parentId, { operation: 'create-folder', fresh: true });
     await this.assertCreateOwnershipCapability(parentId);
     const file = await this.client.createFolder({ name: safeName, parentId });
     this.boundary.invalidate(file.id);
@@ -347,7 +349,7 @@ export class GoogleDriveService {
       throw new DriveServiceError('DRIVE_INVALID_NATIVE_FILE_TYPE', 'type은 document, spreadsheet, presentation 중 하나여야 합니다.');
     }
     const safeName = normalizeName(name, '파일명');
-    await this.boundary.assertDestination(parentId, { operation: 'create-native-file' });
+    await this.boundary.assertDestination(parentId, { operation: 'create-native-file', fresh: true });
     await this.assertCreateOwnershipCapability(parentId);
     const file = await this.client.createFileMetadata({
       name: safeName,
@@ -363,7 +365,7 @@ export class GoogleDriveService {
     this.assertWriteFlag('allowWrites', 'DRIVE_WRITES_DISABLED', 'ATELIER_DRIVE_ALLOW_WRITES=false라 Drive 쓰기가 차단되어 있습니다.');
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.WRITE);
     const safeName = normalizeName(name, '파일명');
-    await this.boundary.assertDestination(parentId, { operation: 'upload' });
+    await this.boundary.assertDestination(parentId, { operation: 'upload', fresh: true });
     await this.assertCreateOwnershipCapability(parentId);
     const buffer = decodeInlineContent({ contentBase64, text });
     this.assertUploadSize(buffer);
@@ -382,7 +384,7 @@ export class GoogleDriveService {
     this.assertWriteFlag('allowWrites', 'DRIVE_WRITES_DISABLED', 'ATELIER_DRIVE_ALLOW_WRITES=false라 Drive 쓰기가 차단되어 있습니다.');
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.WRITE);
     const local = this.assertLocalFileAllowed(filePath);
-    await this.boundary.assertDestination(parentId, { operation: 'upload-local-file' });
+    await this.boundary.assertDestination(parentId, { operation: 'upload-local-file', fresh: true });
     await this.assertCreateOwnershipCapability(parentId);
     const file = await this.client.uploadLocalFile({
       filePath: local.filePath,
@@ -399,7 +401,7 @@ export class GoogleDriveService {
     this.assertWriteFlag('allowWrites', 'DRIVE_WRITES_DISABLED', 'ATELIER_DRIVE_ALLOW_WRITES=false라 Drive 쓰기가 차단되어 있습니다.');
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.WRITE);
     const local = this.assertLocalFileAllowed(filePath);
-    const boundary = await this.boundary.assertInsideRoot(fileId, { operation: 'replace-local-file', allowRoot: false });
+    const boundary = await this.boundary.assertInsideRoot(fileId, { operation: 'replace-local-file', allowRoot: false, fresh: true });
     if (boundary.file.mimeType === GOOGLE_FOLDER_MIME) {
       throw new DriveServiceError('DRIVE_FOLDER_CONTENT_REPLACE_NOT_ALLOWED', '폴더의 내용은 파일처럼 교체할 수 없습니다.');
     }
@@ -415,7 +417,7 @@ export class GoogleDriveService {
   async replaceInline(fileId, { mimeType, contentBase64, text, confirmation }) {
     this.assertWriteFlag('allowWrites', 'DRIVE_WRITES_DISABLED', 'ATELIER_DRIVE_ALLOW_WRITES=false라 Drive 쓰기가 차단되어 있습니다.');
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.WRITE);
-    const boundary = await this.boundary.assertInsideRoot(fileId, { operation: 'replace-content', allowRoot: false });
+    const boundary = await this.boundary.assertInsideRoot(fileId, { operation: 'replace-content', allowRoot: false, fresh: true });
     if (boundary.file.mimeType === GOOGLE_FOLDER_MIME) {
       throw new DriveServiceError('DRIVE_FOLDER_CONTENT_REPLACE_NOT_ALLOWED', '폴더의 내용은 파일처럼 교체할 수 없습니다.');
     }
@@ -433,7 +435,7 @@ export class GoogleDriveService {
   async rename(fileId, { name, confirmation }) {
     this.assertWriteFlag('allowWrites', 'DRIVE_WRITES_DISABLED', 'ATELIER_DRIVE_ALLOW_WRITES=false라 Drive 쓰기가 차단되어 있습니다.');
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.WRITE);
-    await this.boundary.assertInsideRoot(fileId, { operation: 'rename', allowRoot: false });
+    await this.boundary.assertInsideRoot(fileId, { operation: 'rename', allowRoot: false, fresh: true });
     const file = await this.client.renameFile(fileId, normalizeName(name, '새 파일명'));
     this.boundary.invalidate(fileId);
     return publicFile(file);
@@ -442,7 +444,7 @@ export class GoogleDriveService {
   async move(fileId, { parentId, confirmation }) {
     this.assertWriteFlag('allowMoves', 'DRIVE_MOVES_DISABLED', 'ATELIER_DRIVE_ALLOW_MOVES=false라 Drive 이동이 차단되어 있습니다.');
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.MOVE);
-    await this.boundary.assertMove(fileId, parentId);
+    await this.boundary.assertMove(fileId, parentId, { fresh: true });
     const current = await this.client.getFile(fileId);
     const removeParentIds = (current.parents || []).filter(id => id !== parentId);
     const file = await this.client.moveFile(fileId, { addParentId: parentId, removeParentIds });
@@ -454,8 +456,8 @@ export class GoogleDriveService {
     this.assertWriteFlag('allowWrites', 'DRIVE_WRITES_DISABLED', 'ATELIER_DRIVE_ALLOW_WRITES=false라 Drive 쓰기가 차단되어 있습니다.');
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.WRITE);
     await Promise.all([
-      this.boundary.assertInsideRoot(fileId, { operation: 'copy-source' }),
-      this.boundary.assertDestination(parentId, { operation: 'copy-destination' })
+      this.boundary.assertInsideRoot(fileId, { operation: 'copy-source', fresh: true }),
+      this.boundary.assertDestination(parentId, { operation: 'copy-destination', fresh: true })
     ]);
     await this.assertCreateOwnershipCapability(parentId);
     const file = await this.client.copyFile(fileId, {
@@ -470,7 +472,7 @@ export class GoogleDriveService {
   async trash(fileId, { confirmation, secondConfirmation }) {
     this.assertWriteFlag('allowTrash', 'DRIVE_TRASH_DISABLED', 'ATELIER_DRIVE_ALLOW_TRASH=false라 휴지통 이동이 차단되어 있습니다.');
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.TRASH, secondConfirmation, fileId);
-    await this.boundary.assertInsideRoot(fileId, { operation: 'trash', allowRoot: false });
+    await this.boundary.assertInsideRoot(fileId, { operation: 'trash', allowRoot: false, fresh: true });
     const file = await this.client.trashFile(fileId);
     this.boundary.invalidate(fileId);
     return publicFile(file);
@@ -479,7 +481,7 @@ export class GoogleDriveService {
   async restore(fileId, { confirmation, secondConfirmation }) {
     this.assertWriteFlag('allowTrash', 'DRIVE_TRASH_DISABLED', 'ATELIER_DRIVE_ALLOW_TRASH=false라 복원이 차단되어 있습니다.');
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.RESTORE, secondConfirmation, fileId);
-    await this.boundary.assertInsideRoot(fileId, { operation: 'restore', allowRoot: false });
+    await this.boundary.assertInsideRoot(fileId, { operation: 'restore', allowRoot: false, fresh: true });
     const file = await this.client.restoreFile(fileId);
     this.boundary.invalidate(fileId);
     return publicFile(file);
@@ -492,7 +494,7 @@ export class GoogleDriveService {
       'ATELIER_DRIVE_ALLOW_PERMANENT_DELETE=false라 영구 삭제가 차단되어 있습니다.'
     );
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.DELETE, secondConfirmation, fileId);
-    await this.boundary.assertInsideRoot(fileId, { operation: 'permanent-delete', allowRoot: false });
+    await this.boundary.assertInsideRoot(fileId, { operation: 'permanent-delete', allowRoot: false, fresh: true });
     await this.client.deleteFile(fileId);
     this.boundary.clear();
     return { deleted: true, fileId };
@@ -505,7 +507,7 @@ export class GoogleDriveService {
       'ATELIER_DRIVE_ALLOW_PERMISSION_CHANGES=false라 공유 권한 변경이 차단되어 있습니다.'
     );
     requireConfirmation(input.confirmation, DRIVE_CONFIRMATIONS.PERMISSION, input.secondConfirmation, fileId);
-    await this.boundary.assertInsideRoot(fileId, { operation: 'create-permission' });
+    await this.boundary.assertInsideRoot(fileId, { operation: 'create-permission', fresh: true });
     const role = String(input.role || '').trim();
     const type = String(input.type || 'user').trim();
     if (!PERMISSION_ROLES.has(role)) {
@@ -514,13 +516,24 @@ export class GoogleDriveService {
     if (!PERMISSION_TYPES.has(type)) {
       throw new DriveServiceError('DRIVE_INVALID_PERMISSION_TYPE', 'type은 user, group, domain, anyone 중 하나여야 합니다.');
     }
-    if (type === 'anyone' && input.allowFileDiscovery === undefined) input.allowFileDiscovery = false;
+    if (['anyone', 'domain'].includes(type) && role !== 'reader') {
+      throw new DriveServiceError('DRIVE_PUBLIC_WRITE_NOT_ALLOWED', 'anyone 또는 domain 권한은 reader만 허용됩니다.');
+    }
+    if (['user', 'group'].includes(type) && !String(input.emailAddress || '').trim()) {
+      throw new DriveServiceError('DRIVE_PERMISSION_EMAIL_REQUIRED', 'user 또는 group 권한에는 emailAddress가 필요합니다.');
+    }
+    if (type === 'domain' && !String(input.domain || '').trim()) {
+      throw new DriveServiceError('DRIVE_PERMISSION_DOMAIN_REQUIRED', 'domain 권한에는 domain이 필요합니다.');
+    }
+    const allowFileDiscovery = type === 'anyone' && input.allowFileDiscovery === undefined
+      ? false
+      : input.allowFileDiscovery;
     return this.client.createPermission(fileId, {
       type,
       role,
       emailAddress: input.emailAddress,
       domain: input.domain,
-      allowFileDiscovery: input.allowFileDiscovery,
+      allowFileDiscovery,
       sendNotificationEmail: Boolean(input.sendNotificationEmail),
       emailMessage: input.emailMessage,
       transferOwnership: false
@@ -534,7 +547,7 @@ export class GoogleDriveService {
       'ATELIER_DRIVE_ALLOW_PERMISSION_CHANGES=false라 공유 권한 변경이 차단되어 있습니다.'
     );
     requireConfirmation(input.confirmation, DRIVE_CONFIRMATIONS.PERMISSION, input.secondConfirmation, permissionId);
-    await this.boundary.assertInsideRoot(fileId, { operation: 'delete-permission' });
+    await this.boundary.assertInsideRoot(fileId, { operation: 'delete-permission', fresh: true });
     await this.client.deletePermission(fileId, permissionId);
     return { deleted: true, fileId, permissionId };
   }
@@ -581,6 +594,8 @@ export class GoogleDriveService {
 
   async runWriteCanary({ confirmation }) {
     this.assertWriteFlag('allowWrites', 'DRIVE_WRITES_DISABLED', 'ATELIER_DRIVE_ALLOW_WRITES=false라 Drive 쓰기가 차단되어 있습니다.');
+    this.assertWriteFlag('allowMoves', 'DRIVE_MOVES_DISABLED', 'ATELIER_DRIVE_ALLOW_MOVES=false라 Drive 이동 Canary를 실행할 수 없습니다.');
+    this.assertWriteFlag('allowTrash', 'DRIVE_TRASH_DISABLED', 'ATELIER_DRIVE_ALLOW_TRASH=false라 Drive Canary를 안전하게 정리할 수 없습니다.');
     requireConfirmation(confirmation, DRIVE_CONFIRMATIONS.PROBE);
     const result = {
       read: false,

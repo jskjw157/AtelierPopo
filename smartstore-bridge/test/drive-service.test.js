@@ -158,3 +158,48 @@ test('Drive service creates Google native files with an allowlisted type', async
     error => error.code === 'DRIVE_INVALID_NATIVE_FILE_TYPE'
   );
 });
+
+test('Drive service rejects malformed Base64 instead of uploading corrupted bytes', async () => {
+  // Given
+  const { service } = setup();
+
+  // When / Then
+  await assert.rejects(
+    () => service.uploadInline({
+      name: 'bad.bin',
+      contentBase64: '@@@not-base64@@@',
+      confirmation: DRIVE_CONFIRMATIONS.WRITE
+    }),
+    error => error.code === 'DRIVE_INVALID_BASE64'
+  );
+});
+
+test('Drive service never permits world-writable sharing', async () => {
+  // Given
+  const { service, root } = setup();
+
+  // When / Then
+  await assert.rejects(
+    () => service.createPermission(root, {
+      type: 'anyone',
+      role: 'writer',
+      confirmation: DRIVE_CONFIRMATIONS.PERMISSION,
+      secondConfirmation: root
+    }),
+    error => error.code === 'DRIVE_PUBLIC_WRITE_NOT_ALLOWED'
+  );
+});
+
+test('Drive canary refuses to start when cleanup gates are disabled', async () => {
+  // Given
+  const { service, files } = setup();
+  service.config.allowTrash = false;
+  service.config.allowPermanentDelete = false;
+
+  // When / Then
+  await assert.rejects(
+    () => service.runWriteCanary({ confirmation: DRIVE_CONFIRMATIONS.PROBE }),
+    error => error.code === 'DRIVE_TRASH_DISABLED'
+  );
+  assert.equal(files.size, 1);
+});

@@ -13,6 +13,7 @@ import {
 } from './security.js';
 import {
   applyCors,
+  closeLedgerWhenQueueIdle,
   configuredApiKeys,
   ensureSameIdempotentOperation,
   normalizePathname,
@@ -49,7 +50,7 @@ export function createHttpApiV04({ app, env = process.env, logger = defaultLogge
   async function createAsyncOperation({ idempotencyKey, operationType, sourceProductId, request, task }) {
     const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
     if (existing) {
-      ensureSameIdempotentOperation(existing, { operationType, sourceProductId });
+      ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request });
       return { row: existing, reused: true };
     }
 
@@ -66,7 +67,7 @@ export function createHttpApiV04({ app, env = process.env, logger = defaultLogge
     } catch (error) {
       const raced = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
       if (!raced) throw error;
-      ensureSameIdempotentOperation(raced, { operationType, sourceProductId });
+      ensureSameIdempotentOperation(raced, { operationType, sourceProductId, request });
       return { row: raced, reused: true };
     }
 
@@ -209,8 +210,8 @@ export function createHttpApiV04({ app, env = process.env, logger = defaultLogge
     if (server.listening) {
       await new Promise(resolve => server.close(() => resolve()));
     }
-    await operationQueue.close({ timeoutMs: httpConfig.shutdownTimeoutMs });
-    app.ledger.close();
+    const idle = await operationQueue.close({ timeoutMs: httpConfig.shutdownTimeoutMs });
+    closeLedgerWhenQueueIdle(app.ledger, idle);
   }
 
   return {

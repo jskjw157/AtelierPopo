@@ -21,8 +21,7 @@ export function createSystemRoutes({ app, httpConfig, operationQueue, version, s
         status: state.readyForRead ? 'ok' : 'degraded',
         service: 'atelier-popo-smartstore-bridge',
         version,
-        uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
-        readiness: state
+        uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000)
       });
     }, { auth: false }),
 
@@ -36,8 +35,7 @@ export function createSystemRoutes({ app, httpConfig, operationQueue, version, s
         ok: state.readyForRead,
         status: state.readyForRead ? 'ready' : 'not_ready',
         service: 'atelier-popo-smartstore-bridge',
-        version,
-        readiness: state
+        version
       });
     }, { auth: false }),
 

@@ -27,11 +27,11 @@ export class DriveRootBoundary {
     this.cache.delete(String(fileId));
   }
 
-  async getNode(fileId) {
+  async getNode(fileId, { fresh = false } = {}) {
     const id = String(fileId || '').trim();
     if (!id) throw new DriveBoundaryError('DRIVE_INVALID_FILE_ID', 'Google Drive fileId가 필요합니다.');
     const cached = this.cache.get(id);
-    if (cached && cached.expiresAt > Date.now()) return cached.file;
+    if (!fresh && cached && cached.expiresAt > Date.now()) return cached.file;
     try {
       const file = await this.client.getFile(id, {
         fields: 'id,name,mimeType,parents,trashed,driveId,shortcutDetails,capabilities(canEdit,canCopy,canDelete,canShare,canTrash,canUntrash)'
@@ -46,14 +46,14 @@ export class DriveRootBoundary {
     }
   }
 
-  async resolve(fileId) {
+  async resolve(fileId, { fresh = false } = {}) {
     const startId = String(fileId || '').trim();
     if (!startId) throw new DriveBoundaryError('DRIVE_INVALID_FILE_ID', 'Google Drive fileId가 필요합니다.');
     if (!this.allowedRootIds.size) {
       throw new DriveBoundaryError('DRIVE_ALLOWED_ROOT_NOT_CONFIGURED', 'Google Drive 허용 루트가 설정되지 않았습니다.');
     }
     if (this.allowedRootIds.has(startId)) {
-      const root = await this.getNode(startId);
+      const root = await this.getNode(startId, { fresh });
       return {
         allowed: true,
         rootId: startId,
@@ -78,7 +78,7 @@ export class DriveRootBoundary {
         });
       }
 
-      const node = await this.getNode(current.id);
+      const node = await this.getNode(current.id, { fresh });
       if (!startFile) startFile = node;
       for (const parentId of node.parents || []) {
         const nextChain = [...current.chain, parentId];
@@ -106,8 +106,8 @@ export class DriveRootBoundary {
     };
   }
 
-  async assertInsideRoot(fileId, { operation = 'access', allowRoot = true } = {}) {
-    const result = await this.resolve(fileId);
+  async assertInsideRoot(fileId, { operation = 'access', allowRoot = true, fresh = false } = {}) {
+    const result = await this.resolve(fileId, { fresh });
     if (!result.allowed) {
       throw new DriveBoundaryError(
         'DRIVE_PATH_OUTSIDE_ALLOWED_ROOT',
@@ -125,14 +125,14 @@ export class DriveRootBoundary {
     return result;
   }
 
-  async assertDestination(parentId, { operation = 'write' } = {}) {
-    return this.assertInsideRoot(parentId, { operation, allowRoot: true });
+  async assertDestination(parentId, { operation = 'write', fresh = false } = {}) {
+    return this.assertInsideRoot(parentId, { operation, allowRoot: true, fresh });
   }
 
-  async assertMove(fileId, newParentId) {
+  async assertMove(fileId, newParentId, { fresh = false } = {}) {
     const [source, destination] = await Promise.all([
-      this.assertInsideRoot(fileId, { operation: 'move-source', allowRoot: false }),
-      this.assertDestination(newParentId, { operation: 'move-destination' })
+      this.assertInsideRoot(fileId, { operation: 'move-source', allowRoot: false, fresh }),
+      this.assertDestination(newParentId, { operation: 'move-destination', fresh })
     ]);
     return { source, destination };
   }

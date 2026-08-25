@@ -13,7 +13,7 @@ const errorResponses = {
 export function buildOpenApiSpecV04({ serverUrl, version = '0.4.0' }) {
   const spec = buildOpenApiSpecV03({ serverUrl, version });
   spec.info.title = 'HAAR SmartStore, Naver Commerce and Google Drive Bridge API';
-  spec.info.description = '네이버 커머스API 공식 operation 115개, 기존 상품 상세페이지 수정/롤백, Google Drive 전체 쓰기, 퀸실버 카탈로그를 통합하는 HTTP API입니다.';
+  spec.info.description = '네이버 커머스API 공식 operation 116개, 기존 상품 상세페이지 수정/롤백, Google Drive 전체 쓰기, 퀸실버 카탈로그를 통합하는 HTTP API입니다.';
   spec.tags.push(
     { name: 'Commerce' },
     { name: 'Commerce Products' },
@@ -184,7 +184,7 @@ export function buildOpenApiSpecV04({ serverUrl, version = '0.4.0' }) {
       confirmation: { type: 'string' },
       secondConfirmation: { type: 'string' },
       idempotencyKey: { type: 'string', minLength: 8, maxLength: 128 },
-      timeoutMs: { type: 'integer', minimum: 1000, maximum: 600000 }
+      timeoutMs: { type: 'integer', minimum: 5000, maximum: 60000 }
     },
     additionalProperties: false
   };

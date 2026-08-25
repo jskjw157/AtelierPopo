@@ -151,8 +151,10 @@ export class GoogleDriveClient {
           await sleep(Math.min(15_000, 500 * (2 ** attempt)) + Math.floor(Math.random() * 300));
           continue;
         }
-        const wrapped = new GoogleDriveError(`Google Drive 요청에 실패했습니다: ${error.message}`, {
-          code: error.name === 'TimeoutError' ? 'GOOGLE_DRIVE_TIMEOUT' : 'GOOGLE_DRIVE_NETWORK_ERROR'
+        const wrapped = new GoogleDriveError(`Google Drive 요청 결과를 확인할 수 없습니다: ${error.message}`, {
+          code: safe
+            ? (error.name === 'TimeoutError' ? 'GOOGLE_DRIVE_TIMEOUT' : 'GOOGLE_DRIVE_NETWORK_ERROR')
+            : 'DRIVE_WRITE_OUTCOME_UNKNOWN'
         });
         wrapped.cause = error;
         throw wrapped;

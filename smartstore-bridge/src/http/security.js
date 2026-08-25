@@ -26,7 +26,7 @@ export function loadHttpConfig(env = process.env) {
     apiKeyMinLength: asInteger(env.ATELIER_API_KEY_MIN_LENGTH, 32, { min: 16, max: 128 }),
     allowWrites: asBoolean(env.ATELIER_HTTP_ALLOW_WRITES, false),
     allowBatchWrites: asBoolean(env.ATELIER_HTTP_ALLOW_BATCH_WRITES, false),
-    trustProxy: asBoolean(env.ATELIER_TRUST_PROXY, true),
+    trustProxy: asBoolean(env.ATELIER_TRUST_PROXY, false),
     corsOrigins,
     maxBodyBytes: asInteger(env.ATELIER_MAX_BODY_BYTES, 64 * 1024, { min: 1024, max: 1024 * 1024 }),
     readRateLimitPerMinute: asInteger(env.ATELIER_RATE_LIMIT_PER_MINUTE, 120, { min: 1, max: 10_000 }),

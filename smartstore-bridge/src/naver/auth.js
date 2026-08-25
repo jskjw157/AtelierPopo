@@ -62,6 +62,7 @@ export class TokenProvider {
   constructor(options) {
     this.options = options;
     this.cached = null;
+    this.inflight = null;
   }
 
   clear() { this.cached = null; }
@@ -71,7 +72,16 @@ export class TokenProvider {
     if (this.cached && Date.now() < this.cached.issuedAt + this.cached.expiresIn * 1000 - safetyMs) {
       return this.cached.accessToken;
     }
-    this.cached = await issueAccessToken(this.options);
-    return this.cached.accessToken;
+    if (this.inflight) return this.inflight;
+    const promise = issueAccessToken(this.options).then(token => {
+      this.cached = token;
+      return token.accessToken;
+    });
+    this.inflight = promise;
+    try {
+      return await promise;
+    } finally {
+      if (this.inflight === promise) this.inflight = null;
+    }
   }
 }

@@ -19,7 +19,7 @@ async function ensureDriveManifest(app) {
 
 export function readinessV04(app, httpConfig, operationQueue) {
   const base = readinessV03(app, httpConfig, operationQueue);
-  const commerceReady = Boolean(app.commerceGateway && app.commerceManifest?.operations?.length === 115);
+  const commerceReady = Boolean(app.commerceGateway && app.commerceManifest?.operations?.length);
   return {
     ...base,
     commerce: {
@@ -64,8 +64,7 @@ export function createSystemRoutesV04({
         status: state.readyForRead ? 'ok' : 'degraded',
         service: 'haar-smartstore-commerce-drive-bridge',
         version,
-        uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
-        readiness: state
+        uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000)
       });
     }, { auth: false }),
 
@@ -79,8 +78,7 @@ export function createSystemRoutesV04({
         ok: state.readyForRead,
         status: state.readyForRead ? 'ready' : 'not_ready',
         service: 'haar-smartstore-commerce-drive-bridge',
-        version,
-        readiness: state
+        version
       });
     }, { auth: false }),
 
@@ -135,9 +133,10 @@ export function createSystemRoutesV04({
       const concurrency = parseIntegerQuery(body.concurrency, 4, { min: 1, max: 8 });
       const operationType = 'sync_and_enqueue_catalog';
       const sourceProductId = `catalog:${limit}:${force ? 'force' : 'cached'}`;
+      const operationRequest = { limit, force, concurrency };
       const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
       if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId });
+        ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request: operationRequest });
         sendJson(req, res, operationStatusCode(existing), operationResponse(existing, {
           reused: true,
           redactionRoots
@@ -148,7 +147,7 @@ export function createSystemRoutesV04({
         idempotencyKey,
         operationType,
         sourceProductId,
-        request: { limit, force, concurrency },
+        request: operationRequest,
         task: async () => {
           const sync = await app.catalogMaterializer.syncCatalog({
             includeImages: false,
@@ -166,6 +165,6 @@ export function createSystemRoutesV04({
         reused: created.reused,
         redactionRoots
       }), { Location: `/api/v1/operations/${created.row.operation_id}` });
-    })
+    }, { write: true })
   ];
 }

@@ -145,13 +145,13 @@ async function waitForOperation(fixture, operationId) {
   throw new Error('operation timeout');
 }
 
-test('commerce HTTP API exposes exactly 115 official operations', async () => {
+test('commerce HTTP API exposes exactly 116 official operations', async () => {
   const fixture = await startFixture();
   try {
     const response = await call(fixture, 'GET', '/api/v1/commerce/operations?limit=1');
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.equal(data.total, 115);
+    assert.equal(data.total, 116);
     assert.equal(data.items.length, 1);
 
     const openapi = await fetch(`${fixture.baseUrl}/openapi.json`);

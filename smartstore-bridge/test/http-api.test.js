@@ -148,7 +148,9 @@ test('health는 공개하고 API 경로는 Bearer 키로 보호한다', async ()
   try {
     const health = await fetch(`${fixture.baseUrl}/health`);
     assert.equal(health.status, 200);
-    assert.equal((await health.json()).ok, true);
+    const healthBody = await health.json();
+    assert.equal(healthBody.ok, true);
+    assert.equal('readiness' in healthBody, false);
 
     const unauthorized = await fetch(`${fixture.baseUrl}/api/v1/status`);
     assert.equal(unauthorized.status, 401);

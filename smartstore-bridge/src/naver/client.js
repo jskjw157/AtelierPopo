@@ -119,7 +119,17 @@ export class NaverCommerceClient {
             traceId: response.headers.get('gncp-gw-trace-id')
           });
         }
-        currentUrl = new URL(response.headers.get('location'), currentUrl);
+        const redirectUrl = new URL(response.headers.get('location'), currentUrl);
+        if (redirectUrl.origin !== initialUrl.origin) {
+          throw new NaverApiError('네이버 API가 허용되지 않은 외부 호스트로 리디렉션했습니다.', {
+            status: 502,
+            code: 'NAVER_REDIRECT_HOST_NOT_ALLOWED',
+            traceId: response.headers.get('gncp-gw-trace-id'),
+            url: redirectUrl.toString(),
+            method: currentMethod
+          });
+        }
+        currentUrl = redirectUrl;
         redirectCount += 1;
         if (response.status === 303) {
           currentMethod = 'GET';

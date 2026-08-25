@@ -3,7 +3,7 @@ import { parseCommerceLlmsIndex, writeCommerceManifest, NAVER_COMMERCE_LLMS_URL 
 
 const sourceUrl = process.env.NAVER_COMMERCE_LLMS_URL || NAVER_COMMERCE_LLMS_URL;
 const outputPath = process.env.NAVER_COMMERCE_MANIFEST_PATH || './specs/naver-commerce/current.json';
-const expectedMinimum = Number(process.env.NAVER_COMMERCE_EXPECTED_MIN_OPERATIONS || 115);
+const expectedMinimum = Number(process.env.NAVER_COMMERCE_EXPECTED_MIN_OPERATIONS || 116);
 const version = process.env.NAVER_COMMERCE_API_VERSION || 'current';
 
 const response = await fetch(sourceUrl, {

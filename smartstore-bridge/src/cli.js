@@ -48,7 +48,7 @@ async function main() {
         accountId: app.config.naver.accountId,
         baseUrl: app.config.naver.baseUrl
       });
-      print({ ok: true, tokenType: token.tokenType, expiresIn: token.expiresIn, accessTokenPreview: `${token.accessToken.slice(0, 6)}…` });
+      print({ ok: true, tokenType: token.tokenType, expiresIn: token.expiresIn });
       return;
     }
     if (group === 'catalog' && action === 'stats') {

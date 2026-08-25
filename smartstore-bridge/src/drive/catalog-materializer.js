@@ -30,6 +30,14 @@ function safeRelativeParts(localFolder) {
   return parts;
 }
 
+function safeCacheFileName(value) {
+  const name = String(value || '');
+  if (!name || name === '.' || name === '..' || /[\\/\0]/.test(name)) {
+    throw new DriveServiceError('DRIVE_CATALOG_INVALID_FILE_NAME', '카탈로그 파일명에 경로 구분자를 사용할 수 없습니다.', { name });
+  }
+  return name;
+}
+
 async function mapWithConcurrency(items, concurrency, worker) {
   const results = new Array(items.length);
   let index = 0;
@@ -45,16 +53,18 @@ async function mapWithConcurrency(items, concurrency, worker) {
 
 export class DriveCatalogMaterializer {
   constructor({ driveService, cacheRoot, catalogFolderId, cacheTtlSeconds = 3600, downloadConcurrency = 4 }) {
-    if (!driveService?.client) throw new Error('DriveCatalogMaterializer에는 driveService가 필요합니다.');
+    if (!driveService?.client || !driveService?.boundary) throw new Error('DriveCatalogMaterializer에는 driveService가 필요합니다.');
+    if (!String(catalogFolderId || '').trim()) {
+      throw new DriveServiceError('DRIVE_CATALOG_FOLDER_REQUIRED', 'Google Drive 카탈로그 폴더 ID가 필요합니다.');
+    }
     this.driveService = driveService;
     this.client = driveService.client;
     this.cacheRoot = path.resolve(cacheRoot);
-    this.catalogFolderId = catalogFolderId;
+    this.catalogFolderId = String(catalogFolderId).trim();
     this.cacheTtlMs = Math.max(0, Number(cacheTtlSeconds || 0) * 1000);
     this.downloadConcurrency = Math.max(1, Math.min(12, Number(downloadConcurrency || 4)));
     this.manifestFileId = null;
     this.manifestCache = null;
-    this.folderIdCache = new Map();
     fs.mkdirSync(this.cacheRoot, { recursive: true });
   }
 
@@ -73,8 +83,7 @@ export class DriveCatalogMaterializer {
   }
 
   async findChild(parentId, name, { mimeType, required = true } = {}) {
-    const key = `${parentId}:${mimeType || '*'}:${name}`;
-    if (this.folderIdCache.has(key)) return this.folderIdCache.get(key);
+    await this.driveService.boundary.assertDestination(parentId, { operation: 'catalog-search', fresh: true });
     const response = await this.client.searchByName(name, {
       parentId,
       mimeType,
@@ -98,11 +107,12 @@ export class DriveCatalogMaterializer {
         fileIds: files.map(file => file.id)
       });
     }
-    this.folderIdCache.set(key, files[0]);
+    await this.driveService.boundary.assertInsideRoot(files[0].id, { operation: 'catalog-read', fresh: true });
     return files[0];
   }
 
   async downloadIfChanged(remoteFile, localPath, state, stateKey) {
+    await this.driveService.boundary.assertInsideRoot(remoteFile.id, { operation: 'catalog-download', fresh: true });
     const previous = state.files?.[stateKey];
     const unchanged = previous
       && previous.fileId === remoteFile.id
@@ -123,6 +133,7 @@ export class DriveCatalogMaterializer {
   }
 
   async ensureManifest({ force = false } = {}) {
+    await this.driveService.boundary.assertDestination(this.catalogFolderId, { operation: 'catalog-root', fresh: true });
     const localPath = this.manifestPath();
     if (!force && this.manifestCache && this.isFresh(localPath)) return this.manifestCache;
     if (!force && this.isFresh(localPath)) {
@@ -173,6 +184,7 @@ export class DriveCatalogMaterializer {
   }
 
   async listAllChildren(folderId) {
+    await this.driveService.boundary.assertDestination(folderId, { operation: 'catalog-list', fresh: true });
     const files = [];
     let pageToken;
     do {
@@ -210,7 +222,7 @@ export class DriveCatalogMaterializer {
     }
 
     const requestedNames = includeImages
-      ? [...new Set((imageNames?.length ? imageNames : product.downloaded_images || []).map(String))]
+      ? [...new Set((imageNames?.length ? imageNames : product.downloaded_images || []).map(safeCacheFileName))]
       : [];
     let downloadedImages = 0;
     let reusedImages = 0;

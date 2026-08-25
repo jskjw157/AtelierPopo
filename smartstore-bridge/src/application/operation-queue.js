@@ -48,7 +48,8 @@ export class OperationQueue {
           this.logger?.info?.('HTTP operation succeeded', { operationId: item.operationId });
         })
         .catch(error => {
-          this.ledger.markOperation(item.operationId, 'failed', {
+          const status = String(error.code || '').endsWith('_WRITE_OUTCOME_UNKNOWN') ? 'interrupted' : 'failed';
+          this.ledger.markOperation(item.operationId, status, {
             error: {
               name: error.name,
               code: error.code,
@@ -57,6 +58,7 @@ export class OperationQueue {
           });
           this.logger?.error?.('HTTP operation failed', {
             operationId: item.operationId,
+            status,
             name: error.name,
             code: error.code,
             message: error.message

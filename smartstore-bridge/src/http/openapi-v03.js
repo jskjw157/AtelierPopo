@@ -449,6 +449,35 @@ export function buildOpenApiSpec({ serverUrl, version = '0.3.0' }) {
     pattern: '^[A-Za-z0-9._:-]+$'
   };
 
+  const asynchronousDriveMutations = [
+    '/api/v1/drive/capabilities/probe',
+    '/api/v1/drive/folders',
+    '/api/v1/drive/native-files',
+    '/api/v1/drive/files/upload',
+    '/api/v1/drive/files/{fileId}/replace',
+    '/api/v1/drive/files/{fileId}/rename',
+    '/api/v1/drive/files/{fileId}/move',
+    '/api/v1/drive/files/{fileId}/copy',
+    '/api/v1/drive/files/{fileId}/trash',
+    '/api/v1/drive/files/{fileId}/restore',
+    '/api/v1/drive/files/{fileId}/delete',
+    '/api/v1/drive/files/{fileId}/permissions',
+    '/api/v1/drive/files/{fileId}/permissions/{permissionId}/delete'
+  ];
+  for (const pathname of asynchronousDriveMutations) {
+    const post = spec.paths[pathname].post;
+    const schema = post.requestBody.content['application/json'].schema;
+    if (!schema.$ref) {
+      schema.required = [...new Set([...(schema.required || []), 'idempotencyKey'])];
+      schema.properties.idempotencyKey = { $ref: '#/components/schemas/IdempotencyKey' };
+    }
+    post.responses = {
+      '200': objectResponse('기존 Drive 작업'),
+      '202': objectResponse('Drive 작업 접수'),
+      ...errors
+    };
+  }
+
   spec.paths['/api/v1/catalog/enqueue'] = {
     post: {
       operationId: 'enqueueCatalog',
@@ -474,10 +503,11 @@ export function buildOpenApiSpec({ serverUrl, version = '0.3.0' }) {
 
   spec.components.schemas.DriveTrashRequest = {
     type: 'object',
-    required: ['confirmation', 'secondConfirmation'],
+    required: ['confirmation', 'secondConfirmation', 'idempotencyKey'],
     properties: {
       confirmation: { type: 'string', enum: [DRIVE_CONFIRMATIONS.TRASH] },
-      secondConfirmation: { type: 'string', description: '대상 fileId와 동일해야 함' }
+      secondConfirmation: { type: 'string', description: '대상 fileId와 동일해야 함' },
+      idempotencyKey: { $ref: '#/components/schemas/IdempotencyKey' }
     },
     additionalProperties: false
   };

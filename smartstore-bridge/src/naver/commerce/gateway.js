@@ -3,7 +3,7 @@ import { loadCommerceManifest } from './spec.js';
 
 const MAX_FILTER_LIMIT = 500;
 const SENSITIVE_KEY_PATTERN = /(secret|token|authorization|password|client[_-]?secret|access[_-]?license)/i;
-const PERSONAL_KEY_PATTERN = /(receiver|recipient|purchaser|buyer|customer).*(name|tel|phone|mobile|email|address)|(^|_)(tel|phone|mobile|email|baseAddress|detailedAddress|zipCode|accountNo|bankAccount)(_|$)/i;
+const PERSONAL_KEY_PATTERN = /(receiver|recipient|purchaser|buyer|customer|orderer|payMember|shipping|delivery|address).*(name|tel|phone|mobile|email|address|zip|id)|(^|[._])(tel1|tel2|tel|phone|mobile|email|baseAddress|detailedAddress|zipCode|accountNo|bankAccount)([._]|$)/i;
 
 function stableJson(value) {
   if (value === undefined) return 'null';
@@ -31,10 +31,10 @@ export function redactCommerceData(value, { exposePersonalData = false } = {}, k
   }
   if (Array.isArray(value)) return value.map(item => redactCommerceData(item, { exposePersonalData }, key));
   if (typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([childKey, child]) => [
-      childKey,
-      redactCommerceData(child, { exposePersonalData }, childKey)
-    ]));
+    return Object.fromEntries(Object.entries(value).map(([childKey, child]) => {
+      const childPath = key ? `${key}.${childKey}` : childKey;
+      return [childKey, redactCommerceData(child, { exposePersonalData }, childPath)];
+    }));
   }
   return value;
 }
@@ -49,6 +49,15 @@ function normalizeOffset(value) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   if (!Number.isFinite(parsed)) return 0;
   return Math.max(0, parsed);
+}
+
+function normalizeTimeoutMs(value) {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new CommerceGatewayError('COMMERCE_INVALID_TIMEOUT', 'timeoutMs는 숫자여야 합니다.', { status: 400 });
+  }
+  return Math.max(5_000, Math.min(60_000, Math.trunc(parsed)));
 }
 
 function normalizeObject(value, label) {
@@ -296,7 +305,7 @@ export class CommerceOperationGateway {
         ? { formData }
         : (input.body !== undefined ? { json: input.body } : {})),
       retrySafe: operation.readOnly,
-      timeoutMs: input.timeoutMs
+      timeoutMs: normalizeTimeoutMs(input.timeoutMs)
     });
     const result = {
       operation: {

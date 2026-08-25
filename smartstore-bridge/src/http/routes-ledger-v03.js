@@ -103,9 +103,10 @@ export function createLedgerRoutesV03({ app, httpConfig, createAsyncOperation, r
       const status = String(body.status || 'previewed');
       const operationType = 'register_batch';
       const sourceProductId = `batch:${status}:${limit}`;
+      const operationRequest = { status, limit, catalogProvider: app.catalogProvider };
       const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
       if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId });
+        ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request: operationRequest });
         sendJson(req, res, operationStatusCode(existing), operationResponse(existing, { reused: true, redactionRoots }), {
           Location: `/api/v1/operations/${existing.operation_id}`
         });
@@ -117,7 +118,7 @@ export function createLedgerRoutesV03({ app, httpConfig, createAsyncOperation, r
         idempotencyKey,
         operationType,
         sourceProductId,
-        request: { status, limit, catalogProvider: app.catalogProvider },
+        request: operationRequest,
         task: async () => {
           const materialization = await materializeBatchJobs(app, { status, limit, includeImages: true });
           const result = await app.productService.runBatch({

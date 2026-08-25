@@ -24,9 +24,9 @@ async function call(name, method, pathname, body) {
 }
 
 const status = await call('commerce status', 'GET', '/api/v1/commerce/status');
-if (Number(status?.commerce?.operationCount) !== 115) throw new Error('operationCount가 115가 아닙니다.');
+if (Number(status?.commerce?.operationCount) !== 116) throw new Error('operationCount가 116이 아닙니다.');
 const list = await call('commerce operations', 'GET', '/api/v1/commerce/operations?limit=1');
-if (Number(list?.total) !== 115) throw new Error('operation total이 115가 아닙니다.');
+if (Number(list?.total) !== 116) throw new Error('operation total이 116이 아닙니다.');
 const preview = await call(
   'category read preview',
   'POST',

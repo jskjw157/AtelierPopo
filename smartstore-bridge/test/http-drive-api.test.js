@@ -11,7 +11,7 @@ const API_KEY = 'd'.repeat(48);
 const ROOT_ID = '1tPsrn29CjAkIg9oloSn5ftwQKyjEPzQD';
 const silentLogger = { info() {}, warn() {}, error() {} };
 
-function createFixture({ drive = true } = {}) {
+function createFixture({ drive = true, httpWrites = true } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'atelier-http-drive-'));
   const catalogRoot = path.join(dir, 'catalog');
   fs.mkdirSync(catalogRoot, { recursive: true });
@@ -82,7 +82,7 @@ function createFixture({ drive = true } = {}) {
   };
   const env = {
     ATELIER_API_KEY: API_KEY,
-    ATELIER_HTTP_ALLOW_WRITES: 'false',
+    ATELIER_HTTP_ALLOW_WRITES: String(httpWrites),
     ATELIER_HTTP_ALLOW_BATCH_WRITES: 'false',
     ATELIER_TRUST_PROXY: 'false'
   };
@@ -117,7 +117,10 @@ test('v0.3 OpenAPI exposes Drive read/write operations', async () => {
     assert.ok(spec.paths['/api/v1/drive/status']);
     assert.ok(spec.paths['/api/v1/drive/files/upload']);
     assert.ok(spec.paths['/api/v1/drive/files/{fileId}/delete']);
-    assert.equal(spec.paths['/api/v1/drive/folders'].post.operationId, 'createGoogleDriveFolder');
+    const createFolder = spec.paths['/api/v1/drive/folders'].post;
+    assert.equal(createFolder.operationId, 'createGoogleDriveFolder');
+    assert.ok(createFolder.requestBody.content['application/json'].schema.required.includes('idempotencyKey'));
+    assert.ok(createFolder.responses['202']);
   } finally {
     await fixture.api.close();
     fs.rmSync(fixture.dir, { recursive: true, force: true });
@@ -141,23 +144,73 @@ test('Drive routes require API key and return configured status', async () => {
   }
 });
 
-test('Drive folder create forwards explicit confirmation and stays inside configured root', async () => {
+test('Drive folder create is asynchronous and idempotent', async () => {
+  // Given
   const fixture = await startFixture();
   try {
-    const response = await authorized(fixture.baseUrl, '/api/v1/drive/folders', {
+    const request = {
       method: 'POST',
       body: JSON.stringify({
         name: '테스트 폴더',
         parentId: ROOT_ID,
-        confirmation: 'WRITE_DRIVE_ITEM'
+        confirmation: 'WRITE_DRIVE_ITEM',
+        idempotencyKey: 'drive-folder-test-001'
       })
-    });
-    assert.equal(response.status, 201);
+    };
+
+    // When
+    const response = await authorized(fixture.baseUrl, '/api/v1/drive/folders', request);
+
+    // Then
+    assert.equal(response.status, 202);
     const body = await response.json();
-    assert.equal(body.file.name, '테스트 폴더');
+    assert.equal(body.operation.operationType, 'drive:create-folder');
+    assert.equal(await fixture.api.operationQueue.onIdle(), true);
     assert.equal(fixture.calls[0].method, 'createFolder');
     assert.equal(fixture.calls[0].input.parentId, ROOT_ID);
     assert.equal(fixture.calls[0].input.confirmation, 'WRITE_DRIVE_ITEM');
+
+    const replay = await authorized(fixture.baseUrl, '/api/v1/drive/folders', request);
+    assert.equal(replay.status, 200);
+    assert.equal((await replay.json()).reused, true);
+    assert.equal(fixture.calls.length, 1);
+
+    const conflict = await authorized(fixture.baseUrl, '/api/v1/drive/folders', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: '다른 폴더',
+        parentId: ROOT_ID,
+        confirmation: 'WRITE_DRIVE_ITEM',
+        idempotencyKey: 'drive-folder-test-001'
+      })
+    });
+    assert.equal(conflict.status, 409);
+  } finally {
+    await fixture.api.close();
+    fs.rmSync(fixture.dir, { recursive: true, force: true });
+  }
+});
+
+test('Drive writes obey the HTTP master write switch', async () => {
+  // Given
+  const fixture = await startFixture({ httpWrites: false });
+
+  // When
+  const response = await authorized(fixture.baseUrl, '/api/v1/drive/folders', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: '차단 대상',
+      parentId: ROOT_ID,
+      confirmation: 'WRITE_DRIVE_ITEM',
+      idempotencyKey: 'drive-folder-disabled-001'
+    })
+  });
+
+  // Then
+  try {
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, 'HTTP_WRITES_DISABLED');
+    assert.equal(fixture.calls.length, 0);
   } finally {
     await fixture.api.close();
     fs.rmSync(fixture.dir, { recursive: true, force: true });

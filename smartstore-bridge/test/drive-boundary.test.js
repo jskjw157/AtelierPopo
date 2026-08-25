@@ -45,3 +45,21 @@ test('boundary prevents destructive action on configured root', async () => {
     error => error.code === 'DRIVE_ROOT_OPERATION_NOT_ALLOWED'
   );
 });
+
+test('fresh boundary checks do not trust cached parent metadata for writes', async () => {
+  // Given
+  const root = 'root_1234567890';
+  const graph = {
+    [root]: { id: root, parents: [] },
+    file_123456789000: { id: 'file_123456789000', parents: [root] }
+  };
+  const boundary = new DriveRootBoundary({ client: fakeClient(graph), allowedRootIds: [root] });
+  await boundary.assertInsideRoot('file_123456789000');
+  graph.file_123456789000 = { id: 'file_123456789000', parents: [] };
+
+  // When / Then
+  await assert.rejects(
+    () => boundary.assertInsideRoot('file_123456789000', { operation: 'rename', fresh: true }),
+    error => error.code === 'DRIVE_PATH_OUTSIDE_ALLOWED_ROOT'
+  );
+});

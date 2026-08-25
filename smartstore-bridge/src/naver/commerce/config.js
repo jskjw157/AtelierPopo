@@ -25,7 +25,7 @@ export function loadCommerceGatewayConfig(env = process.env) {
     allowSolutions: asBoolean(env.ATELIER_COMMERCE_ALLOW_SOLUTIONS, false),
     allowSellerWrites: asBoolean(env.ATELIER_COMMERCE_ALLOW_SELLER_WRITES, false),
     allowMultipartUploads: asBoolean(env.ATELIER_COMMERCE_ALLOW_MULTIPART_UPLOADS, false),
-    allowUnverifiedOperations: asBoolean(env.ATELIER_COMMERCE_ALLOW_UNVERIFIED_OPERATIONS, true),
+    allowUnverifiedOperations: asBoolean(env.ATELIER_COMMERCE_ALLOW_UNVERIFIED_OPERATIONS, false),
     exposePersonalData: asBoolean(env.ATELIER_COMMERCE_EXPOSE_PERSONAL_DATA, false),
     maxJsonBodyBytes: asInteger(env.ATELIER_COMMERCE_MAX_JSON_BODY_BYTES, 16 * 1024 * 1024, {
       min: 64 * 1024,

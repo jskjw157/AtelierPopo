@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCommerceManifest, parseCommerceLlmsIndex } from '../src/naver/commerce/spec.js';
 
-test('bundled Naver Commerce manifest classifies all 115 official operations', () => {
+test('bundled Naver Commerce manifest classifies all 116 official operations', () => {
   const manifest = loadCommerceManifest('./specs/naver-commerce/current.json');
-  assert.equal(manifest.totalOperations, 115);
-  assert.equal(manifest.operations.length, 115);
-  assert.equal(new Set(manifest.operations.map(item => item.operationId)).size, 115);
+  assert.equal(manifest.totalOperations, 116);
+  assert.equal(manifest.operations.length, 116);
+  assert.equal(new Set(manifest.operations.map(item => item.operationId)).size, 116);
   assert.deepEqual(manifest.domains, {
-    N배송: 3,
+    N배송: 4,
     문의: 6,
     상품: 64,
     인증: 1,
@@ -18,7 +18,7 @@ test('bundled Naver Commerce manifest classifies all 115 official operations', (
     판매자정보: 8
   });
   assert.equal(manifest.operations.filter(item => item.sideEffect).length, 54);
-  assert.equal(manifest.operations.filter(item => item.readOnly && !item.internal).length, 60);
+  assert.equal(manifest.operations.filter(item => item.readOnly && !item.internal).length, 61);
 });
 
 test('llms index parser creates stable operation ids and risk metadata', () => {

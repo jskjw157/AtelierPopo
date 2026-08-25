@@ -30,7 +30,13 @@ function fixture(overrides = {}) {
       calls.push({ method, apiPath, options });
       return {
         status: 200,
-        data: overrides.data || { receiverName: '홍길동', productName: '실버 귀걸이' },
+        data: overrides.data || {
+          receiverName: '홍길동',
+          ordererName: '김주문',
+          ordererTel: '010-1234-5678',
+          shippingAddress: { name: '박수령', tel1: '02-123-4567', baseAddress: '서울시' },
+          productName: '실버 귀걸이'
+        },
         traceId: 'trace-1',
         headers: { 'x-ratelimit-remaining': '9' },
         url: `https://api.commerce.naver.com/external${apiPath}`,
@@ -51,7 +57,7 @@ function fixture(overrides = {}) {
 
 test('gateway lists and previews all official operations without accepting arbitrary paths', () => {
   const { gateway } = fixture();
-  assert.equal(gateway.list({ limit: 500 }).total, 115);
+  assert.equal(gateway.list({ limit: 500 }).total, 116);
   const preview = gateway.preview('get_v2_products_channel_products_by_channel_product_no', {
     pathParams: { channelProductNo: '13732645378' }
   });
@@ -71,6 +77,10 @@ test('read operation executes synchronously and redacts personal data', async ()
   assert.equal(calls[0].apiPath, '/v1/categories');
   assert.equal(calls[0].options.query.last, true);
   assert.notEqual(result.data.receiverName, '홍길동');
+  assert.notEqual(result.data.ordererName, '김주문');
+  assert.notEqual(result.data.ordererTel, '010-1234-5678');
+  assert.notEqual(result.data.shippingAddress.name, '박수령');
+  assert.notEqual(result.data.shippingAddress.tel1, '02-123-4567');
   assert.equal(result.data.productName, '실버 귀걸이');
 });
 
@@ -118,4 +128,18 @@ test('destructive operation requires resource-key second confirmation', () => {
     naverWritesEnabled: true,
     httpWritesEnabled: true
   }), /secondConfirmation/);
+});
+
+test('commerce execution clamps caller-controlled upstream timeouts', async () => {
+  // Given
+  const { gateway, calls } = fixture();
+
+  // When
+  await gateway.execute('get_v1_categories', { timeoutMs: 1 }, {
+    naverWritesEnabled: false,
+    httpWritesEnabled: false
+  });
+
+  // Then
+  assert.equal(calls[0].options.timeoutMs, 5_000);
 });

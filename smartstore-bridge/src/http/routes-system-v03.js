@@ -83,8 +83,7 @@ export function createSystemRoutesV03({
         status: state.readyForRead ? 'ok' : 'degraded',
         service: 'atelier-popo-smartstore-drive-bridge',
         version,
-        uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
-        readiness: state
+        uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000)
       });
     }, { auth: false }),
 
@@ -98,8 +97,7 @@ export function createSystemRoutesV03({
         ok: state.readyForRead,
         status: state.readyForRead ? 'ready' : 'not_ready',
         service: 'atelier-popo-smartstore-drive-bridge',
-        version,
-        readiness: state
+        version
       });
     }, { auth: false }),
 

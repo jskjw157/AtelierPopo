@@ -101,9 +101,10 @@ export function createProductRoutesV03({ app, httpConfig, createAsyncOperation, 
       const confirmation = validateConfirmation(body.confirmation, app.config.writeConfirmation);
       const idempotencyKey = validateIdempotencyKey(body.idempotencyKey);
       const operationType = 'register_product';
+      const operationRequest = { productId, catalogProvider: app.catalogProvider };
       const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
       if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId: productId });
+        ensureSameIdempotentOperation(existing, { operationType, sourceProductId: productId, request: operationRequest });
         sendJson(req, res, operationStatusCode(existing), operationResponse(existing, { reused: true, redactionRoots }), {
           Location: `/api/v1/operations/${existing.operation_id}`
         });
@@ -125,7 +126,7 @@ export function createProductRoutesV03({ app, httpConfig, createAsyncOperation, 
         idempotencyKey,
         operationType,
         sourceProductId: productId,
-        request: { productId, catalogProvider: app.catalogProvider },
+        request: operationRequest,
         task: async () => publicCreateResult(await app.productService.create(productPath, { confirm: confirmation }))
       });
       sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {

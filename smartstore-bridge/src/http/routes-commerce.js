@@ -110,9 +110,14 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
       const preview = app.commerceGateway.preview(operationId, body);
       const operationType = `commerce:${operationId}`;
       const sourceProductId = `commerce:${preview.resourceKey}`;
+      const operationRequest = {
+        operationId,
+        resourceKey: preview.resourceKey,
+        request: preview.request
+      };
       const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
       if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId });
+        ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request: operationRequest });
         sendJson(req, res, operationStatusCode(existing), operationResponse(existing, {
           reused: true,
           redactionRoots
@@ -123,11 +128,7 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
         idempotencyKey,
         operationType,
         sourceProductId,
-        request: {
-          operationId,
-          resourceKey: preview.resourceKey,
-          request: preview.request
-        },
+        request: operationRequest,
         task: async () => app.commerceGateway.execute(operationId, body, executionContext)
       });
       sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
@@ -206,9 +207,10 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
       const idempotencyKey = validateIdempotencyKey(body.idempotencyKey);
       const operationType = 'commerce:update_product_detail';
       const sourceProductId = `channel:${channelProductNo}`;
+      const operationRequest = { channelProductNo, detailContent: body.detailContent };
       const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
       if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId });
+        ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request: operationRequest });
         sendJson(req, res, operationStatusCode(existing), operationResponse(existing, { reused: true, redactionRoots }), {
           Location: `/api/v1/operations/${existing.operation_id}`
         });
@@ -219,11 +221,7 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
         idempotencyKey,
         operationType,
         sourceProductId,
-        request: {
-          channelProductNo,
-          current: preview.current,
-          next: preview.next
-        },
+        request: operationRequest,
         task: async () => app.detailContentService.updateChannelDetail(channelProductNo, body.detailContent)
       });
       sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
@@ -244,9 +242,10 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
       }
       const operationType = 'commerce:rollback_product_detail';
       const sourceProductId = `channel:${channelProductNo}:backup:${body.backupId}`;
+      const operationRequest = { channelProductNo, backupId: body.backupId };
       const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
       if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId });
+        ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request: operationRequest });
         sendJson(req, res, operationStatusCode(existing), operationResponse(existing, { reused: true, redactionRoots }), {
           Location: `/api/v1/operations/${existing.operation_id}`
         });
@@ -256,7 +255,7 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
         idempotencyKey,
         operationType,
         sourceProductId,
-        request: { channelProductNo, backupId: body.backupId },
+        request: operationRequest,
         task: async () => app.detailContentService.rollbackChannelDetail(body.backupId)
       });
       sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
