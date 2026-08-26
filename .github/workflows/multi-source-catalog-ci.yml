@@ -1,0 +1,54 @@
+name: Multi-source catalog CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'smartstore-bridge/**'
+      - '.github/workflows/multi-source-catalog-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'smartstore-bridge/**'
+      - '.github/workflows/multi-source-catalog-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: smartstore-bridge
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-package-lock --no-audit --no-fund
+
+      - name: Static checks
+        run: npm run check
+
+      - name: Full test suite
+        run: npm test
+
+      - name: Verify Commerce coverage
+        run: npm run commerce:coverage
+
+      - name: Verify SearchAd coverage
+        run: npm run searchad:coverage
+
+      - name: Verify default multi-source identity
+        env:
+          GOOGLE_DRIVE_CATALOG_FOLDER_ID: test-drive-folder
+          HAAR_OWN_MALL_DOMAIN: haar.co.kr
+        run: npm run catalog:sources:status
