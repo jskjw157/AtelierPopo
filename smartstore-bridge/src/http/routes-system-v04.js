@@ -51,9 +51,13 @@ export function createSystemRoutesV04({
         health: '/health',
         readiness: '/health/ready',
         openapi: '/openapi.json',
+        searchAdOpenApi: '/openapi-searchad.json',
+        catalogOpenApi: '/openapi-catalog.json',
         driveStatus: '/api/v1/drive/status',
         commerceStatus: '/api/v1/commerce/status',
-        commerceOperations: '/api/v1/commerce/operations'
+        commerceOperations: '/api/v1/commerce/operations',
+        searchAdStatus: '/api/v1/searchad/status',
+        multiSourceCatalogStatus: '/api/v1/catalog/multi-source/status'
       });
     }, { auth: false }),
 
@@ -95,7 +99,14 @@ export function createSystemRoutesV04({
         jobs: app.ledger.counts(),
         operations: app.ledger.operationCounts(),
         drive: app.driveService ? await app.driveService.status({ verifyRemote: false }) : null,
-        commerce: app.commerceGateway?.status?.() || null
+        commerce: app.commerceGateway?.status?.() || null,
+        searchAd: app.searchAdGateway?.status?.() || null,
+        multiSourceCatalog: app.catalogSourceRegistry ? {
+          registry: app.catalogSourceRegistry.status(),
+          channels: app.salesChannelRegistry?.status?.() || null,
+          startupErrors: app.multiSourceCatalogStartupErrors || [],
+          startupError: app.multiSourceCatalogStartupError || null
+        } : null
       });
     }),
 
