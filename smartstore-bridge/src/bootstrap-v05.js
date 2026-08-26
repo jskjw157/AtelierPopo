@@ -5,6 +5,7 @@ import { NaverSearchAdClient } from './naver/searchad/client.js';
 import { loadSearchAdSpecRegistry } from './naver/searchad/spec-registry.js';
 import { SearchAdOperationGateway } from './naver/searchad/gateway.js';
 import { SearchAdCapabilityService } from './naver/searchad/capability.js';
+import { bootstrapMultiSourceCatalog } from './catalog/multi-source/bootstrap.js';
 import { logger } from './infrastructure/logger.js';
 
 export async function bootstrapV05(configPath, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
@@ -47,6 +48,27 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
     logger.error('Naver SearchAd startup failed', searchAdStartupError);
   }
 
+  let multiSourceCatalogConfig = null;
+  let catalogSourceRegistry = null;
+  let salesChannelRegistry = null;
+  let multiSourceCatalogStartupErrors = [];
+  let multiSourceCatalogStartupError = null;
+  try {
+    const multiSource = await bootstrapMultiSourceCatalog(app, { env, logger });
+    ({
+      multiSourceCatalogConfig,
+      catalogSourceRegistry,
+      salesChannelRegistry,
+      multiSourceCatalogStartupErrors
+    } = multiSource);
+  } catch (error) {
+    multiSourceCatalogStartupError = {
+      code: error.code || 'MULTI_SOURCE_CATALOG_STARTUP_FAILED',
+      message: error.message
+    };
+    logger.error('Multi-source catalog startup failed', multiSourceCatalogStartupError);
+  }
+
   return {
     ...app,
     searchAdConfig,
@@ -55,6 +77,11 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
     searchAdClient,
     searchAdGateway,
     searchAdCapabilityService,
-    searchAdStartupError
+    searchAdStartupError,
+    multiSourceCatalogConfig,
+    catalogSourceRegistry,
+    salesChannelRegistry,
+    multiSourceCatalogStartupErrors,
+    multiSourceCatalogStartupError
   };
 }
