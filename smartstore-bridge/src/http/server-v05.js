@@ -24,9 +24,10 @@ import { createLedgerRoutesV03 } from './routes-ledger-v03.js';
 import { createDriveRoutes } from './routes-drive.js';
 import { createCommerceRoutes } from './routes-commerce.js';
 import { createSearchAdRoutes } from './routes-searchad.js';
+import { createMultiSourceCatalogRoutes } from './routes-multi-source-catalog.js';
 import { HttpError } from './errors.js';
 
-const SERVICE_VERSION = '0.5.0';
+const SERVICE_VERSION = '0.5.1';
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export function createHttpApiV05({ app, env = process.env, logger = defaultLogger, version = SERVICE_VERSION } = {}) {
@@ -45,7 +46,8 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     app.config.workDir,
     app.config.databasePath && path.dirname(app.config.databasePath),
     app.driveConfig?.cacheDir,
-    app.commerceConfig?.backupDir
+    app.commerceConfig?.backupDir,
+    app.multiSourceCatalogConfig?.cacheRoot
   ];
 
   async function createAsyncOperation({ idempotencyKey, operationType, sourceProductId, request, task }) {
@@ -75,7 +77,8 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createLedgerRoutesV03(routeContext),
     ...createDriveRoutes(routeContext),
     ...createCommerceRoutes(routeContext),
-    ...createSearchAdRoutes(routeContext)
+    ...createSearchAdRoutes(routeContext),
+    ...createMultiSourceCatalogRoutes(routeContext)
   ];
 
   const server = http.createServer(async (req, res) => {
@@ -191,6 +194,14 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
         ready: Boolean(app.searchAdGateway),
         startupError: app.searchAdStartupError || null,
         status: app.searchAdGateway?.status?.() || null
+      },
+      multiSourceCatalog: {
+        configured: Boolean(app.multiSourceCatalogConfig),
+        ready: Boolean(app.catalogSourceRegistry && app.salesChannelRegistry),
+        startupError: app.multiSourceCatalogStartupError || null,
+        startupErrors: app.multiSourceCatalogStartupErrors || [],
+        sources: app.catalogSourceRegistry?.status?.() || null,
+        channels: app.salesChannelRegistry?.status?.() || null
       }
     })
   };
