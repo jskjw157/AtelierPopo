@@ -3,9 +3,18 @@ import { toHttpErrorV04 } from './errors-v04.js';
 import { SearchAdGatewayError } from '../naver/searchad/gateway.js';
 import { SearchAdError } from '../naver/searchad/errors.js';
 import { SearchAdSpecError } from '../naver/searchad/spec-registry.js';
+import { MultiSourceCatalogError } from '../catalog/multi-source/errors.js';
 
 export function toHttpErrorV05(error) {
   if (error instanceof HttpError) return error;
+  if (error instanceof MultiSourceCatalogError) {
+    return new HttpError(
+      error.status || 400,
+      error.code || 'MULTI_SOURCE_CATALOG_ERROR',
+      error.message,
+      error.details
+    );
+  }
   if (error instanceof SearchAdGatewayError || error instanceof SearchAdSpecError) {
     return new HttpError(error.status || 400, error.code || 'SEARCHAD_ERROR', error.message, error.details);
   }
