@@ -1,8 +1,9 @@
 # HAAR 다중 공급처·다중 상품소스 아키텍처
 
 > 작성일: 2026-08-26  
-> 상태: **S4 구현 기준 — 퀸실버 전용 가정 폐기**  
-> 적용 범위: 상품 수집, PIM, 스마트스토어 등록, 정산·수익성, SearchAd 상품 매핑
+> 수정일: 2026-08-26  
+> 상태: **S4 구현 기준 — 퀸실버 전용 가정 폐기 / Cafe24·자사몰 중복 채널 가정 폐기**  
+> 적용 범위: 상품 수집, PIM, 스마트스토어·HAAR 자사몰 등록, 정산·수익성, SearchAd 상품 매핑
 
 ---
 
@@ -25,14 +26,26 @@ HAAR 자체 제작·자체 촬영 제품
 CSV·Excel 사입 목록
 Google Drive 개별 상품 폴더
 공급처 API·URL Import
-기존 스마트스토어·Cafe24에서 역수집한 상품
+기존 스마트스토어·HAAR 자사몰에서 역수집한 상품
 ```
 
 따라서 SearchAd S4의 기준 엔티티는 `퀸실버 상품번호`가 아니라 `haar_product_id`다.
 
+또한 **HAAR 자사몰은 Cafe24로 운영되는 하나의 판매 채널**이다.
+
+```text
+HAAR 자사몰 = Cafe24 스토어 = haar.co.kr
+```
+
+`CAFE24`와 `OWN_SITE`를 별도 판매 채널 두 개로 만들지 않는다.
+
+- `자사몰`은 채널의 사업상 역할이다.
+- `Cafe24`는 그 자사몰을 운영하는 플랫폼이다.
+- `haar.co.kr`은 같은 채널의 대표 도메인이다.
+
 ---
 
-## 1. 세 개의 서로 다른 식별자 계층
+## 1. 서로 다른 식별자 계층
 
 ### 1.1 공급처 원본 상품
 
@@ -65,25 +78,53 @@ HAAR가 실제로 판매·광고·수익성을 관리하는 기준 엔티티다.
 - 공급처를 교체할 수 있고
 - 자체 제작이어서 공급처 상품이 없을 수도 있다.
 
-### 1.3 판매 채널 상품
+### 1.3 판매 채널 인스턴스
 
 ```text
+channel_id
+channel_role
+platform_type
+external_store_id
+primary_domain
+```
+
+HAAR의 현재 판매 채널 예:
+
+```text
+channel_id: haar_naver_smartstore
+channel_role: marketplace
+platform_type: naver_smartstore
+
+channel_id: haar_own_mall
+channel_role: owned_store
+platform_type: cafe24
+primary_domain: haar.co.kr
+```
+
+중요:
+
+```text
+haar_own_mall과 cafe24는 같은 채널이다.
+```
+
+하나의 판매 채널을 플랫폼명과 사이트 역할명으로 중복 등록하지 않는다.
+
+### 1.4 채널 상품
+
+```text
+channel_product_key
 channel_id
 channel_product_no
 origin_product_no
 seller_management_code
 ```
 
-예:
+하나의 HAAR 상품은 현재 기준으로 다음 채널에 각각 등록될 수 있다.
 
 ```text
-NAVER_SMARTSTORE
-CAFE24
-SHOPIFY
-OWN_SITE
+네이버 스마트스토어
+HAAR 자사몰(Cafe24)
 ```
-
-하나의 HAAR 상품이 여러 채널에 각각 등록될 수 있다.
 
 ---
 
@@ -101,6 +142,10 @@ HAAR Product
   ├─ 0..N Source Products
   └─ 0..N Channel Products
 
+Sales Channel
+  ├─ Naver SmartStore
+  └─ HAAR Own Mall (Cafe24)
+
 Channel Product
   └─ 0..N SearchAd objects
        ├─ Product Group
@@ -112,10 +157,16 @@ Channel Product
 즉:
 
 ```text
-공급처 상품 ≠ HAAR 상품 ≠ 스마트스토어 상품 ≠ 광고 객체
+공급처 상품 ≠ HAAR 상품 ≠ 채널 상품 ≠ 광고 객체
 ```
 
-이 네 계층을 이름으로 억지 매칭하지 않고 명시적 ID 연결로 관리한다.
+그러나:
+
+```text
+Cafe24 자사몰 = HAAR 자사몰 채널 1개
+```
+
+이다.
 
 ---
 
@@ -125,6 +176,7 @@ Channel Product
 
 ```text
 migrations/postgres/0003_multi_source_product_catalog.sql
+migrations/postgres/0004_sales_channel_platform_identity.sql
 ```
 
 ### 3.1 상품 소스
@@ -179,10 +231,33 @@ HAAR 고객 노출 상품명·콘텐츠·브랜드·분류는 공급처 원본�
 
 ```text
 sales_channels
+- channel_id
+- channel_type            # marketplace / owned_store 등 사업상 역할
+- platform_type           # naver_smartstore / cafe24 등 기술 플랫폼
+- external_store_id       # 네이버 판매자/채널 식별자 또는 Cafe24 mall_id
+- primary_domain          # haar.co.kr 등
+- account_reference
+- channel_name
+- status
+
 channel_products
+- channel_product_key
+- channel_id
+- haar_product_id
+- channel_product_no
+- origin_product_no
+- seller_management_code
+- channel_url
 ```
 
-스마트스토어 번호는 공급처 상품번호가 아니라 HAAR 상품과 연결한다.
+`channel_type`과 `platform_type`을 분리하는 이유:
+
+```text
+자사몰(owned_store)은 채널 역할
+Cafe24는 운영 플랫폼
+```
+
+이 둘을 구분해서 저장하되 판매 채널 행은 하나만 만든다.
 
 ### 3.5 광고 매핑
 
@@ -194,7 +269,15 @@ haar_product_id
 channel_product_key
 ```
 
-광고 자동화는 가능한 경우 `haar_product_id + channel_product_key`를 사용한다.
+SearchAd 자동화는 가능한 경우:
+
+```text
+haar_product_id + channel_product_key
+```
+
+를 사용한다.
+
+네이버 SearchAd의 랜딩 상품은 일반적으로 네이버 스마트스토어의 `channel_product_key`와 연결하고, Cafe24 자사몰 데이터는 통합 매출·재고·수익성 분석에 같은 HAAR 상품 기준으로 결합한다.
 
 ---
 
@@ -224,6 +307,8 @@ CommerceChannelImportProvider
 
 퀸실버는 `GoogleDriveManifestProvider`를 사용하는 한 개 Source다.
 
+Cafe24 자사몰에서 기존 상품을 역수집하는 경우 `CommerceChannelImportProvider`가 같은 `haar_own_mall` 채널을 참조한다.
+
 ---
 
 ## 5. 상품 등록 흐름
@@ -235,8 +320,8 @@ CommerceChannelImportProvider
 → 기존 HAAR 상품과 동일상품 여부 확인
 → 새 HAAR 상품 생성 또는 기존 상품 연결
 → HAAR 기준 상품명·옵션·가격·상세페이지 확정
-→ 판매 채널 Payload 생성
-→ 스마트스토어 등록·수정
+→ 채널별 Payload 생성
+→ 네이버 스마트스토어 또는 HAAR 자사몰(Cafe24) 등록·수정
 → Channel Product ID 저장
 → SearchAd 상품·광고 객체 연결
 ```
@@ -246,8 +331,8 @@ CommerceChannelImportProvider
 ```text
 Manual Source
 → HAAR Product
-→ SmartStore
-→ SearchAd
+├─ Naver SmartStore
+└─ HAAR Own Mall (Cafe24)
 ```
 
 ---
@@ -291,7 +376,7 @@ Source Variant
 HAAR Variant
 - 고객 노출 옵션명
 - HAAR SKU
-- 채널 옵션 구조
+- 채널별 옵션 구조
 - 판매 재고 정책
 ```
 
@@ -302,7 +387,7 @@ HAAR Variant
 HAAR 옵션: 실버 / 골드
 ```
 
-자동 매핑은 명시적 규칙 또는 사용자 검증을 거친다.
+네이버 스마트스토어와 Cafe24 자사몰의 옵션 ID는 서로 다를 수 있지만 같은 `haar_variant_id`에 연결한다.
 
 ---
 
@@ -313,10 +398,19 @@ HAAR 옵션: 실버 / 골드
 ```text
 HAAR 판매상품
 + 실제 선택된 공급처·옵션·원가 시점
-+ 채널 수수료·할인·배송
++ 판매 채널별 수수료·할인·배송
 + 광고비
-= 상품별 수익성
+= 상품별·채널별·통합 수익성
 ```
+
+채널별 계산 예:
+
+```text
+네이버 스마트스토어 매출·정산·광고비
+HAAR 자사몰(Cafe24) 매출·결제수수료·쿠폰
+```
+
+두 채널의 실적은 같은 `haar_product_id` 아래에서 합산하거나 비교할 수 있다.
 
 여러 공급처가 연결된 경우:
 
@@ -338,9 +432,9 @@ HAAR 판매상품
 
 ---
 
-## 9. SearchAd S4 수정
+## 9. SearchAd S4 기준
 
-기존의 다음 표현은 폐기한다.
+폐기하는 표현:
 
 ```text
 퀸실버 상품번호를 중심으로 광고를 연결한다.
@@ -355,20 +449,27 @@ haar_product_id
 → SearchAd shopping reference / product group / adgroup / ad / keyword
 ```
 
-필요한 경우 원본 추적을 위해:
+원본 추적:
 
 ```text
 haar_product_id
 → catalog_source_id + source_product_id
 ```
 
-를 역참조한다.
+Cafe24 자사몰은 별도 `OWN_SITE` 채널로 복제하지 않는다.
+
+```text
+haar_product_id
+→ haar_own_mall(channel_role=owned_store, platform_type=cafe24)
+```
+
+한 경로만 사용한다.
 
 ---
 
-## 10. 초기 Source 등록
+## 10. 초기 Source와 Channel 등록
 
-현재 확보된 퀸실버 데이터는 다음 Source로 등록한다.
+### 10.1 퀸실버 Source
 
 ```text
 source_id: queensilver_20260811
@@ -381,7 +482,27 @@ expected_product_count: 1515
 
 `canonical: false`는 퀸실버 데이터가 플랫폼 전체 상품 정의가 아니라는 뜻이다.
 
-다음 공급처를 추가할 때 코드 변경 없이 Source 설정과 Provider만 등록할 수 있어야 한다.
+### 10.2 HAAR 판매 채널
+
+```text
+channel_id: haar_naver_smartstore
+channel_type: marketplace
+platform_type: naver_smartstore
+
+channel_id: haar_own_mall
+channel_type: owned_store
+platform_type: cafe24
+primary_domain: haar.co.kr
+```
+
+금지:
+
+```text
+channel_id: cafe24
+channel_id: own_site
+```
+
+처럼 같은 자사몰을 두 행으로 중복 등록하는 방식.
 
 ---
 
@@ -395,6 +516,8 @@ expected_product_count: 1515
 - 다른 공급처 상품번호 충돌을 무시
 - 공급처를 바꾸면 새 스마트스토어 상품을 무조건 만드는 방식
 - 상품명 유사도만으로 광고를 자동 연결
+- Cafe24와 HAAR 자사몰을 서로 다른 두 판매 채널로 등록
+- `haar.co.kr`을 Cafe24 채널과 별도 채널로 등록
 
 ---
 
@@ -403,6 +526,10 @@ expected_product_count: 1515
 ```text
 S4.0
 Multi-source schema 및 Source Registry
+
+S4.0.1
+판매 채널 역할(channel_type)과 플랫폼(platform_type) 분리
+HAAR 자사몰(Cafe24) 단일 채널 등록
 
 S4.1
 QueenSilver Source를 첫 Adapter로 이전
@@ -417,13 +544,15 @@ S4.4
 HAAR Product 생성·병합·공급처 연결 UI/API
 
 S4.5
-Channel Product 연결 및 기존 스마트스토어 상품 역매핑
+Channel Product 연결
+- 네이버 스마트스토어
+- HAAR 자사몰(Cafe24)
 
 S4.6
 SearchAd N:M 매핑
 
 S4.7
-공급처별 원가 이력·수익성
+공급처별 원가 이력·채널별·통합 수익성
 ```
 
 ---
@@ -435,7 +564,10 @@ S4.7
 - [ ] 같은 상품번호를 가진 두 공급처가 충돌하지 않는다.
 - [ ] 공급처가 없는 자체·수동 상품을 등록할 수 있다.
 - [ ] 한 HAAR 상품에 여러 공급처를 연결할 수 있다.
-- [ ] 한 HAAR 상품을 여러 판매 채널에 연결할 수 있다.
+- [ ] 한 HAAR 상품을 네이버 스마트스토어와 HAAR 자사몰(Cafe24)에 연결할 수 있다.
+- [ ] Cafe24와 자사몰이 중복 채널로 생성되지 않는다.
+- [ ] `haar.co.kr`은 `haar_own_mall` 채널의 도메인으로 저장된다.
 - [ ] SearchAd 매핑이 공급처 상품번호에 종속되지 않는다.
 - [ ] 공급가·옵션 원가 이력이 공급처별로 보존된다.
+- [ ] 채널별 및 통합 수익성을 같은 `haar_product_id` 기준으로 계산한다.
 - [ ] 퀸실버는 첫 Source일 뿐 전체 시스템의 고정 전제가 아니다.
