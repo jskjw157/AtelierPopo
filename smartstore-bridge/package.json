@@ -1,8 +1,8 @@
 {
   "name": "atelier-popo-smartstore-bridge",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
-  "description": "HAAR/아뜰리에포포 전용 네이버 커머스API + SearchAd 공식 스펙·HMAC·Passive Capability + Google Drive 전체 쓰기 운영 브리지",
+  "description": "HAAR/아뜰리에포포 전용 다중 공급처 상품카탈로그 + 네이버 커머스API + SearchAd + Google Drive 운영 브리지",
   "type": "module",
   "engines": {
     "node": ">=22.5.0"
@@ -22,7 +22,7 @@
     "mcp": "node src/mcp.js",
     "drive:oauth": "node scripts/google-drive-oauth.mjs",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/cli.js && node --check src/mcp.js && node --check src/http-v05.js && node --check src/bootstrap-v05.js && node --check src/http/server-v05.js && node --check src/http/errors-v05.js && node --check src/http/routes-searchad.js && node --check src/http/openapi-searchad.js && node --check src/naver/searchad/config.js && node --check src/naver/searchad/auth.js && node --check src/naver/searchad/errors.js && node --check src/naver/searchad/client.js && node --check src/naver/searchad/spec-sync.js && node --check src/naver/searchad/spec-registry.js && node --check src/naver/searchad/gateway.js && node --check src/naver/searchad/capability.js && node --check src/http-v04.js && node --check src/bootstrap-v04.js && node --check src/http/server-v04.js && node --check src/http/errors-v04.js && node --check src/http/routes-system-v04.js && node --check src/http/routes-commerce.js && node --check src/http/openapi-v04.js && node --check src/naver/client.js && node --check src/naver/products.js && node --check src/naver/commerce/spec.js && node --check src/naver/commerce/config.js && node --check src/naver/commerce/gateway.js && node --check src/application/commerce/detail-content-service.js && node --check src/domain/product-update.js && node --check src/drive/config.js && node --check src/drive/auth.js && node --check src/drive/client.js && node --check src/drive/boundary.js && node --check src/drive/service.js && node --check src/drive/catalog-materializer.js && node --check src/http/routes-products-v03.js && node --check src/http/routes-ledger-v03.js && node --check src/http/routes-drive.js && node --check scripts/google-drive-oauth.mjs && node --check scripts/remote-smoke-test.mjs && node --check scripts/drive-remote-smoke.mjs && node --check scripts/naver-commerce-spec-sync.mjs && node --check scripts/naver-commerce-coverage.mjs && node --check scripts/commerce-remote-smoke.mjs && node --check scripts/searchad-spec-sync.mjs && node --check scripts/searchad-coverage.mjs && node --check scripts/searchad-status.mjs && node --check scripts/searchad-remote-smoke.mjs",
+    "check": "node --check src/cli.js && node --check src/mcp.js && node --check src/http-v05.js && node --check src/bootstrap-v05.js && node --check src/http/server-v05.js && node --check src/http/errors-v05.js && node --check src/http/routes-searchad.js && node --check src/http/openapi-searchad.js && node --check src/http/routes-multi-source-catalog.js && node --check src/http/openapi-multi-source.js && node --check src/catalog/multi-source/errors.js && node --check src/catalog/multi-source/config.js && node --check src/catalog/multi-source/source-registry.js && node --check src/catalog/multi-source/bootstrap.js && node --check src/catalog/multi-source/providers/google-drive-manifest-provider.js && node --check src/naver/searchad/config.js && node --check src/naver/searchad/auth.js && node --check src/naver/searchad/errors.js && node --check src/naver/searchad/client.js && node --check src/naver/searchad/spec-sync.js && node --check src/naver/searchad/spec-registry.js && node --check src/naver/searchad/gateway.js && node --check src/naver/searchad/capability.js && node --check src/http-v04.js && node --check src/bootstrap-v04.js && node --check src/http/server-v04.js && node --check src/http/errors-v04.js && node --check src/http/routes-system-v04.js && node --check src/http/routes-commerce.js && node --check src/http/openapi-v04.js && node --check src/naver/client.js && node --check src/naver/products.js && node --check src/naver/commerce/spec.js && node --check src/naver/commerce/config.js && node --check src/naver/commerce/gateway.js && node --check src/application/commerce/detail-content-service.js && node --check src/domain/product-update.js && node --check src/drive/config.js && node --check src/drive/auth.js && node --check src/drive/client.js && node --check src/drive/boundary.js && node --check src/drive/service.js && node --check src/drive/catalog-materializer.js && node --check src/http/routes-products-v03.js && node --check src/http/routes-ledger-v03.js && node --check src/http/routes-drive.js && node --check scripts/google-drive-oauth.mjs && node --check scripts/remote-smoke-test.mjs && node --check scripts/drive-remote-smoke.mjs && node --check scripts/naver-commerce-spec-sync.mjs && node --check scripts/naver-commerce-coverage.mjs && node --check scripts/commerce-remote-smoke.mjs && node --check scripts/searchad-spec-sync.mjs && node --check scripts/searchad-coverage.mjs && node --check scripts/searchad-status.mjs && node --check scripts/searchad-remote-smoke.mjs && node --check scripts/multi-source-status.mjs",
     "inspect:mcp": "npx @modelcontextprotocol/inspector node src/mcp.js",
     "test:remote": "node scripts/remote-smoke-test.mjs",
     "test:drive:remote": "node scripts/drive-remote-smoke.mjs",
@@ -32,7 +32,8 @@
     "searchad:spec:sync": "node scripts/searchad-spec-sync.mjs",
     "searchad:coverage": "node scripts/searchad-coverage.mjs",
     "searchad:status": "node scripts/searchad-status.mjs",
-    "test:searchad:remote": "node scripts/searchad-remote-smoke.mjs"
+    "test:searchad:remote": "node scripts/searchad-remote-smoke.mjs",
+    "catalog:sources:status": "node scripts/multi-source-status.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
