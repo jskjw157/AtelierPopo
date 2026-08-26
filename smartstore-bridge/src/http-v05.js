@@ -4,7 +4,7 @@ import { createHttpApiV05 } from './http/server-v05.js';
 import { logger } from './infrastructure/logger.js';
 
 const app = await bootstrapV05();
-const api = createHttpApiV05({ app, logger, version: '0.5.0' });
+const api = createHttpApiV05({ app, logger, version: '0.5.1' });
 let closing = false;
 
 async function shutdown(signal) {
@@ -23,13 +23,17 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 try {
   const address = await api.listen();
   logger.info('HTTP server started', {
-    version: '0.5.0',
+    version: '0.5.1',
     host: typeof address === 'object' ? address.address : api.httpConfig.host,
     port: typeof address === 'object' ? address.port : api.httpConfig.port,
     commerceOperations: app.commerceManifest?.operations?.length || 0,
     searchAdOperations: app.searchAdRegistry?.manifest?.operations?.length || 0,
     searchAdConfigured: Boolean(app.searchAdConfig?.configured),
-    searchAdStartupError: app.searchAdStartupError || null
+    searchAdStartupError: app.searchAdStartupError || null,
+    catalogSources: app.catalogSourceRegistry?.status?.() || null,
+    salesChannels: app.salesChannelRegistry?.status?.() || null,
+    multiSourceCatalogStartupError: app.multiSourceCatalogStartupError || null,
+    multiSourceCatalogStartupErrors: app.multiSourceCatalogStartupErrors || []
   });
 } catch (error) {
   logger.error('HTTP server failed to start', { message: error.message, stack: error.stack });
