@@ -1,0 +1,45 @@
+{
+  "data": {
+    "originProduct": {
+      "originProductNo": 9876543210,
+      "name": "925 실버 샘플 리본 귀걸이",
+      "sellerManagementCode": "HAAR-EAR-0012",
+      "statusType": "SALE",
+      "modifiedDate": "2026-08-27T09:30:00+09:00",
+      "representativeImage": {
+        "url": "https://shop-phinf.pstatic.net/sample-main.jpg"
+      },
+      "detailAttribute": {
+        "optionInfo": {
+          "optionCombinations": [
+            {
+              "id": 71001,
+              "optionName1": "색상",
+              "optionValue1": "실버",
+              "stockQuantity": 10,
+              "price": 0,
+              "sellerManagerCode": "HAAR-EAR-0012-S"
+            },
+            {
+              "id": 71002,
+              "optionName1": "색상",
+              "optionValue1": "골드",
+              "stockQuantity": 8,
+              "price": 1000,
+              "sellerManagerCode": "HAAR-EAR-0012-G"
+            }
+          ]
+        }
+      }
+    },
+    "smartstoreChannelProduct": {
+      "channelProductNo": 13732645378,
+      "originProductNo": 9876543210,
+      "channelProductName": "925 실버 샘플 리본 귀걸이",
+      "sellerManagementCode": "HAAR-EAR-0012",
+      "channelProductDisplayStatusType": "ON",
+      "channelProductUrl": "https://smartstore.naver.com/haar_/products/13732645378",
+      "modifiedDate": "2026-08-27T09:30:00+09:00"
+    }
+  }
+}
