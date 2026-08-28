@@ -11,3 +11,5 @@ npm-debug.log*
 .DS_Store
 .google-oauth*.json
 google-drive-oauth-refresh-token.json
+.cafe24-oauth*.json
+cafe24-oauth-token*.json
