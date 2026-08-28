@@ -1,0 +1,31 @@
+{
+  "data": {
+    "variants": [
+      {
+        "shop_no": 1,
+        "variant_code": "P00000AB000A",
+        "custom_variant_code": "HAAR-EAR-0012-S",
+        "options": [
+          { "name": "색상", "value": "실버" }
+        ],
+        "display": "T",
+        "selling": "T",
+        "quantity": 10,
+        "additional_amount": "0.00"
+      },
+      {
+        "shop_no": 1,
+        "variant_code": "P00000AB000B",
+        "custom_variant_code": "HAAR-EAR-0012-G",
+        "options": [
+          { "name": "색상", "value": "골드" }
+        ],
+        "display": "T",
+        "selling": "T",
+        "quantity": 8,
+        "additional_amount": "1000.00"
+      }
+    ],
+    "total_count": 2
+  }
+}
