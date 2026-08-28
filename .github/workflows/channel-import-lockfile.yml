@@ -9,7 +9,7 @@ on:
       - '.github/workflows/channel-import-lockfile.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
@@ -19,6 +19,8 @@ jobs:
         working-directory: smartstore-bridge
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: codex/channel-product-import-mapping
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -26,6 +28,18 @@ jobs:
           cache-dependency-path: smartstore-bridge/package-lock.json
       - name: Generate lockfile
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit generated lockfile
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add smartstore-bridge/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfile already current"
+          else
+            git commit -m "build: update package lock for postgres"
+            git push origin HEAD:codex/channel-product-import-mapping
+          fi
       - name: Upload lockfile
         uses: actions/upload-artifact@v4
         with:
