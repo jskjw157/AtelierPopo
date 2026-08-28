@@ -42,6 +42,16 @@ function hasCheckpoint(cursor) {
   return Boolean(cursor && typeof cursor === 'object' && Object.keys(cursor).length);
 }
 
+function removeResolvedPageFailure(run, failures, failedCount) {
+  if (!run?.error?.pageFailure) return { failures, failedCount };
+  const pageFailure = run.error.pageFailure;
+  const reversedIndex = [...failures].reverse().findIndex(item => (
+    item?.code === pageFailure.code && item?.message === pageFailure.message
+  ));
+  if (reversedIndex >= 0) failures.splice(failures.length - 1 - reversedIndex, 1);
+  return { failures, failedCount: Math.max(0, failedCount - 1) };
+}
+
 export class ChannelImportService {
   constructor({ repository, importers, registrar, idFactory, clock } = {}) {
     if (!repository) throw new Error('ChannelImportService에는 repository가 필요합니다.');
@@ -97,7 +107,7 @@ export class ChannelImportService {
     const importer = this.getImporter(normalizedChannelId);
 
     let run = this.repository.findImportRunByIdempotencyKey(key);
-    let reused = Boolean(run);
+    const reused = Boolean(run);
     let resumed = false;
     if (run) {
       if (run.requestHash !== fingerprint || run.channelId !== normalizedChannelId || run.mode !== normalizedMode) {
@@ -127,11 +137,15 @@ export class ChannelImportService {
     let updatedCount = run.updatedCount;
     let unchangedCount = run.unchangedCount;
     let failedCount = run.failedCount;
-    const failures = priorFailures(run);
+    let failures = priorFailures(run);
+    if (resumed) {
+      ({ failures, failedCount } = removeResolvedPageFailure(run, failures, failedCount));
+    }
     let cursor = run.cursor || {};
 
     run = this.repository.updateImportCheckpoint(run.importRunId, {
       status: 'running',
+      failedCount,
       cursor,
       error: { failures }
     });
@@ -210,5 +224,6 @@ export const _internal = {
   asFailure,
   priorFailures,
   checkpointComplete,
-  hasCheckpoint
+  hasCheckpoint,
+  removeResolvedPageFailure
 };
