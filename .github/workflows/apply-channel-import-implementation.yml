@@ -1,0 +1,64 @@
+name: Apply channel import implementation
+
+on:
+  push:
+    branches:
+      - codex/v0.6.0-channel-import-exec
+    paths:
+      - '.github/workflows/apply-channel-import-implementation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/v0.6.0-channel-import-exec
+          fetch-depth: 0
+
+      - name: Apply implementation patch
+        shell: bash
+        run: |
+          cat > /tmp/channel-import.patch.b64 <<'PATCH_B64'
+__PATCH_B64_PLACEHOLDER__
+PATCH_B64
+          base64 -d /tmp/channel-import.patch.b64 > /tmp/channel-import.patch
+          git apply --index --binary /tmp/channel-import.patch
+          rm -f '.github/workflows/apply-channel-import-implementation.yml'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: smartstore-bridge
+        run: npm install --no-package-lock --no-audit --no-fund
+
+      - name: Static checks
+        working-directory: smartstore-bridge
+        run: npm run check
+
+      - name: Full test suite
+        working-directory: smartstore-bridge
+        run: npm test
+
+      - name: Commerce coverage
+        working-directory: smartstore-bridge
+        run: npm run commerce:coverage
+
+      - name: SearchAd coverage
+        working-directory: smartstore-bridge
+        run: npm run searchad:coverage
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: import and exactly map existing channel products"
+          git push origin HEAD:codex/v0.6.0-channel-import-exec
