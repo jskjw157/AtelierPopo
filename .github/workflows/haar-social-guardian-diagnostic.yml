@@ -1,0 +1,82 @@
+name: HAAR Social Guardian Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/haar-social-studio-meta-phase1
+    paths:
+      - '.github/workflows/haar-social-guardian-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+      SOCIAL_DOMAIN: ${{ secrets.HAAR_SOCIAL_DOMAIN }}
+    steps:
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/key
+          chmod 600 ~/.ssh/key
+
+      - name: Inspect guardian and public route
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT="${SSH_PORT:-22}"
+          for attempt in $(seq 1 10); do
+            if ssh -i ~/.ssh/key -p "$PORT" \
+                -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new \
+                "$SSH_USER@$SSH_HOST" 'bash -s' <<REMOTE
+          set +e
+          SUDO=""
+          if [[ "\$(id -u)" != "0" ]]; then SUDO="sudo"; fi
+          DOMAIN='$SOCIAL_DOMAIN'
+
+          echo '=== service_status ==='
+          \$SUDO systemctl status haar-social-caddy-guard.service --no-pager -l 2>&1 | tail -n 80
+          echo '=== service_journal ==='
+          \$SUDO journalctl -u haar-social-caddy-guard.service --since '-20 minutes' --no-pager -o short-iso 2>&1 | tail -n 150
+          echo '=== timer_status ==='
+          \$SUDO systemctl status haar-social-caddy-guard.timer --no-pager -l 2>&1 | tail -n 60
+          echo '=== installed_files ==='
+          for file in \
+            /usr/local/sbin/haar-social-caddy-guard \
+            /usr/local/lib/haar-social-studio/ensure_caddy_route.py \
+            /etc/haar-social-studio/caddy-guard.env; do
+            if [[ -f "\$file" ]]; then stat -c '%a %U:%G %n' "\$file"; else echo "missing \$file"; fi
+          done
+          echo '=== route_state ==='
+          CADDYFILE="\$(\$SUDO docker inspect fanpulse-caddy --format '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)"
+          echo "caddyfile_present=\$([[ -f \"\$CADDYFILE\" ]] && echo true || echo false)"
+          if [[ -f "\$CADDYFILE" ]]; then
+            echo -n 'host_route_count='
+            grep -Fxc "\$DOMAIN {" "\$CADDYFILE" 2>/dev/null || true
+          fi
+          echo -n 'container_route_count='
+          \$SUDO docker exec fanpulse-caddy grep -Fxc "\$DOMAIN {" /etc/caddy/Caddyfile 2>/dev/null || true
+          echo -n 'active_route='
+          if curl -fsS --max-time 10 http://127.0.0.1:2019/config/apps/http/servers 2>/dev/null | grep -Fq "\$DOMAIN"; then echo true; else echo false; fi
+          echo '=== health ==='
+          curl -sS --connect-timeout 8 --max-time 20 -w '\nlocal_http=%{http_code} exit=%{exitcode}\n' http://127.0.0.1:3100/api/health 2>&1 | head -c 2000
+          curl --resolve "\$DOMAIN:443:127.0.0.1" -sS --connect-timeout 8 --max-time 20 -w '\nloop_http=%{http_code} exit=%{exitcode}\n' "https://\$DOMAIN/api/health" 2>&1 | head -c 2000
+          curl -sS --connect-timeout 8 --max-time 20 -w '\npublic_http=%{http_code} exit=%{exitcode}\n' "https://\$DOMAIN/api/health" 2>&1 | head -c 2000
+          REMOTE
+            then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Unable to connect over SSH after retries.' >&2
+          exit 1
