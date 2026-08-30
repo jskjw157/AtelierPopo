@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-08-30T06:42:47.936484+00:00",
+  "domain": "social.haarapp.tech",
+  "dnsOk": true,
+  "dnsResult": "76.13.212.135",
+  "sshPortOk": true,
+  "hostKeyOk": true,
+  "sshAuthOk": true,
+  "sshDetail": "HAAR_SSH_OK",
+  "runUrl": "https://github.com/jskjw157/AtelierPopo/actions/runs/32631475238"
+}
