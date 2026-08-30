@@ -46,8 +46,11 @@ jobs:
       - name: Check server syntax
         run: npm run check:syntax
 
-      - name: Run unit tests
+      - name: Run JavaScript unit tests
         run: npm test
+
+      - name: Run Caddy route recovery tests
+        run: python3 -m unittest discover -s test -p 'test_*.py' -v
 
       - name: Build admin app
         run: npm run build
