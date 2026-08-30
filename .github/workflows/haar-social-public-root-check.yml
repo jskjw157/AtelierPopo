@@ -1,0 +1,46 @@
+name: HAAR Social Public Root Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/haar-social-studio-meta-phase1
+    paths:
+      - '.github/workflows/haar-social-public-root-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      SOCIAL_DOMAIN: ${{ secrets.HAAR_SOCIAL_DOMAIN }}
+    steps:
+      - name: Verify public root and health endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$SOCIAL_DOMAIN" ]]
+
+          root_body=''
+          root_code=''
+          for attempt in $(seq 1 10); do
+            root_code="$(curl -sS --connect-timeout 10 --max-time 30 \
+              -o /tmp/haar-root.html -w '%{http_code}' \
+              "https://$SOCIAL_DOMAIN/")" || true
+            if [[ "$root_code" == '200' ]]; then
+              root_body="$(cat /tmp/haar-root.html)"
+              break
+            fi
+            sleep 5
+          done
+          [[ "$root_code" == '200' ]]
+          grep -Fq '<title>HAAR Social Studio</title>' /tmp/haar-root.html
+          grep -Fq '<div id="root"></div>' /tmp/haar-root.html
+
+          health_body="$(curl -fsS --connect-timeout 10 --max-time 30 \
+            "https://$SOCIAL_DOMAIN/api/health")"
+          printf 'root_http=%s root_bytes=%s\n' "$root_code" "$(wc -c < /tmp/haar-root.html)"
+          printf 'health=%s\n' "$health_body"
+          printf '%s' "$health_body" | grep -q '"status":"ok"'
