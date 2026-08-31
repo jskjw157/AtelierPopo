@@ -11,6 +11,16 @@ function responseDouble() {
   };
 }
 
+function successfulQueryDouble(queries) {
+  return async (sql, params) => {
+    queries.push({ sql, params });
+    if (/^SELECT/i.test(sql.trim())) {
+      return { rowCount: 1, rows: [{ id: 'user-1', password_hash: 'stored-hash' }] };
+    }
+    return { rowCount: 1, rows: [{ id: 'user-1' }] };
+  };
+}
+
 describe('change password handler', () => {
   it('rejects an incorrect current password without updating the account', async () => {
     const queries = [];
@@ -45,13 +55,7 @@ describe('change password handler', () => {
     const audits = [];
     let cleared = false;
     const handler = createChangePasswordHandler({
-      queryFn: async (sql, params) => {
-        queries.push({ sql, params });
-        if (/^SELECT/i.test(sql.trim())) {
-          return { rowCount: 1, rows: [{ id: 'user-1', password_hash: 'stored-hash' }] };
-        }
-        return { rowCount: 1, rows: [{ id: 'user-1' }] };
-      },
+      queryFn: successfulQueryDouble(queries),
       compareFn: async (candidate) => candidate === 'Current-password-123!',
       hashFn: async (candidate, rounds) => {
         expect(candidate).toBe('New-password-456!');
@@ -88,5 +92,43 @@ describe('change password handler', () => {
     expect(audits).toEqual([
       ['user-1', 'auth.password_changed', 'user', 'user-1', {}]
     ]);
+  });
+
+  it('returns success and clears the session when the audit write fails after the hash update', async () => {
+    const queries = [];
+    let cleared = false;
+    let auditFailureReported = false;
+    const handler = createChangePasswordHandler({
+      queryFn: successfulQueryDouble(queries),
+      compareFn: async (candidate) => candidate === 'Current-password-123!',
+      hashFn: async () => 'new-hash',
+      auditFn: async () => {
+        throw new Error('audit database unavailable');
+      },
+      onAuditFailure: () => {
+        auditFailureReported = true;
+      },
+      clearSessionCookiesFn: () => {
+        cleared = true;
+      }
+    });
+    const response = responseDouble();
+
+    await handler(
+      {
+        user: { sub: 'user-1' },
+        body: {
+          currentPassword: 'Current-password-123!',
+          newPassword: 'New-password-456!',
+          confirmPassword: 'New-password-456!'
+        }
+      },
+      response
+    );
+
+    expect(queries).toHaveLength(2);
+    expect(auditFailureReported).toBe(true);
+    expect(cleared).toBe(true);
+    expect(response.payload?.ok).toBe(true);
   });
 });
