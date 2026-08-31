@@ -24,6 +24,7 @@ export function createChangePasswordHandler({
   hashFn = bcrypt.hash,
   auditFn = audit,
   clearSessionCookiesFn = clearSessionCookies,
+  onAuditFailure = () => console.error('Password change audit write failed.'),
   errorFactory = (status, code, message) => new AppError(status, code, message)
 } = {}) {
   return async function changePassword(req, res) {
@@ -73,7 +74,14 @@ export function createChangePasswordHandler({
       );
     }
 
-    await auditFn(user.id, 'auth.password_changed', 'user', user.id, {});
+    try {
+      await auditFn(user.id, 'auth.password_changed', 'user', user.id, {});
+    } catch {
+      // The credential was already changed. Do not report a false failure that
+      // could make the administrator retry an operation that already succeeded.
+      onAuditFailure();
+    }
+
     clearSessionCookiesFn(res);
     return res.json({
       ok: true,
