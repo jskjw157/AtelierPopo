@@ -1,0 +1,30 @@
+name: Export PR10 source
+
+on:
+  push:
+    branches:
+      - codex/channel-product-import-mapping
+    paths:
+      - '.github/workflows/export-pr10-source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/channel-product-import-mapping
+          fetch-depth: 0
+      - name: Archive source
+        run: |
+          tar --exclude='.git' -czf /tmp/pr10-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr10-source
+          path: /tmp/pr10-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
