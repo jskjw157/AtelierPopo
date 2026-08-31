@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { ArrowRight, LockKeyhole } from 'lucide-react';
-import { api } from '../lib/api.js';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../App.jsx';
+import { api } from '../lib/api.js';
 
 export default function LoginPage() {
   const { setUser } = useAuth();
+  const location = useLocation();
+  const passwordChanged = new URLSearchParams(location.search).get('passwordChanged') === '1';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -16,7 +19,8 @@ export default function LoginPage() {
     setError('');
     try {
       const result = await api('/api/auth/login', {
-        method: 'POST', body: JSON.stringify({ email, password })
+        method: 'POST',
+        body: JSON.stringify({ email, password })
       });
       setUser(result.user);
     } catch (requestError) {
@@ -38,12 +42,41 @@ export default function LoginPage() {
       <section className="login-panel">
         <form className="login-card" onSubmit={submit}>
           <span className="login-lock"><LockKeyhole size={20} /></span>
-          <div><span className="eyebrow">ADMIN ACCESS</span><h2>HAAR Social Studio</h2><p>승인된 관리자 계정으로 로그인하세요.</p></div>
-          <label>이메일<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required /></label>
-          <label>비밀번호<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></label>
+          <div>
+            <span className="eyebrow">ADMIN ACCESS</span>
+            <h2>HAAR Social Studio</h2>
+            <p>승인된 관리자 계정으로 로그인하세요.</p>
+          </div>
+          {passwordChanged ? (
+            <div className="alert alert-success" role="status">
+              비밀번호가 변경되었습니다. 새 비밀번호로 다시 로그인해 주세요.
+            </div>
+          ) : null}
+          <label>
+            이메일
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="username"
+              required
+            />
+          </label>
+          <label>
+            비밀번호
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </label>
           {error ? <div className="alert alert-error">{error}</div> : null}
-          <button className="button button-primary button-wide" disabled={submitting}>{submitting ? '확인 중…' : <>로그인 <ArrowRight size={17} /></>}</button>
-          <small className="muted">계정 정보는 서버의 암호화된 환경 변수로 관리됩니다.</small>
+          <button className="button button-primary button-wide" disabled={submitting}>
+            {submitting ? '확인 중…' : <>로그인 <ArrowRight size={17} /></>}
+          </button>
+          <small className="muted">비밀번호는 서버에서 해시로 저장하며 화면에 다시 표시하지 않습니다.</small>
         </form>
       </section>
     </div>
