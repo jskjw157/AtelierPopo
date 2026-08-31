@@ -4,11 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { allProducts, searchProducts } from "@/data/products";
 import { useCart } from "@/hooks/useCart";
-
-interface SearchModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
+import { SearchModalProps } from "@/types";
 
 export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const [searchQuery, setSearchQuery] = useState("");

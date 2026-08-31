@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { CartItem, AddToCartOptions, CartHookReturn } from "@/types/cart";
+import { CartItem, AddToCartOptions, CartHookReturn } from "@/types";
 
 const CART_STORAGE_KEY = "cart";
 const CART_UPDATED_EVENT = "cartUpdated";

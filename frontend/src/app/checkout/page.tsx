@@ -8,27 +8,7 @@ import { useCart } from "@/hooks/useCart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-interface CartItem {
-  id: number;
-  name: string;
-  price: string;
-  image: string;
-  quantity: number;
-  color?: string;
-  size?: string;
-}
-
-interface OrderForm {
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  detailAddress: string;
-  zipCode: string;
-  paymentMethod: string;
-  memo: string;
-}
+import { CartItem, OrderForm } from "@/types";
 
 export default function Checkout() {
   const [orderForm, setOrderForm] = useState<OrderForm>({

@@ -1,19 +1,4 @@
-export interface Product {
-  id: number;
-  name: string;
-  price: string;
-  originalPrice?: string;
-  image: string;
-  images: string[];
-  category: string;
-  description: string;
-  features: string[];
-  colors: string[];
-  sizes: string[];
-  inStock: boolean;
-  rating: number;
-  reviews: number;
-}
+import { Product, CategoryOption } from "@/types";
 
 export const allProducts: Product[] = [
   {
@@ -337,10 +322,82 @@ export const allProducts: Product[] = [
     rating: 4.9,
     reviews: 67,
   },
+  {
+    id: 13,
+    name: "러블리 펄 리본 참 퀼팅 소프트 토트백 (블랙)",
+    price: "42,000원",
+    originalPrice: "52,000원",
+    image: "/images/products/miniBag/대표이미지.png",
+    images: [
+      "/images/products/miniBag/대표이미지.png",
+      "/images/products/miniBag/Generated Image October 09, 2025 - 8_41PM-Photoroom.png",
+      "/images/products/miniBag/Generated Image October 09, 2025 - 8_57PM-Photoroom.png",
+      "/images/products/miniBag/Generated Image October 09, 2025 - 8_57PM (1)-Photoroom.png",
+      "/images/products/miniBag/Generated Image October 09, 2025 - 8_57PM (3)-Photoroom.png",
+      "/images/products/miniBag/Generated Image October 09, 2025 - 8_57PM (4)-Photoroom.png",
+      "/images/products/miniBag/Generated Image October 09, 2025 - 8_57PM (5)-Photoroom.png",
+      "/images/products/miniBag/Generated Image October 09, 2025 - 8_59PM-Photoroom.png",
+      "/images/products/miniBag/Generated Image October 09, 2025 - 9_02PM-Photoroom.png",
+      "/images/products/miniBag/Generated Image October 09, 2025 - 9_03PM-Photoroom.png",
+      "/images/products/miniBag/Generated Image October 09, 2025 - 9_06PM-Photoroom.png",
+    ],
+    category: "토트백",
+    description:
+      "가벼운 패브릭 퀼팅과 폭신한 핸들로 장시간 들어도 부담이 적고, 진주 리본 참과 하트 펜던트로 포인트를 더한 사진 잘 받는 데일리백입니다. 베이직한 블랙 컬러에 러블리한 디테일을 더해 사계절 다양한 코디에 매칭됩니다.",
+    features: [
+      "폭신한 다이아 퀼팅 소재로 가벼운 착용감과 포근한 그립감",
+      "진주 리본 참 & 하트 펜던트로 시선 집중 (탈부착 가능)",
+      "미니멀한 스퀘어 실루엣으로 깔끔한 수납력",
+      "고리(D-링) 금속 장식으로 고급스러운 마감",
+      "블랙 컬러와 은은한 광택으로 다양한 코디 매치",
+      "내부 지퍼로 내용물 보안 우수",
+      "꽃·리본 자수 포인트로 러블리 무드 강화",
+    ],
+    colors: ["블랙"],
+    sizes: ["원사이즈"],
+    inStock: true,
+    rating: 4.5,
+    reviews: 154,
+  },
+  {
+    id: 14,
+    name: "레오파드 리본 블랙 아크릴 집게핀",
+    price: "8,900원",
+    originalPrice: "12,900원",
+    image: "/images/products/hairpin/다운로드 (1).png",
+    images: [
+      "/images/products/hairpin/다운로드 (1).png",
+      "/images/products/hairpin/KakaoTalk_20251111_125458213.jpg",
+      "/images/products/hairpin/KakaoTalk_20251111_125458213_01.jpg",
+      "/images/products/hairpin/KakaoTalk_20251111_125458213_02.jpg",
+      "/images/products/hairpin/KakaoTalk_20251111_125458213_03.jpg",
+      "/images/products/hairpin/KakaoTalk_20251111_125458213_04.jpg",
+      "/images/products/hairpin/KakaoTalk_20251111_125458213_05.jpg",
+      "/images/products/hairpin/KakaoTalk_20251111_125458213_06.jpg",
+      "/images/products/hairpin/KakaoTalk_20251111_125458213_07.jpg",
+    ],
+    category: "헤어핀",
+    description:
+      "리본 포인트로 고급스러운 무드를 살리면서도 강한 고정력의 아크릴 집게 구조로 손쉽게 반묶음/올림머리를 완성시키는 실용 미니멀 액세서리입니다. 한 손으로 '딱' 고정되는 원터치 사용성으로 출근 전 3초 스타일링이 가능합니다.",
+    features: [
+      "유광 블랙 아크릴 바디로 강력한 집게 탄성 및 내구성",
+      "그레이 톤 레오파드 패턴 리본 디테일로 세련·시크 무드 연출",
+      "F/W 코디에 최적화된 텍스처(부드러운 퍼/펠트 느낌)",
+      "적당한 폭과 톱니 구조로 숱이 많아도 안정적인 고정력",
+      "한 손으로 '딱' 고정되는 원터치 사용성—출근 전 3초 스타일링",
+      "블랙&그레이 모노톤으로 어떤 컬러 코디에도 매칭 쉬움",
+      "헤어 컬 크리즈(자국) 최소화를 고려한 곡면 설계",
+    ],
+    colors: ["블랙"],
+    sizes: ["원사이즈"],
+    inStock: true,
+    rating: 4.7,
+    reviews: 5263,
+  },
 ];
 
 // 카테고리 목록
-export const categories = [
+export const categories: CategoryOption[] = [
   { name: "전체", value: "all" },
   { name: "에코백", value: "에코백" },
   { name: "파우치", value: "파우치" },
@@ -354,6 +411,7 @@ export const categories = [
   { name: "숄더백", value: "숄더백" },
   { name: "키링", value: "키링" },
   { name: "클러치", value: "클러치" },
+  { name: "토트백", value: "토트백" },
 ];
 
 // 특별 추천 제품 (FeaturedProducts용)

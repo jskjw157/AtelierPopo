@@ -2,11 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCart } from "@/hooks/useCart";
-
-interface CartProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
+import { CartProps } from "@/types";
 
 export default function Cart({ isOpen, onClose }: CartProps) {
   const router = useRouter();

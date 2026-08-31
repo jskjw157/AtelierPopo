@@ -6,6 +6,7 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { getProductById, allProducts } from "@/data/products";
 import { useCart } from "@/hooks/useCart";
+import MiniBagDetail from "@/components/feature/MiniBagDetail";
 
 function ProductDetailContent() {
   const searchParams = useSearchParams();
@@ -77,6 +78,17 @@ function ProductDetailContent() {
           <p className="text-gray-500">제품을 찾을 수 없습니다.</p>
         </div>
       </div>
+    );
+  }
+
+  // ID 13번 미니백 제품인 경우 특별 상세페이지 렌더링
+  if (product.id === 13) {
+    return (
+      <>
+        <Header />
+        <MiniBagDetail product={product} />
+        <Footer />
+      </>
     );
   }
 
