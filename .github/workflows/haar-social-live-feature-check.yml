@@ -1,0 +1,99 @@
+name: HAAR Social Live Feature Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/haar-social-studio-meta-phase1
+    paths:
+      - '.github/workflows/haar-social-live-feature-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+      SOCIAL_DOMAIN: ${{ secrets.HAAR_SOCIAL_DOMAIN }}
+
+    steps:
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$SSH_HOST" && -n "$SSH_USER" && -n "$SSH_PRIVATE_KEY" && -n "$SOCIAL_DOMAIN" ]]
+          [[ "$SOCIAL_DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]]
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/haar_hostinger
+          chmod 600 ~/.ssh/haar_hostinger
+
+      - name: Verify deployed UI and password API through VPS loopback
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT="${SSH_PORT:-22}"
+          for attempt in $(seq 1 10); do
+            echo "SSH verification attempt $attempt/10"
+            if ssh -i ~/.ssh/haar_hostinger -p "$PORT" \
+                -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new \
+                "$SSH_USER@$SSH_HOST" 'bash -s' <<REMOTE
+          set -euo pipefail
+          DOMAIN='$SOCIAL_DOMAIN'
+
+          health="\$(curl -fsS --connect-timeout 8 --max-time 20 \
+            http://127.0.0.1:3100/api/health)"
+          printf '%s' "\$health" | grep -q '"status":"ok"'
+          printf '%s' "\$health" | grep -q '"database":"ok"'
+          printf '%s' "\$health" | grep -q '"metaMissing":\[\]'
+
+          curl --resolve "\$DOMAIN:443:127.0.0.1" \
+            -fsS --connect-timeout 8 --max-time 30 \
+            "https://\$DOMAIN/" -o /tmp/haar-live-root.html
+          grep -Fq '<title>HAAR Social Studio</title>' /tmp/haar-live-root.html
+          grep -Fq '<div id="root"></div>' /tmp/haar-live-root.html
+
+          asset_path="\$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' \
+            /tmp/haar-live-root.html | head -n 1)"
+          [[ -n "\$asset_path" ]]
+          curl --resolve "\$DOMAIN:443:127.0.0.1" \
+            -fsS --connect-timeout 8 --max-time 30 \
+            "https://\$DOMAIN\$asset_path" -o /tmp/haar-live-app.js
+          grep -Fq '관리자 비밀번호 변경' /tmp/haar-live-app.js
+          grep -Fq '비밀번호 변경 후 다시 로그인' /tmp/haar-live-app.js
+
+          change_code="\$(curl --resolve "\$DOMAIN:443:127.0.0.1" \
+            -sS --connect-timeout 8 --max-time 30 \
+            -o /tmp/haar-live-password-unauthorized.json -w '%{http_code}' \
+            -X POST -H 'Content-Type: application/json' -d '{}' \
+            "https://\$DOMAIN/api/auth/change-password")"
+          [[ "\$change_code" == '401' ]]
+          grep -q '"code":"UNAUTHORIZED"' /tmp/haar-live-password-unauthorized.json
+
+          container_state="\$(docker inspect app-app-1 --format '{{.State.Running}}' 2>/dev/null || true)"
+          [[ "\$container_state" == 'true' ]]
+
+          printf 'local_health=ok root=ok password_ui=ok password_route_http=%s app_container=running\n' \
+            "\$change_code"
+          rm -f \
+            /tmp/haar-live-root.html \
+            /tmp/haar-live-app.js \
+            /tmp/haar-live-password-unauthorized.json
+          REMOTE
+            then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Unable to verify the live feature after SSH retries.' >&2
+          exit 1
