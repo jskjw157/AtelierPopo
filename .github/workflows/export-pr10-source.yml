@@ -13,18 +13,26 @@ permissions:
 jobs:
   export:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           ref: codex/channel-product-import-mapping
           fetch-depth: 0
-      - name: Archive source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: smartstore-bridge/package-lock.json
+      - name: Install dependencies
+        working-directory: smartstore-bridge
+        run: npm ci --no-audit --no-fund
+      - name: Archive source and dependencies
         run: |
-          tar --exclude='.git' -czf /tmp/pr10-source.tar.gz .
+          tar --exclude='.git' -czf /tmp/pr10-source-with-deps.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
-          name: pr10-source
-          path: /tmp/pr10-source.tar.gz
+          name: pr10-source-with-deps
+          path: /tmp/pr10-source-with-deps.tar.gz
           if-no-files-found: error
           retention-days: 1
