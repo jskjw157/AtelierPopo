@@ -8,13 +8,16 @@ import helmet from 'helmet';
 import { config, coreMissingConfig, coreConfigErrors } from './config.js';
 import { migrate, bootstrapAdmin, bootstrapBrandProfile, pool } from './db.js';
 import { optionalAuth } from './auth.js';
+import passwordRoutes from './password-routes.js';
 import routes from './routes.js';
 import { errorHandler, notFound } from './http.js';
 
 const missing = coreMissingConfig();
 const configurationErrors = coreConfigErrors();
 if (missing.length || configurationErrors.length) {
-  console.error(`Invalid server configuration. Missing: ${missing.join(', ') || 'none'}; errors: ${configurationErrors.join(', ') || 'none'}`);
+  console.error(
+    `Invalid server configuration. Missing: ${missing.join(', ') || 'none'}; errors: ${configurationErrors.join(', ') || 'none'}`
+  );
   process.exit(1);
 }
 
@@ -46,14 +49,24 @@ app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false, limit: '100kb' }));
 app.use(optionalAuth);
+app.use(passwordRoutes);
 app.use(routes);
 
 const distPath = path.resolve('dist');
 try {
   await fs.access(distPath);
-  app.use(express.static(distPath, { index: false, maxAge: config.nodeEnv === 'production' ? '1h' : 0 }));
+  app.use(express.static(distPath, {
+    index: false,
+    maxAge: config.nodeEnv === 'production' ? '1h' : 0
+  }));
   app.use((req, res, next) => {
-    if (req.method !== 'GET' || req.path.startsWith('/api/') || req.path.startsWith('/public-media/')) return next();
+    if (
+      req.method !== 'GET' ||
+      req.path.startsWith('/api/') ||
+      req.path.startsWith('/public-media/')
+    ) {
+      return next();
+    }
     return res.sendFile(path.join(distPath, 'index.html'));
   });
 } catch {
