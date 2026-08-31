@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { ensureBootstrapAdmin } from './bootstrap-admin.js';
 import { config } from './config.js';
 
 const { Pool } = pg;
@@ -41,24 +42,12 @@ export async function migrate() {
 }
 
 export async function bootstrapAdmin() {
-  const existing = await query('SELECT id FROM users WHERE email = $1', [config.adminEmail]);
-  if (existing.rowCount) {
-    await query(
-      `UPDATE users
-       SET password_hash = $2, role = 'owner', status = 'active', updated_at = NOW()
-       WHERE email = $1`,
-      [config.adminEmail, config.adminPasswordHash]
-    );
-    return existing.rows[0].id;
-  }
-
-  const id = randomUUID();
-  await query(
-    `INSERT INTO users (id, email, password_hash, role, status)
-     VALUES ($1, $2, $3, 'owner', 'active')`,
-    [id, config.adminEmail, config.adminPasswordHash]
-  );
-  return id;
+  return ensureBootstrapAdmin({
+    queryFn: query,
+    email: config.adminEmail,
+    passwordHash: config.adminPasswordHash,
+    idFactory: randomUUID
+  });
 }
 
 export async function bootstrapBrandProfile() {
