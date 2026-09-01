@@ -1,0 +1,20 @@
+{
+  "data": {
+    "products": [
+      {
+        "shop_no": 1,
+        "product_no": 421,
+        "product_code": "P00000AB",
+        "custom_product_code": "HAAR-EAR-0012",
+        "product_name": "925 실버 샘플 리본 귀걸이",
+        "display": "T",
+        "selling": "T",
+        "price": "19900.00",
+        "updated_date": "2026-08-27T09:30:00+09:00",
+        "product_detail_url": "https://haar.co.kr/product/detail.html?product_no=421",
+        "list_image": "https://haar.co.kr/web/product/medium/sample.jpg"
+      }
+    ],
+    "total_count": 1
+  }
+}
