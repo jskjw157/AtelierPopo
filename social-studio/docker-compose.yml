@@ -1,0 +1,38 @@
+services:
+  database:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-haar_social}
+      POSTGRES_USER: ${POSTGRES_USER:-haar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - haar_social_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-haar} -d ${POSTGRES_DB:-haar_social}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-haar}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB:-haar_social}
+      DATABASE_SSL: "false"
+      UPLOAD_DIR: /app/data/uploads
+      TRUST_PROXY: 1
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${HAAR_SOCIAL_PORT:-3100}:3000"
+    volumes:
+      - haar_social_uploads:/app/data/uploads
+
+volumes:
+  haar_social_postgres:
+  haar_social_uploads:

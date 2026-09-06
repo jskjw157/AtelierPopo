@@ -1,0 +1,42 @@
+name: HAAR Hostinger Deploy Preflight
+
+on:
+  pull_request:
+    paths:
+      - 'social-studio/**'
+      - '.github/workflows/social-studio-hostinger-*.yml'
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+      SOCIAL_DOMAIN: ${{ secrets.HAAR_SOCIAL_DOMAIN }}
+      ADMIN_EMAIL: ${{ secrets.HAAR_SOCIAL_ADMIN_EMAIL }}
+      ADMIN_PASSWORD_HASH: ${{ secrets.HAAR_SOCIAL_ADMIN_PASSWORD_HASH }}
+      META_APP_ID: ${{ secrets.META_APP_ID }}
+      META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+    steps:
+      - name: Check required Hostinger deploy secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "$SSH_HOST" ]] || missing+=(HOSTINGER_SSH_HOST)
+          [[ -n "$SSH_USER" ]] || missing+=(HOSTINGER_SSH_USER)
+          [[ -n "$SSH_PRIVATE_KEY" ]] || missing+=(HOSTINGER_SSH_PRIVATE_KEY)
+          [[ -n "$SOCIAL_DOMAIN" ]] || missing+=(HAAR_SOCIAL_DOMAIN)
+          [[ -n "$ADMIN_EMAIL" ]] || missing+=(HAAR_SOCIAL_ADMIN_EMAIL)
+          [[ -n "$ADMIN_PASSWORD_HASH" ]] || missing+=(HAAR_SOCIAL_ADMIN_PASSWORD_HASH)
+          if (( ${#missing[@]} )); then
+            echo "Missing required Hostinger deployment secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "Required Hostinger deployment secrets are configured."
+          if [[ -z "$META_APP_ID" || -z "$META_APP_SECRET" ]]; then
+            echo "Meta credentials are not configured yet; deployment may proceed, but account connection will remain in 설정 필요 state."
+          else
+            echo "Meta app credentials are configured."
+          fi

@@ -1,0 +1,162 @@
+name: HAAR Social Caddy Guardian v2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/haar-social-studio-meta-phase1
+    paths:
+      - 'social-studio/ops/ensure_caddy_route.py'
+      - 'social-studio/ops/haar-social-caddy-guard.sh'
+      - '.github/workflows/haar-social-caddy-guardian-v2.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: haar-social-caddy-guardian-v2
+  cancel-in-progress: true
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+      SOCIAL_DOMAIN: ${{ secrets.HAAR_SOCIAL_DOMAIN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate files and inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$SSH_HOST" && -n "$SSH_USER" && -n "$SSH_PRIVATE_KEY" && -n "$SOCIAL_DOMAIN" ]]
+          [[ "$SOCIAL_DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]]
+          python3 -m unittest discover -s social-studio/test -p 'test_*.py' -v
+          bash -n social-studio/ops/haar-social-caddy-guard.sh
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/key
+          chmod 600 ~/.ssh/key
+
+      - name: Upload guardian files with retries
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT="${SSH_PORT:-22}"
+          printf '%s' "$SOCIAL_DOMAIN" > /tmp/haar-social-domain
+          for attempt in $(seq 1 10); do
+            echo "SCP attempt $attempt/10"
+            if scp -i ~/.ssh/key -P "$PORT" \
+                -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new \
+                social-studio/ops/ensure_caddy_route.py \
+                social-studio/ops/haar-social-caddy-guard.sh \
+                /tmp/haar-social-domain \
+                "$SSH_USER@$SSH_HOST:/tmp/"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Install and start guardian
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT="${SSH_PORT:-22}"
+          ssh -i ~/.ssh/key -p "$PORT" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          SUDO=""
+          if [[ "$(id -u)" != "0" ]]; then SUDO="sudo"; fi
+          DOMAIN="$(cat /tmp/haar-social-domain)"
+          [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]]
+
+          $SUDO install -d -m 0755 /usr/local/lib/haar-social-studio
+          $SUDO install -d -m 0700 /etc/haar-social-studio
+          $SUDO install -d -m 0700 /var/lib/haar-social-studio/caddy-backups
+          $SUDO install -m 0755 /tmp/ensure_caddy_route.py \
+            /usr/local/lib/haar-social-studio/ensure_caddy_route.py
+          $SUDO install -m 0755 /tmp/haar-social-caddy-guard.sh \
+            /usr/local/sbin/haar-social-caddy-guard
+
+          cat > /tmp/caddy-guard.env <<EOF
+          HAAR_SOCIAL_DOMAIN=$DOMAIN
+          HAAR_SOCIAL_UPSTREAM=127.0.0.1:3100
+          HAAR_CADDY_CONTAINER=fanpulse-caddy
+          EOF
+          $SUDO install -m 0600 /tmp/caddy-guard.env \
+            /etc/haar-social-studio/caddy-guard.env
+
+          cat > /tmp/haar-social-caddy-guard.service <<'SERVICE'
+          [Unit]
+          Description=Ensure HAAR Social Studio route in shared Caddy
+          After=docker.service network-online.target
+          Wants=docker.service network-online.target
+
+          [Service]
+          Type=oneshot
+          User=root
+          ExecStart=/usr/local/sbin/haar-social-caddy-guard
+          SERVICE
+          $SUDO install -m 0644 /tmp/haar-social-caddy-guard.service \
+            /etc/systemd/system/haar-social-caddy-guard.service
+
+          cat > /tmp/haar-social-caddy-guard.timer <<'TIMER'
+          [Unit]
+          Description=Continuously verify HAAR Social Studio Caddy route
+
+          [Timer]
+          OnBootSec=30s
+          OnUnitActiveSec=60s
+          AccuracySec=10s
+          RandomizedDelaySec=5s
+          Persistent=true
+          Unit=haar-social-caddy-guard.service
+
+          [Install]
+          WantedBy=timers.target
+          TIMER
+          $SUDO install -m 0644 /tmp/haar-social-caddy-guard.timer \
+            /etc/systemd/system/haar-social-caddy-guard.timer
+
+          $SUDO systemctl daemon-reload
+          $SUDO systemctl reset-failed haar-social-caddy-guard.service || true
+          $SUDO systemctl enable --now haar-social-caddy-guard.timer
+          if ! $SUDO systemctl start haar-social-caddy-guard.service; then
+            $SUDO systemctl status haar-social-caddy-guard.service --no-pager -l || true
+            $SUDO journalctl -u haar-social-caddy-guard.service -n 120 --no-pager || true
+            exit 1
+          fi
+
+          $SUDO systemctl is-active --quiet haar-social-caddy-guard.timer
+          $SUDO systemctl is-failed --quiet haar-social-caddy-guard.service && exit 1 || true
+          curl -fsS --max-time 30 "https://$DOMAIN/api/health" \
+            | grep -q '"status":"ok"'
+
+          rm -f \
+            /tmp/ensure_caddy_route.py \
+            /tmp/haar-social-caddy-guard.sh \
+            /tmp/haar-social-domain \
+            /tmp/caddy-guard.env \
+            /tmp/haar-social-caddy-guard.service \
+            /tmp/haar-social-caddy-guard.timer
+          REMOTE
+
+      - name: Verify externally
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl -fsS --max-time 30 "https://$SOCIAL_DOMAIN/api/health")"
+          printf '%s\n' "$body"
+          printf '%s' "$body" | grep -q '"status":"ok"'

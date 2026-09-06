@@ -1,0 +1,84 @@
+name: HAAR Social Studio CI
+
+on:
+  pull_request:
+    paths:
+      - 'social-studio/**'
+      - '.github/workflows/social-studio-ci.yml'
+  push:
+    branches:
+      - feat/haar-social-studio-meta-phase1
+    paths:
+      - 'social-studio/**'
+      - '.github/workflows/social-studio-ci.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: haar_social_test
+          POSTGRES_USER: haar
+          POSTGRES_PASSWORD: test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U haar -d haar_social_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: social-studio
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check server syntax
+        run: npm run check:syntax
+
+      - name: Run JavaScript unit tests
+        run: npm test
+
+      - name: Run Caddy route recovery tests
+        run: python3 -m unittest discover -s test -p 'test_*.py' -v
+
+      - name: Build admin app
+        run: npm run build
+
+      - name: Start API and verify health
+        env:
+          NODE_ENV: production
+          PORT: '3000'
+          APP_BASE_URL: http://127.0.0.1:3000
+          DATABASE_URL: postgres://haar:test-password@127.0.0.1:5432/haar_social_test
+          DATABASE_SSL: 'false'
+          ADMIN_EMAIL: ci@example.com
+          ADMIN_PASSWORD_HASH: '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.'
+          SESSION_SECRET: ci-session-secret-at-least-thirty-two-characters
+          TOKEN_ENCRYPTION_KEY: 'abababababababababababababababababababababababababababababababab'
+          MEDIA_SIGNING_SECRET: ci-media-signing-secret-at-least-thirty-two
+          CRON_SECRET: ci-cron-secret-at-least-thirty-two-characters
+          UPLOAD_DIR: ./data/ci-uploads
+        run: |
+          npm start > /tmp/haar-social-studio.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID || true; cat /tmp/haar-social-studio.log' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/health > /tmp/health.json; then
+              cat /tmp/health.json
+              grep -q '"status":"ok"' /tmp/health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1

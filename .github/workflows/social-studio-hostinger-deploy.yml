@@ -1,0 +1,354 @@
+name: HAAR Social Studio Hostinger Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/haar-social-studio-meta-phase1
+    paths:
+      - 'social-studio/**'
+      - '.github/workflows/social-studio-hostinger-deploy.yml'
+
+concurrency:
+  group: haar-social-studio-hostinger
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+      SOCIAL_DOMAIN: ${{ secrets.HAAR_SOCIAL_DOMAIN }}
+      ADMIN_EMAIL: ${{ secrets.HAAR_SOCIAL_ADMIN_EMAIL }}
+      ADMIN_PASSWORD_HASH: ${{ secrets.HAAR_SOCIAL_ADMIN_PASSWORD_HASH }}
+      META_APP_ID: ${{ secrets.META_APP_ID }}
+      META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+      META_GRAPH_VERSION: ${{ secrets.META_GRAPH_VERSION }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate required deployment secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "$SSH_HOST" ]] || missing+=(HOSTINGER_SSH_HOST)
+          [[ -n "$SSH_USER" ]] || missing+=(HOSTINGER_SSH_USER)
+          [[ -n "$SSH_PRIVATE_KEY" ]] || missing+=(HOSTINGER_SSH_PRIVATE_KEY)
+          [[ -n "$SOCIAL_DOMAIN" ]] || missing+=(HAAR_SOCIAL_DOMAIN)
+          [[ -n "$ADMIN_EMAIL" ]] || missing+=(HAAR_SOCIAL_ADMIN_EMAIL)
+          [[ -n "$ADMIN_PASSWORD_HASH" ]] || missing+=(HAAR_SOCIAL_ADMIN_PASSWORD_HASH)
+          if (( ${#missing[@]} )); then
+            echo "Missing GitHub Actions secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/haar_hostinger
+          chmod 600 ~/.ssh/haar_hostinger
+          PORT="${SSH_PORT:-22}"
+          ssh -i ~/.ssh/haar_hostinger -p "$PORT" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" 'printf HAAR_DEPLOY_SSH_OK' | grep -q HAAR_DEPLOY_SSH_OK
+
+      - name: Package application
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar \
+            --exclude='social-studio/node_modules' \
+            --exclude='social-studio/dist' \
+            --exclude='social-studio/data' \
+            --exclude='social-studio/.env' \
+            -czf /tmp/haar-social-studio.tgz social-studio
+
+      - name: Upload application and deployment metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT="${SSH_PORT:-22}"
+          printf '%s' "$ADMIN_EMAIL" > /tmp/admin-email
+          printf '%s' "$ADMIN_PASSWORD_HASH" > /tmp/admin-password-hash
+          printf '%s' "$SOCIAL_DOMAIN" > /tmp/social-domain
+          printf '%s' "$META_APP_ID" > /tmp/meta-app-id
+          printf '%s' "$META_APP_SECRET" > /tmp/meta-app-secret
+          printf '%s' "${META_GRAPH_VERSION:-v26.0}" > /tmp/meta-graph-version
+          scp -i ~/.ssh/haar_hostinger -P "$PORT" \
+            -o StrictHostKeyChecking=accept-new \
+            /tmp/haar-social-studio.tgz \
+            /tmp/admin-email \
+            /tmp/admin-password-hash \
+            /tmp/social-domain \
+            /tmp/meta-app-id \
+            /tmp/meta-app-secret \
+            /tmp/meta-graph-version \
+            "$SSH_USER@$SSH_HOST:/tmp/"
+
+      - name: Deploy on Hostinger VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT="${SSH_PORT:-22}"
+          ssh -i ~/.ssh/haar_hostinger -p "$PORT" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          SUDO=""
+          if [[ "$(id -u)" != "0" ]]; then SUDO="sudo"; fi
+          run_python() {
+            if [[ -n "$SUDO" ]]; then
+              sudo -E python3 "$@"
+            else
+              python3 "$@"
+            fi
+          }
+
+          APP_ROOT=/opt/haar-social-studio
+          APP_DIR="$APP_ROOT/app"
+          RELEASE_DIR="$APP_ROOT/release"
+          ENV_FILE="$APP_DIR/.env"
+          DOMAIN="$(cat /tmp/social-domain)"
+          ADMIN_EMAIL_VALUE="$(cat /tmp/admin-email)"
+          ADMIN_PASSWORD_HASH_VALUE="$(cat /tmp/admin-password-hash)"
+          META_APP_ID_VALUE="$(cat /tmp/meta-app-id 2>/dev/null || true)"
+          META_APP_SECRET_VALUE="$(cat /tmp/meta-app-secret 2>/dev/null || true)"
+          META_GRAPH_VERSION_VALUE="$(cat /tmp/meta-graph-version 2>/dev/null || printf v26.0)"
+
+          $SUDO mkdir -p "$APP_ROOT"
+          $SUDO rm -rf "$RELEASE_DIR"
+          $SUDO mkdir -p "$RELEASE_DIR"
+          $SUDO tar -xzf /tmp/haar-social-studio.tgz -C "$RELEASE_DIR" --strip-components=1
+
+          if [[ -f "$ENV_FILE" ]]; then
+            $SUDO cp "$ENV_FILE" "$RELEASE_DIR/.env"
+          else
+            POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+            SESSION_SECRET="$(openssl rand -hex 32)"
+            TOKEN_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+            MEDIA_SIGNING_SECRET="$(openssl rand -hex 32)"
+            CRON_SECRET="$(openssl rand -hex 32)"
+            cat > /tmp/haar-social.env <<EOF
+          POSTGRES_DB=haar_social
+          POSTGRES_USER=haar
+          POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+          HAAR_SOCIAL_PORT=3100
+          NODE_ENV=production
+          APP_BASE_URL=https://$DOMAIN
+          ADMIN_EMAIL=$ADMIN_EMAIL_VALUE
+          ADMIN_PASSWORD_HASH=$ADMIN_PASSWORD_HASH_VALUE
+          SESSION_SECRET=$SESSION_SECRET
+          TOKEN_ENCRYPTION_KEY=$TOKEN_ENCRYPTION_KEY
+          MEDIA_SIGNING_SECRET=$MEDIA_SIGNING_SECRET
+          CRON_SECRET=$CRON_SECRET
+          MAX_UPLOAD_BYTES=104857600
+          META_GRAPH_VERSION=$META_GRAPH_VERSION_VALUE
+          META_APP_ID=$META_APP_ID_VALUE
+          META_APP_SECRET=$META_APP_SECRET_VALUE
+          META_REDIRECT_URI=https://$DOMAIN/api/meta/callback
+          META_SCOPES=pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish
+          EOF
+            $SUDO mv /tmp/haar-social.env "$RELEASE_DIR/.env"
+          fi
+
+          export HAAR_ENV_FILE="$RELEASE_DIR/.env"
+          export HAAR_APP_BASE_URL="https://$DOMAIN"
+          export HAAR_ADMIN_EMAIL="$ADMIN_EMAIL_VALUE"
+          export HAAR_ADMIN_PASSWORD_HASH="$ADMIN_PASSWORD_HASH_VALUE"
+          export HAAR_META_GRAPH_VERSION="${META_GRAPH_VERSION_VALUE:-v26.0}"
+          export HAAR_META_APP_ID="$META_APP_ID_VALUE"
+          export HAAR_META_APP_SECRET="$META_APP_SECRET_VALUE"
+          export HAAR_META_REDIRECT_URI="https://$DOMAIN/api/meta/callback"
+          run_python - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ['HAAR_ENV_FILE'])
+          lines = path.read_text(encoding='utf-8').splitlines() if path.exists() else []
+          updates = {
+              'APP_BASE_URL': os.environ['HAAR_APP_BASE_URL'],
+              'ADMIN_EMAIL': os.environ['HAAR_ADMIN_EMAIL'],
+              'ADMIN_PASSWORD_HASH': os.environ['HAAR_ADMIN_PASSWORD_HASH'],
+              'META_GRAPH_VERSION': os.environ['HAAR_META_GRAPH_VERSION'],
+              'META_REDIRECT_URI': os.environ['HAAR_META_REDIRECT_URI'],
+          }
+          if os.environ.get('HAAR_META_APP_ID'):
+              updates['META_APP_ID'] = os.environ['HAAR_META_APP_ID']
+          if os.environ.get('HAAR_META_APP_SECRET'):
+              updates['META_APP_SECRET'] = os.environ['HAAR_META_APP_SECRET']
+
+          output = []
+          seen = set()
+          for line in lines:
+              key = line.split('=', 1)[0] if '=' in line else None
+              if key in updates:
+                  output.append(f'{key}={updates[key]}')
+                  seen.add(key)
+              else:
+                  output.append(line)
+          for key, value in updates.items():
+              if key not in seen:
+                  output.append(f'{key}={value}')
+          path.write_text('\n'.join(output).rstrip() + '\n', encoding='utf-8')
+          PY
+          $SUDO chmod 600 "$RELEASE_DIR/.env"
+
+          if ! command -v docker >/dev/null 2>&1; then
+            curl -fsSL https://get.docker.com | $SUDO sh
+          fi
+          docker compose version >/dev/null 2>&1 || { echo 'Docker Compose plugin is required.' >&2; exit 1; }
+
+          if [[ -d "$APP_DIR" ]]; then
+            $SUDO rm -rf "$APP_ROOT/previous"
+            $SUDO mv "$APP_DIR" "$APP_ROOT/previous"
+          fi
+          $SUDO mv "$RELEASE_DIR" "$APP_DIR"
+          cd "$APP_DIR"
+          $SUDO docker compose config >/dev/null
+          $SUDO docker compose build --pull
+          $SUDO docker compose up -d
+
+          local_healthy=false
+          for attempt in $(seq 1 45); do
+            if curl -fsS --max-time 15 http://127.0.0.1:3100/api/health >/tmp/haar-local-health.json; then
+              if grep -q '"status":"ok"' /tmp/haar-local-health.json; then
+                local_healthy=true
+                break
+              fi
+            fi
+            sleep 2
+          done
+          [[ "$local_healthy" == true ]] || { echo 'Local HAAR health check failed.' >&2; exit 1; }
+
+          if $SUDO docker ps --format '{{.Names}}' | grep -qx 'fanpulse-caddy'; then
+            CADDYFILE="$($SUDO docker inspect fanpulse-caddy --format '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}{{end}}{{end}}')"
+            [[ -n "$CADDYFILE" && -f "$CADDYFILE" ]] || { echo 'Existing Caddyfile mount could not be resolved.' >&2; exit 1; }
+            CADDY_BACKUP="${CADDYFILE}.haar-backup-$(date -u +%Y%m%dT%H%M%SZ)"
+            $SUDO cp "$CADDYFILE" "$CADDY_BACKUP"
+
+            $SUDO awk '
+              BEGIN { skip = 0 }
+              /^# BEGIN HAAR SOCIAL STUDIO$/ { skip = 1; next }
+              /^# END HAAR SOCIAL STUDIO$/ { skip = 0; next }
+              skip == 0 { print }
+            ' "$CADDYFILE" > /tmp/Caddyfile.haar
+            {
+              printf '\n# BEGIN HAAR SOCIAL STUDIO\n'
+              printf '%s {\n' "$DOMAIN"
+              printf '    encode zstd gzip\n'
+              printf '    reverse_proxy 127.0.0.1:3100\n'
+              printf '}\n'
+              printf '# END HAAR SOCIAL STUDIO\n'
+            } >> /tmp/Caddyfile.haar
+            $SUDO sh -c "cat /tmp/Caddyfile.haar > '$CADDYFILE'"
+
+            restore_caddy() {
+              $SUDO sh -c "cat '$CADDY_BACKUP' > '$CADDYFILE'"
+              $SUDO docker exec fanpulse-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile || true
+            }
+
+            if ! $SUDO docker exec fanpulse-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; then
+              echo 'Caddy validation failed; restoring previous configuration.' >&2
+              restore_caddy
+              exit 1
+            fi
+            if ! $SUDO docker exec fanpulse-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
+              echo 'Caddy reload failed; restoring previous configuration.' >&2
+              restore_caddy
+              exit 1
+            fi
+            curl -fsS --max-time 15 http://127.0.0.1:2019/config/apps/http/servers | grep -Fq "$DOMAIN" || {
+              echo 'Caddy active configuration does not contain the HAAR domain; restoring.' >&2
+              restore_caddy
+              exit 1
+            }
+            $SUDO systemctl disable --now nginx >/dev/null 2>&1 || true
+            $SUDO systemctl reset-failed nginx >/dev/null 2>&1 || true
+          else
+            if ! command -v nginx >/dev/null 2>&1; then
+              $SUDO apt-get update
+              DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y nginx
+            fi
+            cat > /tmp/haar-social-studio.nginx <<EOF
+          server {
+              listen 80;
+              listen [::]:80;
+              server_name $DOMAIN;
+              client_max_body_size 110m;
+              location / {
+                  proxy_pass http://127.0.0.1:3100;
+                  proxy_http_version 1.1;
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+                  proxy_read_timeout 900s;
+                  proxy_send_timeout 900s;
+              }
+          }
+          EOF
+            $SUDO mv /tmp/haar-social-studio.nginx /etc/nginx/sites-available/haar-social-studio
+            $SUDO ln -sfn /etc/nginx/sites-available/haar-social-studio /etc/nginx/sites-enabled/haar-social-studio
+            $SUDO nginx -t
+            $SUDO systemctl enable --now nginx
+            if ! command -v certbot >/dev/null 2>&1; then
+              $SUDO apt-get update
+              DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y certbot python3-certbot-nginx
+            fi
+            $SUDO certbot --nginx --non-interactive --agree-tos --redirect \
+              --register-unsafely-without-email -d "$DOMAIN"
+          fi
+
+          public_healthy=false
+          for attempt in $(seq 1 90); do
+            if curl -fsS --max-time 20 "https://$DOMAIN/api/health" >/tmp/haar-public-health.json; then
+              if grep -q '"status":"ok"' /tmp/haar-public-health.json; then
+                public_healthy=true
+                break
+              fi
+            fi
+            sleep 5
+          done
+          [[ "$public_healthy" == true ]] || { echo 'Public HTTPS health check failed.' >&2; exit 1; }
+
+          cat > /tmp/haar-social-cron.sh <<'CRON'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          ENV_FILE=/opt/haar-social-studio/app/.env
+          CRON_SECRET="$(grep '^CRON_SECRET=' "$ENV_FILE" | cut -d= -f2-)"
+          APP_BASE_URL="$(grep '^APP_BASE_URL=' "$ENV_FILE" | cut -d= -f2-)"
+          curl --fail --silent --show-error --max-time 900 \
+            -X POST -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_BASE_URL/api/jobs/run-due"
+          CRON
+          $SUDO mv /tmp/haar-social-cron.sh /usr/local/bin/haar-social-cron
+          $SUDO chmod 700 /usr/local/bin/haar-social-cron
+          ( $SUDO crontab -l 2>/dev/null | grep -v 'haar-social-cron' || true; echo '*/5 * * * * /usr/local/bin/haar-social-cron >> /var/log/haar-social-cron.log 2>&1' ) | $SUDO crontab -
+
+          cat /tmp/haar-public-health.json
+          rm -f \
+            /tmp/haar-social-studio.tgz \
+            /tmp/admin-email \
+            /tmp/admin-password-hash \
+            /tmp/social-domain \
+            /tmp/meta-app-id \
+            /tmp/meta-app-secret \
+            /tmp/meta-graph-version \
+            /tmp/Caddyfile.haar
+          REMOTE
+
+      - name: Verify public deployment from GitHub runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 30 "https://$SOCIAL_DOMAIN/api/health" \
+            | grep -q '"status":"ok"'
+          echo "HAAR Social Studio deployed: https://$SOCIAL_DOMAIN"

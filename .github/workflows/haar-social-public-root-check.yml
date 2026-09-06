@@ -1,0 +1,60 @@
+name: HAAR Social Public Root Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/haar-social-studio-meta-phase1
+    paths:
+      - '.github/workflows/haar-social-public-root-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      SOCIAL_DOMAIN: ${{ secrets.HAAR_SOCIAL_DOMAIN }}
+    steps:
+      - name: Verify public app, password-change UI, route, and health
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$SOCIAL_DOMAIN" ]]
+
+          root_code=''
+          for attempt in $(seq 1 10); do
+            root_code="$(curl -sS --connect-timeout 10 --max-time 30 \
+              -o /tmp/haar-root.html -w '%{http_code}' \
+              "https://$SOCIAL_DOMAIN/")" || true
+            if [[ "$root_code" == '200' ]]; then
+              break
+            fi
+            sleep 5
+          done
+          [[ "$root_code" == '200' ]]
+          grep -Fq '<title>HAAR Social Studio</title>' /tmp/haar-root.html
+          grep -Fq '<div id="root"></div>' /tmp/haar-root.html
+
+          asset_path="$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' /tmp/haar-root.html | head -n 1)"
+          [[ -n "$asset_path" ]]
+          curl -fsS --connect-timeout 10 --max-time 30 \
+            "https://$SOCIAL_DOMAIN$asset_path" -o /tmp/haar-app.js
+          grep -Fq '관리자 비밀번호 변경' /tmp/haar-app.js
+          grep -Fq '비밀번호 변경 후 다시 로그인' /tmp/haar-app.js
+
+          change_code="$(curl -sS --connect-timeout 10 --max-time 30 \
+            -o /tmp/password-change-unauthorized.json -w '%{http_code}' \
+            -X POST -H 'Content-Type: application/json' -d '{}' \
+            "https://$SOCIAL_DOMAIN/api/auth/change-password")"
+          [[ "$change_code" == '401' ]]
+          grep -q '"code":"UNAUTHORIZED"' /tmp/password-change-unauthorized.json
+
+          health_body="$(curl -fsS --connect-timeout 10 --max-time 30 \
+            "https://$SOCIAL_DOMAIN/api/health")"
+          printf 'root_http=%s root_bytes=%s bundle_bytes=%s\n' \
+            "$root_code" "$(wc -c < /tmp/haar-root.html)" "$(wc -c < /tmp/haar-app.js)"
+          printf 'password_change_unauthenticated_http=%s\n' "$change_code"
+          printf 'health=%s\n' "$health_body"
+          printf '%s' "$health_body" | grep -q '"status":"ok"'

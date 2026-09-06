@@ -1,0 +1,141 @@
+# Verification trigger after successful Caddy remediation on 2026-08-23.
+name: HAAR Social Studio Public Watch
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/haar-social-studio-meta-phase1
+    paths:
+      - 'social-studio/**'
+      - '.github/workflows/social-studio-public-watch.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: haar-social-studio-public-watch
+  cancel-in-progress: true
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    env:
+      SOCIAL_DOMAIN: ${{ secrets.HAAR_SOCIAL_DOMAIN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/haar-social-studio-meta-phase1
+
+      - name: Validate domain secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$SOCIAL_DOMAIN" ]] || { echo 'HAAR_SOCIAL_DOMAIN is missing'; exit 1; }
+
+      - name: Wait for DNS, HTTPS and public health
+        id: health
+        shell: bash
+        run: |
+          set -u
+          endpoint="https://$SOCIAL_DOMAIN/api/health"
+          success=false
+          detail=''
+          for attempt in $(seq 1 90); do
+            echo "[$attempt/90] Checking $endpoint"
+            if body="$(curl --fail --silent --show-error --max-time 20 "$endpoint" 2>/tmp/haar-watch-error)"; then
+              echo "$body"
+              if printf '%s' "$body" | grep -q '"status":"ok"'; then
+                success=true
+                detail="$body"
+                break
+              fi
+              detail="Endpoint responded, but status was not ok: $body"
+            else
+              detail="$(tail -c 700 /tmp/haar-watch-error 2>/dev/null || true)"
+            fi
+            sleep 10
+          done
+          echo "success=$success" >> "$GITHUB_OUTPUT"
+          {
+            echo 'detail<<EOF'
+            printf '%s\n' "$detail"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          [[ "$success" == 'true' ]]
+
+      - name: Persist public deployment result
+        if: always()
+        shell: bash
+        env:
+          HEALTH_SUCCESS: ${{ steps.health.outputs.success }}
+          HEALTH_DETAIL: ${{ steps.health.outputs.detail }}
+        run: |
+          mkdir -p .github/deploy-status
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          success = os.environ.get('HEALTH_SUCCESS') == 'true'
+          detail = os.environ.get('HEALTH_DETAIL', '').strip()[:1500]
+          data = {
+              'checkedAt': datetime.now(timezone.utc).isoformat(),
+              'domain': os.environ.get('SOCIAL_DOMAIN', ''),
+              'endpoint': f"https://{os.environ.get('SOCIAL_DOMAIN','')}/api/health",
+              'healthy': success,
+              'detail': detail,
+              'runUrl': os.environ['GITHUB_SERVER_URL'] + '/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID'],
+          }
+          with open('.github/deploy-status/haar-social-public.json', 'w', encoding='utf-8') as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+              f.write('\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/deploy-status/haar-social-public.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: 공개 배포 상태 기록 [skip ci]'
+            git push origin HEAD:feat/haar-social-studio-meta-phase1
+          fi
+
+      - name: Comment public deployment success
+        if: steps.health.outputs.success == 'true'
+        shell: bash
+        run: |
+          python - <<'PY' >/tmp/comment.json
+          import json, os
+          domain = os.environ['SOCIAL_DOMAIN']
+          run = os.environ['GITHUB_SERVER_URL'] + '/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID']
+          body = f'''## HAAR Social Studio 공개 배포 확인 완료\n\n- 주소: https://{domain}\n- Health: https://{domain}/api/health\n- 결과: DNS 해석, HTTPS 연결, 애플리케이션 health 응답 모두 정상\n- 확인 실행: {run}\n'''
+          print(json.dumps({'body': body}))
+          PY
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/1/comments" \
+            --data-binary @/tmp/comment.json
+
+      - name: Comment public deployment failure
+        if: steps.health.outputs.success != 'true'
+        shell: bash
+        env:
+          DETAIL: ${{ steps.health.outputs.detail }}
+        run: |
+          python - <<'PY' >/tmp/comment.json
+          import json, os
+          domain = os.environ.get('SOCIAL_DOMAIN', '')
+          detail = os.environ.get('DETAIL', '').replace('`', "'").strip()[:900] or '공개 health 확인 시간 내 정상 응답을 받지 못했습니다.'
+          run = os.environ['GITHUB_SERVER_URL'] + '/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID']
+          body = f'''## HAAR Social Studio 공개 배포 확인 실패\n\n- 대상: https://{domain}/api/health\n- 마지막 확인 내용: `{detail}`\n- 확인 실행: {run}\n\nSSH 배포 작업 로그와 DNS A 레코드, 방화벽 22/80/443 포트를 순서대로 확인해야 합니다.\n'''
+          print(json.dumps({'body': body}))
+          PY
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/1/comments" \
+            --data-binary @/tmp/comment.json

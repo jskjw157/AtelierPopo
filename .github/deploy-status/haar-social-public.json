@@ -1,0 +1,8 @@
+{
+  "checkedAt": "2026-08-30T06:57:26.806579+00:00",
+  "domain": "social.haarapp.tech",
+  "endpoint": "https://social.haarapp.tech/api/health",
+  "healthy": true,
+  "detail": "{\"status\":\"ok\",\"database\":\"ok\",\"coreMissing\":[],\"coreErrors\":[],\"metaMissing\":[\"META_APP_ID\",\"META_APP_SECRET\"],\"version\":\"0.1.0\"}",
+  "runUrl": "https://github.com/jskjw157/AtelierPopo/actions/runs/33298078822"
+}
