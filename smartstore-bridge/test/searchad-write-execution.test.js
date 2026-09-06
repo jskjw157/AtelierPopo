@@ -94,11 +94,12 @@ async function approvedPlan(h, { bidAmt = 500 } = {}) {
   return { plan, approval };
 }
 
-test('gateway adapter passes an official operation descriptor as one input object', async () => {
+test('gateway adapter passes the operation key and input separately', async () => {
   let received;
   const gateway = {
-    async execute(input) {
-      received = input;
+    get() { return { sideEffect: false }; },
+    async execute(operationKey, input) {
+      received = { ...input, operationKey };
       return { body: { bidAmt: 300 } };
     }
   };

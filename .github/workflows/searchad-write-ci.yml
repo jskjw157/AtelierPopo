@@ -5,29 +5,13 @@ on:
     branches:
       - codex/searchad-write-execution-v0.7.0
     paths:
-      - 'smartstore-bridge/src/naver/searchad/write/**'
-      - 'smartstore-bridge/src/http/routes-searchad-write*.js'
-      - 'smartstore-bridge/src/http/openapi-searchad-write.js'
-      - 'smartstore-bridge/src/http/server-v05.js'
-      - 'smartstore-bridge/test/searchad-write-*.test.js'
-      - 'smartstore-bridge/scripts/searchad-write-safety.mjs'
-      - 'smartstore-bridge/migrations/postgres/0006_searchad_write_execution.sql'
-      - 'smartstore-bridge/docs/NAVER_SEARCHAD_WRITE_*.md'
-      - 'smartstore-bridge/docs/HAAR_REAL_ACCOUNT_ACTIVATION_RUNBOOK.md'
+      - 'smartstore-bridge/**'
       - '.github/workflows/searchad-write-ci.yml'
   pull_request:
     branches:
       - main
     paths:
-      - 'smartstore-bridge/src/naver/searchad/write/**'
-      - 'smartstore-bridge/src/http/routes-searchad-write*.js'
-      - 'smartstore-bridge/src/http/openapi-searchad-write.js'
-      - 'smartstore-bridge/src/http/server-v05.js'
-      - 'smartstore-bridge/test/searchad-write-*.test.js'
-      - 'smartstore-bridge/scripts/searchad-write-safety.mjs'
-      - 'smartstore-bridge/migrations/postgres/0006_searchad_write_execution.sql'
-      - 'smartstore-bridge/docs/NAVER_SEARCHAD_WRITE_*.md'
-      - 'smartstore-bridge/docs/HAAR_REAL_ACCOUNT_ACTIVATION_RUNBOOK.md'
+      - 'smartstore-bridge/**'
       - '.github/workflows/searchad-write-ci.yml'
 
 permissions:
@@ -53,6 +37,8 @@ jobs:
           --health-retries 12
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      ATELIER_POSTGRES_SSL_MODE: disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -68,6 +54,8 @@ jobs:
         run: |
           find src/naver/searchad/write -name '*.js' -print0 | xargs -0 -n1 node --check
           node --check src/http/routes-searchad-write-v3.js
+          node --check src/http/searchad-write-runtime.js
+          node --check src/http/errors-v05.js
           node --check src/http/openapi-searchad-write.js
           node --check scripts/searchad-write-safety.mjs
       - name: Existing static checks
@@ -76,6 +64,11 @@ jobs:
       - name: Focused SearchAd write tests
         working-directory: smartstore-bridge
         run: node --test test/searchad-write-*.test.js
+      - name: PostgreSQL integration tests (required)
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --test test/postgres-*.integration.test.js
       - name: Full regression test suite
         working-directory: smartstore-bridge
         run: npm test

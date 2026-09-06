@@ -1,3 +1,5 @@
+import { SearchAdWriteError } from './errors.js';
+
 const SENSITIVE_KEY = /(secret|token|authorization|signature|api[-_]?key|access[-_]?license|client[-_]?secret|password|credential)/i;
 const BEARER_VALUE = /^Bearer\s+/i;
 
@@ -16,11 +18,13 @@ export function redactSearchAdWriteValue(value, seen = new WeakSet()) {
 }
 
 export function sanitizeSearchAdRemoteError(error) {
-  const safe = new Error(error?.message || 'SearchAd 원격 요청에 실패했습니다.');
+  const safe = new SearchAdWriteError(
+    error?.code || 'SEARCHAD_REMOTE_ERROR',
+    error?.message || 'SearchAd 원격 요청에 실패했습니다.',
+    redactSearchAdWriteValue(error?.details || error?.response || {}),
+    Number(error?.status || error?.statusCode || 0) || 502
+  );
   safe.name = error?.name || 'SearchAdRemoteError';
-  safe.code = error?.code || 'SEARCHAD_REMOTE_ERROR';
-  safe.status = Number(error?.status || error?.statusCode || 0) || undefined;
-  safe.details = redactSearchAdWriteValue(error?.details || error?.response || {});
   if (error?.name === 'AbortError') safe.name = 'AbortError';
   return safe;
 }

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { buildSearchAdOpenApi } from '../src/http/openapi-searchad.js';
 import { searchAdWriteOpenApi } from '../src/http/openapi-searchad-write.js';
 import { createSearchAdWriteRoutesV3 } from '../src/http/routes-searchad-write-v3.js';
 
@@ -33,4 +34,15 @@ test('SearchAd write routes include authenticated status and write endpoints plu
   const execute = routes.find(route => route.pattern.test('/api/v1/searchad/changes/abc/execute'));
   assert.equal(execute.auth, true);
   assert.equal(execute.write, true);
+});
+
+test('generic SearchAd OpenAPI documents approved-plan execution without advertising unsafe async writes', () => {
+  const document = buildSearchAdOpenApi({ serverUrl: 'http://localhost' });
+  const operation = document.paths['/api/v1/searchad/operations/{operationKey}/execute'].post;
+  assert.ok(operation.responses['200']);
+  assert.equal(operation.responses['202'], undefined);
+  const approved = document.components.schemas.SearchAdApprovedPlanInput;
+  assert.deepEqual(approved.required, ['planId', 'customerId', 'executionToken']);
+  assert.equal(approved.additionalProperties, false);
+  assert.equal(approved.properties.executionToken.writeOnly, true);
 });

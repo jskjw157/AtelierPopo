@@ -1,29 +1,6 @@
-import { createProductionSearchAdWriteRuntime } from '../naver/searchad/write/runtime-production.js';
 import { searchAdWriteOpenApi } from './openapi-searchad-write.js';
-import { HttpError } from './errors.js';
+import { getSearchAdWriteRuntime as runtimeFor, requiredSearchAdIdempotencyKey as requiredIdempotencyKey, requireSearchAdHttpWrites } from './searchad-write-runtime.js';
 import { sendJson } from './runtime.js';
-
-function requiredIdempotencyKey(req, body = {}) {
-  const value = String(req.headers['idempotency-key'] || req.headers['x-idempotency-key'] || body.idempotencyKey || '').trim();
-  if (!value) throw new HttpError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Idempotency-Key 헤더 또는 idempotencyKey가 필요합니다.');
-  if (value.length > 200) throw new HttpError(400, 'IDEMPOTENCY_KEY_INVALID', 'idempotencyKey는 200자 이하여야 합니다.');
-  return value;
-}
-
-function runtimeFor(context) {
-  const { app, env = process.env } = context;
-  if (!app.searchAdGateway) {
-    throw new HttpError(503, 'SEARCHAD_NOT_READY', 'SearchAd gateway가 준비되지 않았습니다.');
-  }
-  if (!app.searchAdWriteRuntime) {
-    app.searchAdWriteRuntime = createProductionSearchAdWriteRuntime({
-      gateway: app.searchAdGateway,
-      env,
-      baseDir: app.config?.workDir || process.cwd()
-    });
-  }
-  return app.searchAdWriteRuntime;
-}
 
 function planId(match) {
   return decodeURIComponent(match?.groups?.planId || '');
@@ -76,6 +53,7 @@ export function createSearchAdWriteRoutesV3(context) {
     {
       method: 'POST', pattern: /^\/api\/v1\/searchad\/changes\/(?<planId>[^/]+)\/execute$/, auth: true, write: true,
       handler: async ({ req, res, match, body, requestId }) => {
+        requireSearchAdHttpWrites(context);
         const result = await runtimeFor(context).executionService.execute(planId(match), {
           ...body,
           idempotencyKey: requiredIdempotencyKey(req, body)
@@ -93,6 +71,7 @@ export function createSearchAdWriteRoutesV3(context) {
     {
       method: 'POST', pattern: /^\/api\/v1\/searchad\/changes\/(?<planId>[^/]+)\/rollback$/, auth: true, write: true,
       handler: async ({ req, res, match, body, requestId }) => {
+        requireSearchAdHttpWrites(context);
         const result = await runtimeFor(context).executionService.rollback(planId(match), {
           ...body,
           idempotencyKey: requiredIdempotencyKey(req, body)

@@ -13,7 +13,7 @@ function extract(value, path) {
 }
 
 function remoteRequestId(result) {
-  return result?.requestId || result?.request_id || result?.headers?.['x-request-id'] || result?.headers?.['x-transaction-id'] || null;
+  return result?.upstream?.requestId || result?.requestId || result?.request_id || result?.headers?.['x-request-id'] || result?.headers?.['x-transaction-id'] || null;
 }
 
 function publicError(error) {

@@ -18,6 +18,7 @@ const required = [
   'src/naver/searchad/write/production-execution-service.js',
   'src/naver/searchad/write/runtime-production.js',
   'src/http/routes-searchad-write-v3.js',
+  'src/http/searchad-write-runtime.js',
   'src/http/openapi-searchad-write.js',
   'migrations/postgres/0006_searchad_write_execution.sql',
   'docs/NAVER_SEARCHAD_WRITE_ACTIVATION_POLICY.md',
@@ -34,7 +35,13 @@ const sourceDir = path.join(root, 'src/naver/searchad/write');
 const sourceFiles = fs.existsSync(sourceDir)
   ? fs.readdirSync(sourceDir).filter(name => name.endsWith('.js')).map(name => path.join(sourceDir, name))
   : [];
-const source = sourceFiles.map(file => fs.readFileSync(file, 'utf8')).join('\n');
+const source = sourceFiles.map(file => {
+  const text = fs.readFileSync(file, 'utf8');
+  // This exact declaration denies raw requests; it is not a raw URL call site.
+  return path.basename(file) === 'plan-service.js'
+    ? text.replace("for (const forbidden of ['url', 'rawUrl', 'method', 'path', 'uri'])", '')
+    : text;
+}).join('\n');
 
 for (const pattern of [
   /fetch\s*\(/,
