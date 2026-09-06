@@ -1,13 +1,11 @@
 import { HttpError } from './errors.js';
-import { parseIntegerQuery, validateIdempotencyKey } from './security.js';
+import { parseIntegerQuery } from './security.js';
 import {
   baseUrlFromRequest,
-  ensureSameIdempotentOperation,
-  operationResponse,
-  operationStatusCode,
   route,
   sendJson
 } from './runtime.js';
+import { getSearchAdWriteRuntime, requiredSearchAdIdempotencyKey, requireSearchAdHttpWrites } from './searchad-write-runtime.js';
 import { buildSearchAdOpenApi } from './openapi-searchad.js';
 import { SearchAdGatewayError, toPublicSearchAdError } from '../naver/searchad/gateway.js';
 
@@ -26,7 +24,8 @@ function asBoolean(value) {
   return /^(1|true|yes|on)$/i.test(String(value || ''));
 }
 
-export function createSearchAdRoutes({ app, httpConfig, createAsyncOperation, redactionRoots, version }) {
+export function createSearchAdRoutes(context) {
+  const { app, httpConfig, version } = context;
   const maxBodyBytes = app.searchAdConfig?.maxJsonBodyBytes || 8 * 1024 * 1024;
   return [
     route('GET', /^\/openapi-searchad\.json$/, async ({ req, res }) => {
@@ -76,40 +75,41 @@ export function createSearchAdRoutes({ app, httpConfig, createAsyncOperation, re
       sendJson(req, res, 200, { ok: true, preview });
     }, { maxBodyBytes }),
 
-    route('POST', /^\/api\/v1\/searchad\/operations\/([^/]+)\/execute$/, async ({ req, res, match, body }) => {
+    route('POST', /^\/api\/v1\/searchad\/operations\/([^/]+)\/execute$/, async ({ req, res, match, body, requestId }) => {
       const gateway = requireGateway(app);
       const operationKey = decodeURIComponent(match[1]);
       const operation = gateway.get(operationKey);
-      gateway.executionCheck(operation, body, { throwOnFailure: true });
-      if (!operation.sideEffect) {
+      if (operation.sideEffect === false) {
         const result = await gateway.execute(operationKey, body);
         sendJson(req, res, 200, { ok: true, result });
         return;
       }
-      if (!httpConfig.allowWrites) throw new HttpError(403, 'HTTP_WRITES_DISABLED', 'ATELIER_HTTP_ALLOW_WRITES=false입니다.');
-      const idempotencyKey = validateIdempotencyKey(body.idempotencyKey);
-      const preview = gateway.preview(operationKey, body);
-      const operationType = `searchad:${operationKey}`;
-      const sourceProductId = preview.resourceKey;
-      const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
-      if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId });
-        sendJson(req, res, operationStatusCode(existing), operationResponse(existing, { reused: true, redactionRoots }), {
-          Location: `/api/v1/operations/${existing.operation_id}`
+      // Preserve the public endpoint, but never allow it to bypass the same
+      // persisted approval, single-use token, drift and remote-readback flow.
+      requireSearchAdHttpWrites(context);
+      const planId = String(body.planId || '').trim();
+      if (!planId) {
+        throw new HttpError(400, 'SEARCHAD_CHANGE_PLAN_REQUIRED', '공식 쓰기 실행에는 먼저 작성·승인한 변경 계획이 필요합니다.', {
+          planEndpoint: '/api/v1/searchad/changes/plan'
         });
-        return;
       }
-      const created = await createAsyncOperation({
-        idempotencyKey,
-        operationType,
-        sourceProductId,
-        request: { operationKey, requestFingerprint: preview.requestFingerprint, resourceKey: preview.resourceKey },
-        task: async () => gateway.execute(operationKey, body)
-      });
-      sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
-        reused: created.reused,
-        redactionRoots
-      }), { Location: `/api/v1/operations/${created.row.operation_id}` });
+      const allowedFields = new Set(['planId', 'customerId', 'executionToken', 'idempotencyKey']);
+      const overrides = Object.keys(body).filter(key => !allowedFields.has(key));
+      if (overrides.length) {
+        throw new HttpError(400, 'SEARCHAD_APPROVED_PLAN_OVERRIDE_FORBIDDEN', '승인된 계획의 요청값은 실행 시 덮어쓸 수 없습니다.', { fields: overrides });
+      }
+      const runtime = getSearchAdWriteRuntime(context);
+      const plan = runtime.planService.get(planId);
+      if (plan.mutation_operation_key !== operationKey) {
+        throw new HttpError(409, 'SEARCHAD_CHANGE_OPERATION_MISMATCH', '변경 계획과 실행 operation이 일치하지 않습니다.');
+      }
+      if (plan.customer_id !== String(body.customerId || '').trim()) {
+        throw new HttpError(403, 'SEARCHAD_CUSTOMER_SCOPE_MISMATCH', '변경 계획과 요청의 광고계정이 일치하지 않습니다.');
+      }
+      const result = await runtime.executionService.execute(planId, {
+        ...body, idempotencyKey: requiredSearchAdIdempotencyKey(req, body)
+      }, { requestId });
+      sendJson(req, res, 200, { ok: true, result });
     }, { write: true, maxBodyBytes }),
 
     route('POST', /^\/api\/v1\/searchad\/capabilities\/passive-probe$/, async ({ req, res, body }) => {

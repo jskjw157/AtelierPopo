@@ -3,10 +3,16 @@ import { toHttpErrorV04 } from './errors-v04.js';
 import { SearchAdGatewayError } from '../naver/searchad/gateway.js';
 import { SearchAdError } from '../naver/searchad/errors.js';
 import { SearchAdSpecError } from '../naver/searchad/spec-registry.js';
+import { SearchAdWriteError } from '../naver/searchad/write/errors.js';
+import { redactSearchAdWriteValue } from '../naver/searchad/write/redaction.js';
 import { MultiSourceCatalogError } from '../catalog/multi-source/errors.js';
 
 export function toHttpErrorV05(error) {
   if (error instanceof HttpError) return error;
+  if (error instanceof SearchAdWriteError) {
+    return new HttpError(error.status || 400, error.code || 'SEARCHAD_WRITE_ERROR', error.message,
+      redactSearchAdWriteValue(error.details));
+  }
   if (error instanceof MultiSourceCatalogError) {
     return new HttpError(
       error.status || 400,

@@ -24,6 +24,7 @@ import { createLedgerRoutesV03 } from './routes-ledger-v03.js';
 import { createDriveRoutes } from './routes-drive.js';
 import { createCommerceRoutes } from './routes-commerce.js';
 import { createSearchAdRoutes } from './routes-searchad.js';
+import { createSearchAdWriteRoutesV3 } from './routes-searchad-write-v3.js';
 import { createMultiSourceCatalogRoutes } from './routes-multi-source-catalog.js';
 import { HttpError } from './errors.js';
 
@@ -70,7 +71,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     return { row, reused: false };
   }
 
-  const routeContext = { app, httpConfig, operationQueue, version, startedAt, createAsyncOperation, redactionRoots };
+  const routeContext = { app, env, httpConfig, operationQueue, version, startedAt, createAsyncOperation, redactionRoots };
   const routes = [
     ...createSystemRoutesV04(routeContext),
     ...createProductRoutesV03(routeContext),
@@ -78,6 +79,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createDriveRoutes(routeContext),
     ...createCommerceRoutes(routeContext),
     ...createSearchAdRoutes(routeContext),
+    ...createSearchAdWriteRoutesV3(routeContext),
     ...createMultiSourceCatalogRoutes(routeContext)
   ];
 
@@ -178,6 +180,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     operationQueue.accepting = false;
     if (server.listening) await new Promise(resolve => server.close(() => resolve()));
     await operationQueue.close({ timeoutMs: httpConfig.shutdownTimeoutMs });
+    app.searchAdWriteRuntime?.close?.();
     app.ledger.close();
   }
 
@@ -194,6 +197,17 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
         ready: Boolean(app.searchAdGateway),
         startupError: app.searchAdStartupError || null,
         status: app.searchAdGateway?.status?.() || null
+      },
+      searchAdWrite: {
+        featureVersion: '0.7.0',
+        initialized: Boolean(app.searchAdWriteRuntime),
+        status: app.searchAdWriteRuntime?.status?.() || {
+          enabled: true,
+          allowWrites: false,
+          activationMode: 'prevalidation',
+          prevalidationGateTemporary: true,
+          permanentWriteProhibition: false
+        }
       },
       multiSourceCatalog: {
         configured: Boolean(app.multiSourceCatalogConfig),

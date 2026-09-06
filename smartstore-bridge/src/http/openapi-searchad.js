@@ -16,7 +16,7 @@ export function buildSearchAdOpenApi({ serverUrl, version = '0.5.0' }) {
     info: {
       title: 'HAAR Naver SearchAd Foundation API',
       version,
-      description: '공식 SearchAd operation manifest, HMAC 인증, 읽기 gateway, Passive Capability Probe를 제공합니다. 쓰기 gate는 기본 비활성입니다.'
+      description: '공식 SearchAd operation manifest, HMAC 인증, 조회 및 승인 계획 기반 쓰기 실행을 제공합니다. 최초 실계정 Capability·Canary 검증 전까지만 원격 실행 gate를 임시 비활성화합니다.'
     },
     servers: [{ url: serverUrl }],
     security: [{ bearerAuth: [] }],
@@ -67,9 +67,16 @@ export function buildSearchAdOpenApi({ serverUrl, version = '0.5.0' }) {
       '/api/v1/searchad/operations/{operationKey}/execute': {
         post: {
           operationId: 'executeSearchAdOperation', tags: ['SearchAd Operations'],
-          parameters: [{ name: 'operationKey', in: 'path', required: true, schema: { type: 'string' } }],
-          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SearchAdOperationInput' } } } },
-          responses: { '200': { description: '읽기 실행 결과' }, '202': { description: '쓰기 작업 접수' }, ...errorResponses }
+          description: '조회 operation은 직접 실행합니다. 쓰기 operation은 /api/v1/searchad/changes/plan에서 작성·승인한 planId와 1회용 executionToken으로 동일한 검증 실행 계층을 사용합니다. 승인된 요청값의 덮어쓰기는 허용하지 않습니다.',
+          parameters: [
+            { name: 'operationKey', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'Idempotency-Key', in: 'header', schema: { type: 'string', minLength: 1, maxLength: 200 } }
+          ],
+          requestBody: { required: true, content: { 'application/json': { schema: { anyOf: [
+            { $ref: '#/components/schemas/SearchAdOperationInput' },
+            { $ref: '#/components/schemas/SearchAdApprovedPlanInput' }
+          ] } } } },
+          responses: { '200': { description: '조회 결과 또는 원격 재검증된 변경 계획 실행 결과' }, ...errorResponses }
         }
       },
       '/api/v1/searchad/capabilities/passive-probe': {
@@ -88,6 +95,17 @@ export function buildSearchAdOpenApi({ serverUrl, version = '0.5.0' }) {
     components: {
       securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } },
       schemas: {
+        SearchAdApprovedPlanInput: {
+          type: 'object', additionalProperties: false,
+          required: ['planId', 'customerId', 'executionToken'],
+          description: '쓰기 전용. Idempotency-Key 헤더 또는 idempotencyKey가 필요합니다.',
+          properties: {
+            planId: { type: 'string', minLength: 1 },
+            customerId: { type: 'string', minLength: 1 },
+            executionToken: { type: 'string', writeOnly: true },
+            idempotencyKey: { type: 'string', minLength: 1, maxLength: 200 }
+          }
+        },
         SearchAdOperationInput: {
           type: 'object',
           required: ['customerId'],

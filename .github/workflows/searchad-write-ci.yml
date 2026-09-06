@@ -1,0 +1,92 @@
+name: SearchAd Write Execution CI
+
+on:
+  push:
+    branches:
+      - codex/searchad-write-execution-v0.7.0
+    paths:
+      - 'smartstore-bridge/**'
+      - '.github/workflows/searchad-write-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'smartstore-bridge/**'
+      - '.github/workflows/searchad-write-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: atelier_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d atelier_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      ATELIER_POSTGRES_SSL_MODE: disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: smartstore-bridge/package-lock.json
+      - name: Install dependencies
+        working-directory: smartstore-bridge
+        run: npm ci --no-audit --no-fund
+      - name: Check new SearchAd write sources
+        working-directory: smartstore-bridge
+        run: |
+          find src/naver/searchad/write -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check src/http/routes-searchad-write-v3.js
+          node --check src/http/searchad-write-runtime.js
+          node --check src/http/errors-v05.js
+          node --check src/http/openapi-searchad-write.js
+          node --check scripts/searchad-write-safety.mjs
+      - name: Existing static checks
+        working-directory: smartstore-bridge
+        run: npm run check
+      - name: Focused SearchAd write tests
+        working-directory: smartstore-bridge
+        run: node --test test/searchad-write-*.test.js
+      - name: PostgreSQL integration tests (required)
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --test test/postgres-*.integration.test.js
+      - name: Full regression test suite
+        working-directory: smartstore-bridge
+        run: npm test
+      - name: SearchAd write safety policy
+        working-directory: smartstore-bridge
+        run: node scripts/searchad-write-safety.mjs
+      - name: Commerce operation coverage
+        working-directory: smartstore-bridge
+        run: npm run commerce:coverage
+      - name: SearchAd operation coverage
+        working-directory: smartstore-bridge
+        run: npm run searchad:coverage
+      - name: PostgreSQL migrations first pass
+        working-directory: smartstore-bridge
+        run: node scripts/postgres-migrate.mjs
+      - name: PostgreSQL migrations idempotency pass
+        working-directory: smartstore-bridge
+        run: node scripts/postgres-migrate.mjs
+      - name: Production dependency audit
+        working-directory: smartstore-bridge
+        run: npm audit --omit=dev --audit-level=high
