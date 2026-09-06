@@ -1,0 +1,35 @@
+name: Export disposable PostgreSQL test runtime
+on:
+  push:
+    branches: [codex/searchad-write-execution-v0.7.0]
+    paths: ['.github/workflows/export-searchad-postgres-test-runtime.yml']
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Package installed PostgreSQL binaries for offline tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          PGROOT=/usr/lib/postgresql/16
+          test -x "$PGROOT/bin/postgres"
+          OUT="$RUNNER_TEMP/pg-test-runtime"
+          mkdir -p "$OUT/usr/lib/postgresql" "$OUT/usr/share/postgresql" "$OUT/deps"
+          cp -a "$PGROOT" "$OUT/usr/lib/postgresql/16"
+          cp -a /usr/share/postgresql/16 "$OUT/usr/share/postgresql/16"
+          for bin in "$PGROOT"/bin/* "$PGROOT"/lib/*.so; do
+            ldd "$bin" 2>/dev/null || true
+          done | awk '/=> \/.* \(/ {print $3}' | sort -u > "$OUT/libraries.txt"
+          while IFS= read -r lib; do cp -L "$lib" "$OUT/deps/"; done < "$OUT/libraries.txt"
+          "$PGROOT/bin/postgres" --version > "$OUT/version.txt"
+          tar -C "$OUT" -czf "$RUNNER_TEMP/pg-test-runtime.tar.gz" .
+          sha256sum "$RUNNER_TEMP/pg-test-runtime.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: postgres16-offline-test-runtime
+          path: ${{ runner.temp }}/pg-test-runtime.tar.gz
+          retention-days: 3
+          if-no-files-found: error
