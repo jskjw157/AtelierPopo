@@ -85,7 +85,7 @@ Active Canary는 일반 mutation gateway의 우회로가 아니다.
 8. `unknown_outcome`이면 다음 mutation으로 진행하지 않고 read-only reconcile로 전환한다.
 9. cleanup도 같은 규칙을 적용한다. cleanup 결과가 불명하면 반복 delete/update를 보내지 않는다.
 10. 실제 spend가 0원이 아니면 Canary는 PASS가 될 수 없다.
-11. cleanup이 완료되지 않으면 Canary는 PASS가 될 수 없다.
+11. cleanup 정책이 완료되지 않으면 Canary는 PASS가 될 수 없다.
 12. 성공한 Canary evidence는 customer/spec/credential fingerprint/upstream/operation scope와 결합된 immutable record로 저장한다.
 13. Canary evidence가 있다고 해서 다른 Customer, 다른 credential, 다른 spec, 다른 operation으로 승격하지 않는다.
 14. client가 `passed`, remote ID, spend, cleanup 완료를 임의 선언하는 입력은 신뢰하지 않는다.
@@ -160,7 +160,7 @@ CanaryRemoteAdapter는 일반 gateway의 새로운 bypass API를 만들지 않�
 
 PostgreSQL을 권위 저장소로 사용한다. Active Canary는 운영 안전 판단에 쓰이므로 새 Canary 상태를 SQLite-only runtime으로 두지 않는다.
 
-테이블 제안:
+테이블:
 
 #### `searchad_canary_runs`
 
@@ -172,6 +172,7 @@ PostgreSQL을 권위 저장소로 사용한다. Active Canary는 운영 안전 �
 - `credential_fingerprint`
 - `upstream_base_url`
 - `passive_evidence_id`
+- `verified_operation_scope_json`
 - `started_at`
 - `expires_at`
 - `completed_at`
@@ -228,8 +229,6 @@ created
 → passed
 ```
 
-중간 단계는 실제 지원 operation에 따라 추가될 수 있다. 광고그룹·키워드·소재 검증은 같은 step contract로 확장한다.
-
 차단/실패 상태:
 
 ```text
@@ -243,6 +242,8 @@ expired
 ```
 
 `unknown_outcome`, `cleanup_unknown_outcome`, `spend_detected`는 자동으로 `passed`로 전환하지 않는다.
+
+`passed`는 그 run의 `verified_operation_scope_json`에 적힌 operation/field scope만 통과했다는 뜻이다. campaign-only Canary PASS를 Gate E 전체 완료나 create/batch/delete 전체 승인으로 해석하지 않는다.
 
 ## 7. Canary 단계
 
@@ -272,27 +273,29 @@ expired
 - remote ID로 단건 read-back
 - OFF 상태 및 주요 field hash 검증
 
-공식 API/계정 조건상 생성 즉시 OFF를 직접 보장할 수 없다면 create 직후의 첫 허용 mutation을 OFF로 제한하고, 그 사이 노출 가능성이 있는 구조는 Canary 대상에서 차단한다.
+공식 API/계정 조건상 생성 즉시 OFF를 보장할 수 없다면 해당 create operation은 Canary 대상으로 실행하지 않는다. create 후 즉시 OFF로 바꾸면 된다는 이유로 짧은 노출 가능성을 허용하지 않는다.
 
 ### Phase C — Controlled mutation round trip
 
-초기 Canary runner의 필수 수정 검증:
+초기 runner의 campaign mutation 검증은 노출 가능한 하위 객체가 없는 상태에서만 수행한다.
 
-- ON/OFF 왕복 중 실제 노출이 발생하지 않도록 안전 정책을 우선한다.
-- 일예산 또는 입찰 관련 필드는 해당 object/광고상품 validator가 준비된 경우에만 검증한다.
+- campaign에 deliverable adgroup/ad/keyword가 없는 동안에만 campaign ON/OFF round trip을 허용한다.
+- 하위 객체를 만든 이후에는 campaign을 계속 OFF로 유지한다.
+- 일예산 또는 입찰 필드는 해당 object/광고상품 validator가 준비된 경우에만 검증한다.
 - before hash → approved patch → mutate once → read-back → applied hash → rollback once → read-back 순서를 유지한다.
 
-광고그룹·키워드·소재 create는 각 validator가 준비될 때 step registry에 추가한다. 이 확장이 끝나기 전에는 그 operation을 전체 운영 create allowlist로 승격하지 않는다.
+광고그룹·키워드·소재 create는 각 validator가 준비될 때 step registry에 추가한다. 그때도 상위 campaign은 OFF여야 한다. 이 확장이 끝나기 전에는 해당 operation을 전체 운영 create allowlist로 승격하지 않는다.
 
 ### Phase D — Cleanup
 
 - 이름 검색 금지
 - 저장된 remote ID만 사용
 - 공식 delete 처리 operation이 검증된 object는 그 operation 사용
-- delete가 미지원/조건부이면 OFF 보존 + cleanup 상태를 명시
-- cleanup 후 read-back 또는 공식 상태 조회로 결과 검증
+- delete가 공개 API에서 지원되지 않거나 해당 광고상품에서 금지된 경우, verified OFF 상태와 retention reason을 기록한 `off_preserved` terminal cleanup을 허용할 수 있다.
+- `off_preserved`는 delete operation 검증으로 간주하지 않으며 delete capability 승격에 사용하지 않는다.
+- cleanup 후 read-back 또는 공식 상태 조회로 결과를 검증한다.
 
-정리되지 않은 remote object가 하나라도 있으면 `cleanup_required`다.
+Canary PASS에 허용되는 cleanup terminal state는 `deleted_verified` 또는 정책상 명시적으로 허용된 `off_preserved_verified`다. 그 외 remote object가 남으면 `cleanup_required`다.
 
 ### Phase E — Zero-spend verification
 
@@ -313,15 +316,15 @@ verified spend delta == 0
 ```dotenv
 ATELIER_SEARCHAD_ALLOW_ACTIVE_CANARY=false
 ATELIER_SEARCHAD_CANARY_MAX_CONCURRENT_PER_CUSTOMER=1
-ATELIER_SEARCHAD_CANARY_MAX_OBJECTS=<operator-configured-positive-int>
-ATELIER_SEARCHAD_CANARY_MAX_MUTATIONS=<operator-configured-positive-int>
-ATELIER_SEARCHAD_CANARY_TTL_SECONDS=<operator-configured-positive-int>
+ATELIER_SEARCHAD_CANARY_MAX_OBJECTS=4
+ATELIER_SEARCHAD_CANARY_MAX_MUTATIONS=12
+ATELIER_SEARCHAD_CANARY_TTL_SECONDS=3600
 ATELIER_SEARCHAD_CANARY_MAX_SPEND_KRW=0
 ```
 
 예산·입찰 값의 절대 숫자는 이 설계에서 임의로 고정하지 않는다. 공식 API validator와 실제 광고상품 최소값을 만족하면서 운영자가 설정한 별도 상한 이하인 경우에만 실행한다.
 
-상한 미설정 또는 공식 최소값과 모순되는 설정은 fail-open하지 않고 preflight에서 차단한다.
+예산·입찰 상한이 미설정이거나 공식 최소값과 모순되면 fail-open하지 않고 해당 step을 preflight에서 차단한다.
 
 ## 9. HTTP API
 
@@ -380,9 +383,11 @@ customer_id
 + field_scope
 ```
 
-Passive evidence와 Active Canary evidence가 둘 다 유효한 operation만 `implemented_verified` 또는 해당 production activation 상태로 올릴 수 있다.
+Passive evidence와 Active Canary evidence가 둘 다 유효한 operation만 해당 production activation 상태로 올릴 수 있다.
 
 create/batch/delete처럼 별도 Canary를 통과하지 않은 operation은 기존 조회/수정 Canary가 PASS해도 자동 승격하지 않는다.
+
+Gate E 전체 완료는 운영자가 대상으로 정한 모든 필수 operation scope가 각각 valid active-canary evidence를 가진 뒤에만 선언한다.
 
 ## 11. Crash / Unknown outcome
 
@@ -417,6 +422,8 @@ TDD로 구현한다.
 - spend > 0이면 PASS 불가
 - spend 미확정이면 pending 유지
 - cleanup 미완료면 PASS 불가
+- `off_preserved_verified`가 delete capability로 승격되지 않음
+- campaign-only PASS가 다른 operation을 승격하지 않음
 - evidence scope mismatch 승격 차단
 
 ### PostgreSQL 통합 테스트
@@ -431,14 +438,14 @@ TDD로 구현한다.
 ### HTTP/OpenAPI 테스트
 
 - 역할별 접근
-- 404 projection for inaccessible run
-- no secrets in response/error
+- inaccessible run의 404 projection
+- response/error에 secret 미노출
 - minimal start payload contract
 - OpenAPI role surface
 
 ### 기존 회귀
 
-기준 로컬 강화본 복구 후 먼저 기존 247 tests를 다시 통과시킨다. 그다음 Canary 테스트를 추가한다.
+9/6 강화본 복구 후 먼저 기존 247 tests를 다시 통과시킨다. 그다음 Canary 테스트를 추가한다.
 
 CI는 fixture upstream만 사용하고 실제 SearchAd credential/remote mutation을 절대 요구하지 않는다.
 
@@ -446,7 +453,7 @@ CI는 fixture upstream만 사용하고 실제 SearchAd credential/remote mutatio
 
 1. PR #11 head에서 continuation branch 유지
 2. 9/6 access-activation hardening 복구
-3. 복구 tree에서 기존 247-test regression 재현
+3. 복구 기준에서 기존 247-test regression 재현
 4. Canary migration/repository 실패 테스트
 5. Canary state machine/service 실패 테스트
 6. remote adapter/step registry 실패 테스트
@@ -482,7 +489,7 @@ CI는 fixture upstream만 사용하고 실제 SearchAd credential/remote mutatio
 - 반환 remote ID 저장
 - controlled mutation + read-back + rollback 검증
 - unknown outcome 없음 또는 명시적 reconcile 완료
-- cleanup 검증
+- cleanup policy terminal state 검증
 - 공식 spend delta 0 확인
 - immutable active_canary evidence 발급
 - 해당 operation scope만 승격
