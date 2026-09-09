@@ -1,0 +1,133 @@
+name: SearchAd continuation verified publisher
+
+on:
+  push:
+    branches:
+      - codex/searchad-continuation-20260909
+    paths:
+      - '.github/workflows/searchad-continuation-publish.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-fast-forward-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASE_SHA: 56abf47c1eeb8124fa9fb8f4f60b81e36376c109
+      EXPECTED_B64_SHA256: 7c55eaf56e78b65acc12a821bf2d0db47e7a075dd8e412c5153693aa75f8eb44
+      EXPECTED_TGZ_SHA256: ce87f97bef1b39e5c566e8c1441cd1186ddc883feb354ab999c20ff485db1eaf
+      EXPECTED_CANARY_TREE: 7ae8e35407de4b954d99f6fcb9b3f23e5e3e2045
+      STAGING_BRANCH: codex/searchad-continuation-20260909
+      PR_BRANCH: codex/searchad-write-execution-v0.7.0
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build or select clean candidate
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "$BASE_SHA^{commit}"
+
+          if test -s .searchad-bootstrap/chunk-00; then
+            echo 'mode=rebuild-from-verified-bundle'
+            parts=(
+              .searchad-bootstrap/chunk-00
+              .searchad-bootstrap/chunk-01
+              .searchad-bootstrap/chunk-02
+              .searchad-bootstrap/chunk-03
+              .searchad-bootstrap/chunk-04
+              .searchad-bootstrap/chunk-05
+              .searchad-bootstrap/chunk-06
+              .searchad-bootstrap/chunk-07
+              .searchad-bootstrap/chunk-08a
+              .searchad-bootstrap/chunk-08b
+              .searchad-bootstrap/chunk-09a
+              .searchad-bootstrap/chunk-09b
+              .searchad-bootstrap/chunk-10a
+              .searchad-bootstrap/chunk-10b
+              .searchad-bootstrap/chunk-11a
+              .searchad-bootstrap/chunk-11b
+            )
+            for p in "${parts[@]}"; do
+              test -s "$p" || { echo "missing bootstrap part: $p" >&2; exit 1; }
+            done
+            cat "${parts[@]}" > /tmp/searchad-patches.tar.gz.b64
+            printf '%s  %s\n' "$EXPECTED_B64_SHA256" /tmp/searchad-patches.tar.gz.b64 | sha256sum -c -
+            base64 --decode /tmp/searchad-patches.tar.gz.b64 > /tmp/searchad-patches.tar.gz
+            printf '%s  %s\n' "$EXPECTED_TGZ_SHA256" /tmp/searchad-patches.tar.gz | sha256sum -c -
+            mkdir -p /tmp/searchad-patches
+            tar -xzf /tmp/searchad-patches.tar.gz -C /tmp/searchad-patches
+
+            git reset --hard "$BASE_SHA"
+            git clean -fdx
+
+            p1="$(find /tmp/searchad-patches -type f -name '*56abf47*.patch' -print -quit)"
+            p2="$(find /tmp/searchad-patches -type f -name '*308_BASELINE*.patch' -print -quit)"
+            p3="$(find /tmp/searchad-patches -type f -name '*904b648*.patch' -print -quit)"
+            test -n "$p1" && test -n "$p2" && test -n "$p3"
+
+            git apply --check "$p1"
+            git apply "$p1"
+            test "$(git write-tree)" = "$EXPECTED_CANARY_TREE"
+            git apply --check "$p2"
+            git apply "$p2"
+            git apply --check "$p3"
+            git apply "$p3"
+            git diff --check
+
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -A
+            git commit -m 'feat(searchad): publish validated activation through automation checkpoint'
+            test "$(git rev-parse HEAD^1)" = "$BASE_SHA"
+            candidate_sha="$(git rev-parse HEAD)"
+          else
+            echo 'mode=validate-existing-clean-candidate'
+            trigger_parent="$(git rev-parse HEAD^1)"
+            test "$(git rev-parse "$trigger_parent^1")" = "$BASE_SHA"
+            git cat-file -e "$trigger_parent:smartstore-bridge/migrations/postgres/0017_searchad_circuit_execution_projection.sql"
+            git cat-file -e "$trigger_parent:smartstore-bridge/docs/SEARCHAD_REPORTING_CIRCUIT_AUTOMATION_2026-09-08.md"
+            git checkout --detach "$trigger_parent"
+            candidate_sha="$trigger_parent"
+          fi
+
+          test "$(git rev-parse "$candidate_sha^1")" = "$BASE_SHA"
+          if git ls-tree -r --name-only "$candidate_sha" | grep -q '^\.searchad-bootstrap/'; then
+            echo 'bootstrap files leaked into candidate' >&2
+            exit 1
+          fi
+          if git ls-tree -r --name-only "$candidate_sha" | grep -q '^\.github/workflows/searchad-continuation-'; then
+            echo 'temporary continuation workflow leaked into candidate' >&2
+            exit 1
+          fi
+          echo "candidate_sha=$candidate_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Fresh install and full regression on candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach '${{ steps.candidate.outputs.candidate_sha }}'
+          cd smartstore-bridge
+          npm ci
+          npm test
+
+      - name: Publish only by fast-forwarding the existing PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate='${{ steps.candidate.outputs.candidate_sha }}'
+          git fetch origin "$PR_BRANCH"
+          remote_pr="$(git rev-parse "origin/$PR_BRANCH")"
+          test "$remote_pr" = "$BASE_SHA"
+          git merge-base --is-ancestor "$remote_pr" "$candidate"
+          git push origin "$candidate:refs/heads/$PR_BRANCH"
+
+          # Keep the staging ref on the same clean candidate without preserving bootstrap-only history.
+          git fetch origin "$STAGING_BRANCH"
+          git push --force-with-lease="refs/heads/$STAGING_BRANCH:$(git rev-parse "origin/$STAGING_BRANCH")" origin "$candidate:refs/heads/$STAGING_BRANCH"
