@@ -23,68 +23,76 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          parts=(
-            .searchad-bootstrap/chunk-00
-            .searchad-bootstrap/chunk-01
-            .searchad-bootstrap/chunk-02
-            .searchad-bootstrap/chunk-03
-            .searchad-bootstrap/chunk-04
-            .searchad-bootstrap/chunk-05
-            .searchad-bootstrap/chunk-06
-            .searchad-bootstrap/chunk-07
-            .searchad-bootstrap/chunk-08a
-            .searchad-bootstrap/chunk-08b
-            .searchad-bootstrap/chunk-09a
-            .searchad-bootstrap/chunk-09b
-            .searchad-bootstrap/chunk-10a
-            .searchad-bootstrap/chunk-10b
-            .searchad-bootstrap/chunk-11a
-            .searchad-bootstrap/chunk-11b
-          )
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, tarfile, io
 
-          cumulative=0
-          for p in "${parts[@]}"; do
-            test -s "$p" || { echo "missing bootstrap part: $p" >&2; exit 1; }
-            bytes="$(wc -c < "$p" | tr -d ' ')"
-            sha="$(sha256sum "$p" | awk '{print $1}')"
-            invalid_count="$(LC_ALL=C grep -ao '[^A-Za-z0-9+/=]' "$p" 2>/dev/null | wc -l | tr -d ' ')"
-            equals_count="$(LC_ALL=C grep -ao '=' "$p" 2>/dev/null | wc -l | tr -d ' ')"
-            prefix="$(head -c 24 "$p")"
-            suffix="$(tail -c 24 "$p")"
-            cumulative=$((cumulative + bytes))
-            echo "PART=$p BYTES=$bytes MOD4=$((bytes % 4)) CUMULATIVE=$cumulative CUM_MOD4=$((cumulative % 4)) INVALID=$invalid_count EQUALS=$equals_count SHA256=$sha"
-            echo "PART_PREFIX=$prefix"
-            echo "PART_SUFFIX=$suffix"
-            if [ "$invalid_count" -gt 0 ]; then
-              echo "INVALID_OFFSETS_BEGIN=$p"
-              LC_ALL=C grep -abo '[^A-Za-z0-9+/=]' "$p" | head -20 || true
-              echo "INVALID_OFFSETS_END=$p"
-            fi
-            if [ "$equals_count" -gt 0 ]; then
-              echo "PADDING_OFFSETS_BEGIN=$p"
-              LC_ALL=C grep -abo '=' "$p" | head -20 || true
-              echo "PADDING_OFFSETS_END=$p"
-            fi
-          done
+          parts = [
+              '.searchad-bootstrap/chunk-00',
+              '.searchad-bootstrap/chunk-01',
+              '.searchad-bootstrap/chunk-02',
+              '.searchad-bootstrap/chunk-03',
+              '.searchad-bootstrap/chunk-04',
+              '.searchad-bootstrap/chunk-05',
+              '.searchad-bootstrap/chunk-06',
+              '.searchad-bootstrap/chunk-07',
+              '.searchad-bootstrap/chunk-08a',
+              '.searchad-bootstrap/chunk-08b',
+              '.searchad-bootstrap/chunk-09a',
+              '.searchad-bootstrap/chunk-09b',
+              '.searchad-bootstrap/chunk-10a',
+              '.searchad-bootstrap/chunk-10b',
+              '.searchad-bootstrap/chunk-11a',
+              '.searchad-bootstrap/chunk-11b',
+          ]
+          allowed = set(b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
+          cumulative = 0
+          blobs = []
+          for name in parts:
+              data = Path(name).read_bytes()
+              if not data:
+                  raise SystemExit(f'missing/empty bootstrap part: {name}')
+              blobs.append(data)
+              cumulative += len(data)
+              invalid = [(i, b) for i, b in enumerate(data) if b not in allowed]
+              padding = [i for i, b in enumerate(data) if b == ord('=')]
+              print(f'PART={name} BYTES={len(data)} MOD4={len(data)%4} CUMULATIVE={cumulative} CUM_MOD4={cumulative%4} INVALID={len(invalid)} EQUALS={len(padding)} SHA256={hashlib.sha256(data).hexdigest()}')
+              print(f'PART_PREFIX={data[:24]!r}')
+              print(f'PART_SUFFIX={data[-24:]!r}')
+              if invalid:
+                  print(f'INVALID_OFFSETS={name}:{invalid[:20]}')
+              if padding:
+                  print(f'PADDING_OFFSETS={name}:{padding[:20]}')
 
-          cat "${parts[@]}" > /tmp/searchad-patches.raw.b64
-          echo "TOTAL_BYTES=$(wc -c < /tmp/searchad-patches.raw.b64 | tr -d ' ')"
-          echo "TOTAL_MOD4=$(( $(wc -c < /tmp/searchad-patches.raw.b64) % 4 ))"
-          echo "TOTAL_INVALID=$(LC_ALL=C grep -ao '[^A-Za-z0-9+/=]' /tmp/searchad-patches.raw.b64 2>/dev/null | wc -l | tr -d ' ')"
-          echo "TOTAL_PADDING=$(LC_ALL=C grep -ao '=' /tmp/searchad-patches.raw.b64 2>/dev/null | wc -l | tr -d ' ')"
-          echo 'FIRST_GLOBAL_INVALID_OFFSETS'
-          LC_ALL=C grep -abo '[^A-Za-z0-9+/=]' /tmp/searchad-patches.raw.b64 | head -20 || true
-          echo 'FIRST_GLOBAL_PADDING_OFFSETS'
-          LC_ALL=C grep -abo '=' /tmp/searchad-patches.raw.b64 | head -20 || true
+          raw = b''.join(blobs)
+          invalid = [(i, b) for i, b in enumerate(raw) if b not in allowed]
+          padding = [i for i, b in enumerate(raw) if b == ord('=')]
+          print(f'TOTAL_BYTES={len(raw)}')
+          print(f'TOTAL_MOD4={len(raw)%4}')
+          print(f'TOTAL_INVALID={len(invalid)}')
+          print(f'TOTAL_PADDING={len(padding)}')
+          print(f'RAW_B64_SHA256={hashlib.sha256(raw).hexdigest()}')
+          print(f'FIRST_GLOBAL_INVALID={invalid[:20]}')
+          print(f'FIRST_GLOBAL_PADDING={padding[:20]}')
 
-          set +e
-          base64 --decode /tmp/searchad-patches.raw.b64 > /tmp/searchad-patches.partial.tar.gz 2>/tmp/base64.err
-          decode_status=$?
-          set -e
-          echo "BASE64_DECODE_STATUS=$decode_status"
-          cat /tmp/base64.err || true
-          echo "PARTIAL_DECODE_BYTES=$(wc -c < /tmp/searchad-patches.partial.tar.gz | tr -d ' ')"
-          echo "PARTIAL_DECODE_SHA256=$(sha256sum /tmp/searchad-patches.partial.tar.gz | awk '{print $1}')"
+          try:
+              decoded = base64.b64decode(raw, validate=True)
+          except Exception as exc:
+              print(f'BASE64_VALIDATE_ERROR={type(exc).__name__}:{exc}')
+              # Also decode only the maximal valid prefix before the first obvious structural fault when possible.
+              decoded = b''
+          else:
+              print(f'BASE64_DECODE_STATUS=0')
+              print(f'TGZ_BYTES={len(decoded)}')
+              print(f'TGZ_SHA256={hashlib.sha256(decoded).hexdigest()}')
+              try:
+                  with tarfile.open(fileobj=io.BytesIO(decoded), mode='r:gz') as tf:
+                      print('BUNDLE_MEMBERS_BEGIN')
+                      for member in sorted(tf.getnames()):
+                          print(member)
+                      print('BUNDLE_MEMBERS_END')
+              except Exception as exc:
+                  print(f'TAR_VALIDATE_ERROR={type(exc).__name__}:{exc}')
+          PY
 
-          # This job is evidence gathering only. It must never apply, commit, or push the bundle.
-          exit 0
+          echo 'Diagnostic workflow intentionally performs no git apply, commit, push, or branch update.'
