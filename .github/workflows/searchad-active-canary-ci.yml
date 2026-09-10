@@ -1,0 +1,38 @@
+name: SearchAd Active Canary CI
+
+on:
+  push:
+    branches:
+      - codex/searchad-active-canary-20260910
+    paths:
+      - 'smartstore-bridge/src/naver/searchad/canary/**'
+      - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
+      - '.github/workflows/searchad-active-canary-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'smartstore-bridge/src/naver/searchad/canary/**'
+      - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
+      - '.github/workflows/searchad-active-canary-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  active-canary-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: smartstore-bridge/package-lock.json
+      - name: Install dependencies
+        working-directory: smartstore-bridge
+        run: npm ci --no-audit --no-fund
+      - name: Active Canary contract tests
+        working-directory: smartstore-bridge
+        run: node --test test/searchad-active-canary-service.test.js
