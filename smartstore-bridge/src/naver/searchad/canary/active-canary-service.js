@@ -37,7 +37,14 @@ function normalizePrincipal(principal = {}) {
 }
 
 export class ActiveCanaryService {
-  constructor({ repository, remote, recipe, config = {}, clock = Date.now } = {}) {
+  constructor({
+    repository,
+    remote,
+    recipe,
+    config = {},
+    credentialFingerprintResolver = null,
+    clock = Date.now
+  } = {}) {
     if (!repository) throw new TypeError('repository is required');
     if (!remote) throw new TypeError('remote is required');
     if (!recipe) throw new TypeError('recipe is required');
@@ -54,6 +61,7 @@ export class ActiveCanaryService {
       upstreamBaseUrl: '',
       ...config
     };
+    this.credentialFingerprintResolver = credentialFingerprintResolver;
     this.clock = clock;
   }
 
@@ -96,7 +104,23 @@ export class ActiveCanaryService {
     }
   }
 
-  async assertPassiveEvidence(customerId, passiveEvidenceId) {
+  async resolveCredentialFingerprint(customerId) {
+    const resolved = this.credentialFingerprintResolver
+      ? await this.credentialFingerprintResolver(String(customerId))
+      : this.config.credentialFingerprint;
+    const fingerprint = String(resolved || '').trim();
+    if (!fingerprint) {
+      fail(
+        'SEARCHAD_CANARY_CREDENTIAL_FINGERPRINT_REQUIRED',
+        'Active Canary에는 현재 Customer credential fingerprint가 필요합니다.',
+        { customerId },
+        503
+      );
+    }
+    return fingerprint;
+  }
+
+  async assertPassiveEvidence(customerId, passiveEvidenceId, credentialFingerprint) {
     const evidence = await this.repository.getEvidence(passiveEvidenceId);
     const now = this.clock();
     const matches = Boolean(
@@ -105,7 +129,7 @@ export class ActiveCanaryService {
       evidence.result === 'verified' &&
       String(evidence.customerId) === String(customerId) &&
       String(evidence.specSha) === String(this.config.specSha) &&
-      String(evidence.credentialFingerprint) === String(this.config.credentialFingerprint) &&
+      String(evidence.credentialFingerprint) === String(credentialFingerprint) &&
       String(evidence.upstreamBaseUrl) === String(this.config.upstreamBaseUrl) &&
       Number.isFinite(Date.parse(evidence.expiresAt)) &&
       Date.parse(evidence.expiresAt) > now &&
@@ -121,6 +145,23 @@ export class ActiveCanaryService {
       );
     }
     return evidence;
+  }
+
+  async assertRunContextCurrent(run) {
+    const credentialFingerprint = await this.resolveCredentialFingerprint(run.customerId);
+    const current = Boolean(
+      String(run.specSha) === String(this.config.specSha) &&
+      String(run.credentialFingerprint) === String(credentialFingerprint) &&
+      String(run.upstreamBaseUrl) === String(this.config.upstreamBaseUrl)
+    );
+    if (!current) {
+      fail(
+        'SEARCHAD_CANARY_CONTEXT_CHANGED',
+        'Canary 시작 이후 spec/credential/upstream context가 변경되어 evidence를 발급할 수 없습니다.',
+        { canaryRunId: run.canaryRunId, customerId: run.customerId },
+        409
+      );
+    }
   }
 
   async addEvent(run, { phase, status, operationKey, error, requestId } = {}) {
@@ -209,7 +250,8 @@ export class ActiveCanaryService {
       fail('SEARCHAD_CANARY_ACCOUNT_SUSPENDED', '중지된 SearchAd Customer에서는 새 Active Canary를 시작할 수 없습니다.', { customerId }, 409);
     }
 
-    const evidence = await this.assertPassiveEvidence(customerId, passiveEvidenceId);
+    const credentialFingerprint = await this.resolveCredentialFingerprint(customerId);
+    const evidence = await this.assertPassiveEvidence(customerId, passiveEvidenceId, credentialFingerprint);
     const existing = await this.repository.findActiveRun(customerId);
     if (existing && !TERMINAL_STATUSES.has(existing.status)) {
       fail('SEARCHAD_CANARY_ALREADY_ACTIVE', '같은 Customer의 미완료 Active Canary가 이미 존재합니다.', { canaryRunId: existing.canaryRunId }, 409);
@@ -223,7 +265,7 @@ export class ActiveCanaryService {
       status: 'preflight_verified',
       startedByPrincipalId: principal.principalId,
       specSha: this.config.specSha,
-      credentialFingerprint: this.config.credentialFingerprint,
+      credentialFingerprint,
       upstreamBaseUrl: this.config.upstreamBaseUrl,
       verifiedOperationScope: structuredClone(this.recipe.verifiedOperationScope || {}),
       startedAt: nowIso(this.clock),
@@ -235,9 +277,6 @@ export class ActiveCanaryService {
     };
     await this.repository.createRun(run);
     await this.addEvent(run, { phase: 'preflight', status: 'verified' });
-
-    const beforeSpend = await this.readSpend(this.recipe.beforeSpendRead({ customerId, evidence, canaryRunId: run.canaryRunId }));
-    await this.repository.updateRun(run.canaryRunId, { beforeSpend });
 
     const createResult = await this.mutateOnce(
       run,
@@ -264,14 +303,38 @@ export class ActiveCanaryService {
       cleanupStatus: 'pending',
       createdAt: nowIso(this.clock)
     };
-    if (canUpdateObject) await this.repository.addObject(objectRecord);
+    await this.repository.addObject(objectRecord);
 
     const createdSnapshot = await this.remote.read(this.recipe.readCampaign({ customerId, remoteId }));
     if (!this.recipe.assertCreatedStopped(createdSnapshot)) {
-      await this.repository.updateRun(run.canaryRunId, { status: 'failed' });
+      await this.repository.updateRun(run.canaryRunId, { status: 'cleanup_required' });
       fail('SEARCHAD_CANARY_NOT_STOPPED', '새 Canary campaign이 안전한 stopped WEB_SITE 상태로 검증되지 않았습니다.', { remoteId }, 409);
     }
     await this.repository.updateRun(run.canaryRunId, { status: 'campaign_verified_off' });
+
+    let beforeSpend;
+    try {
+      beforeSpend = await this.readSpend(this.recipe.beforeSpendRead({
+        customerId,
+        evidence,
+        canaryRunId: run.canaryRunId,
+        remoteId,
+        snapshot: createdSnapshot
+      }));
+    } catch (error) {
+      await this.repository.updateRun(run.canaryRunId, {
+        status: 'cleanup_required',
+        lastError: safeError(error)
+      });
+      await this.addEvent(run, {
+        phase: 'baseline_spend',
+        status: 'unverified',
+        operationKey: this.recipe.beforeSpendRead({ customerId, remoteId })?.operationKey,
+        error
+      });
+      throw error;
+    }
+    await this.repository.updateRun(run.canaryRunId, { beforeSpend });
 
     await this.mutateOnce(
       run,
@@ -280,7 +343,7 @@ export class ActiveCanaryService {
     );
     const updatedSnapshot = await this.remote.read(this.recipe.readCampaign({ customerId, remoteId }));
     if (!this.recipe.assertBudgetMutation(createdSnapshot, updatedSnapshot)) {
-      await this.repository.updateRun(run.canaryRunId, { status: 'failed' });
+      await this.repository.updateRun(run.canaryRunId, { status: 'cleanup_required' });
       fail('SEARCHAD_CANARY_MUTATION_VERIFY_FAILED', 'Canary budget 변경 후 원격 상태 검증에 실패했습니다.', { remoteId }, 409);
     }
 
@@ -291,7 +354,7 @@ export class ActiveCanaryService {
     );
     const restoredSnapshot = await this.remote.read(this.recipe.readCampaign({ customerId, remoteId }));
     if (!this.recipe.assertBudgetRestored(createdSnapshot, restoredSnapshot)) {
-      await this.repository.updateRun(run.canaryRunId, { status: 'failed' });
+      await this.repository.updateRun(run.canaryRunId, { status: 'cleanup_required' });
       fail('SEARCHAD_CANARY_RESTORE_VERIFY_FAILED', 'Canary budget 원복 후 원격 상태 검증에 실패했습니다.', { remoteId }, 409);
     }
 
@@ -300,7 +363,14 @@ export class ActiveCanaryService {
       'campaign_cleanup',
       this.recipe.cleanupCampaign({ customerId, remoteId })
     );
-    const cleanupSnapshot = await this.remote.read(this.recipe.readCampaign({ customerId, remoteId }));
+    let cleanupSnapshot;
+    try {
+      cleanupSnapshot = await this.remote.read(this.recipe.readCampaign({ customerId, remoteId }));
+    } catch (error) {
+      const status = Number(error?.status || error?.statusCode || 0);
+      if (status === 404) cleanupSnapshot = null;
+      else throw error;
+    }
     if (!this.recipe.assertCleanup(cleanupSnapshot)) {
       await this.repository.updateRun(run.canaryRunId, { status: 'cleanup_required' });
       fail('SEARCHAD_CANARY_CLEANUP_REQUIRED', 'Canary campaign 정리가 원격에서 검증되지 않았습니다.', { remoteId }, 409);
@@ -309,12 +379,6 @@ export class ActiveCanaryService {
     const cleanupVerifiedAt = nowIso(this.clock);
     if (canUpdateObject) {
       await this.repository.updateObject(run.canaryRunId, remoteId, {
-        cleanupStatus: 'deleted_verified',
-        cleanedAt: cleanupVerifiedAt
-      });
-    } else {
-      await this.repository.addObject({
-        ...objectRecord,
         cleanupStatus: 'deleted_verified',
         cleanedAt: cleanupVerifiedAt
       });
@@ -332,6 +396,7 @@ export class ActiveCanaryService {
     const run = await this.repository.getRun(canaryRunId);
     if (!run) fail('SEARCHAD_CANARY_NOT_FOUND', 'Active Canary run을 찾을 수 없습니다.', { canaryRunId }, 404);
     this.assertAdminForCustomer(run.customerId, context);
+    await this.assertRunContextCurrent(run);
 
     if (run.status === 'passed') return run;
     if (run.status !== 'spend_check_pending') {
