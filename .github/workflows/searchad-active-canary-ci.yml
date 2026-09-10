@@ -6,7 +6,9 @@ on:
       - codex/searchad-active-canary-20260910
     paths:
       - 'smartstore-bridge/src/naver/searchad/canary/**'
+      - 'smartstore-bridge/src/naver/searchad/gateway.js'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
+      - 'smartstore-bridge/test/searchad-gateway-active-canary.test.js'
       - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
       - 'smartstore-bridge/migrations/postgres/**'
       - '.github/workflows/searchad-active-canary-ci.yml'
@@ -15,7 +17,9 @@ on:
       - main
     paths:
       - 'smartstore-bridge/src/naver/searchad/canary/**'
+      - 'smartstore-bridge/src/naver/searchad/gateway.js'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
+      - 'smartstore-bridge/test/searchad-gateway-active-canary.test.js'
       - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
       - 'smartstore-bridge/migrations/postgres/**'
       - '.github/workflows/searchad-active-canary-ci.yml'
@@ -39,7 +43,7 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Active Canary contract tests
         working-directory: smartstore-bridge
-        run: node --test test/searchad-active-canary-service.test.js
+        run: node --test test/searchad-active-canary-*.test.js test/searchad-gateway-active-canary.test.js
 
   active-canary-postgres:
     runs-on: ubuntu-latest
