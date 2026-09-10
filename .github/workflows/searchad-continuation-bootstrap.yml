@@ -1,4 +1,4 @@
-name: SearchAd continuation bundle padding diagnostic
+name: SearchAd two-patch checkpoint diagnostic
 
 on:
   push:
@@ -11,72 +11,96 @@ permissions:
   contents: read
 
 jobs:
-  diagnose-padding:
+  identify-checkpoint:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
-      EXPECTED_B64_SHA256: 7c55eaf56e78b65acc12a821bf2d0db47e7a075dd8e412c5153693aa75f8eb44
-      EXPECTED_TGZ_SHA256: ce87f97bef1b39e5c566e8c1441cd1186ddc883feb354ab999c20ff485db1eaf
+      BASE_SHA: 56abf47c1eeb8124fa9fb8f4f60b81e36376c109
+      EXPECTED_FIRST_TREE: 7ae8e35407de4b954d99f6fcb9b3f23e5e3e2045
     steps:
       - name: Checkout staging branch
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Test exact missing-padding hypothesis only
+      - name: Reassemble known-valid two-patch archive
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import base64, hashlib, io, tarfile
+          parts=(
+            .searchad-bootstrap/chunk-00
+            .searchad-bootstrap/chunk-01
+            .searchad-bootstrap/chunk-02
+            .searchad-bootstrap/chunk-03
+            .searchad-bootstrap/chunk-04
+            .searchad-bootstrap/chunk-05
+            .searchad-bootstrap/chunk-06
+            .searchad-bootstrap/chunk-07
+            .searchad-bootstrap/chunk-08a
+            .searchad-bootstrap/chunk-08b
+            .searchad-bootstrap/chunk-09a
+            .searchad-bootstrap/chunk-10a
+            .searchad-bootstrap/chunk-11a
+          )
+          for p in "${parts[@]}"; do test -s "$p"; done
+          cat "${parts[@]}" > /tmp/searchad-two-patch.b64
+          echo "TWO_PATCH_B64_SHA256=$(sha256sum /tmp/searchad-two-patch.b64 | awk '{print $1}')"
+          base64 --decode /tmp/searchad-two-patch.b64 > /tmp/searchad-two-patch.tar.gz
+          echo "TWO_PATCH_TGZ_SHA256=$(sha256sum /tmp/searchad-two-patch.tar.gz | awk '{print $1}')"
+          mkdir -p /tmp/searchad-two-patch
+          tar -xzf /tmp/searchad-two-patch.tar.gz -C /tmp/searchad-two-patch
+          find /tmp/searchad-two-patch -maxdepth 2 -type f -print | sort
 
-          names = [
-              '.searchad-bootstrap/chunk-00',
-              '.searchad-bootstrap/chunk-01',
-              '.searchad-bootstrap/chunk-02',
-              '.searchad-bootstrap/chunk-03',
-              '.searchad-bootstrap/chunk-04',
-              '.searchad-bootstrap/chunk-05',
-              '.searchad-bootstrap/chunk-06',
-              '.searchad-bootstrap/chunk-07',
-              '.searchad-bootstrap/chunk-08a',
-              '.searchad-bootstrap/chunk-08b',
-              '.searchad-bootstrap/chunk-09a',
-              '.searchad-bootstrap/chunk-09b',
-              '.searchad-bootstrap/chunk-10a',
-              '.searchad-bootstrap/chunk-10b',
-              '.searchad-bootstrap/chunk-11a',
-              '.searchad-bootstrap/chunk-11b',
-          ]
-          raw = b''.join(Path(n).read_bytes() for n in names)
-          missing = (-len(raw)) % 4
-          print(f'RAW_BYTES={len(raw)}')
-          print(f'RAW_MOD4={len(raw)%4}')
-          print(f'RAW_SHA256={hashlib.sha256(raw).hexdigest()}')
-          print(f'PADDING_BYTES_NEEDED={missing}')
-          if missing not in (0, 1, 2):
-              raise SystemExit('STRUCTURALLY_INVALID_BASE64_LENGTH')
-          padded = raw + b'=' * missing
-          print(f'PADDED_BYTES={len(padded)}')
-          print(f'PADDED_SHA256={hashlib.sha256(padded).hexdigest()}')
-          print('EXPECTED_B64_SHA256=' + '7c55eaf56e78b65acc12a821bf2d0db47e7a075dd8e412c5153693aa75f8eb44')
-          decoded = base64.b64decode(padded, validate=True)
-          tgz_sha = hashlib.sha256(decoded).hexdigest()
-          print(f'TGZ_BYTES={len(decoded)}')
-          print(f'TGZ_SHA256={tgz_sha}')
-          print('EXPECTED_TGZ_SHA256=' + 'ce87f97bef1b39e5c566e8c1441cd1186ddc883feb354ab999c20ff485db1eaf')
-          try:
-              with tarfile.open(fileobj=io.BytesIO(decoded), mode='r:gz') as tf:
-                  members = sorted(tf.getnames())
-          except Exception as exc:
-              print(f'TAR_VALIDATE_ERROR={type(exc).__name__}:{exc}')
-              raise SystemExit(3)
-          print('BUNDLE_MEMBERS_BEGIN')
-          for member in members:
-              print(member)
-          print('BUNDLE_MEMBERS_END')
-          if tgz_sha != 'ce87f97bef1b39e5c566e8c1441cd1186ddc883feb354ab999c20ff485db1eaf':
-              raise SystemExit('TGZ_HASH_MISMATCH_DO_NOT_APPLY')
-          print('DIAGNOSTIC_RESULT=MISSING_PADDING_CONFIRMED_BINARY_INTACT')
-          PY
+      - name: Apply two patches from exact PR baseline without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "$BASE_SHA^{commit}"
+          git reset --hard "$BASE_SHA"
+          git clean -fdx
 
-          echo 'Diagnostic only: no git apply, commit, push, or branch update.'
+          p1="$(find /tmp/searchad-two-patch -type f -name '*56abf47*.patch' -print -quit)"
+          p2="$(find /tmp/searchad-two-patch -type f -name '*308_BASELINE*.patch' -print -quit)"
+          test -n "$p1" && test -n "$p2"
+
+          echo "PATCH1=$p1"
+          git apply --check "$p1"
+          git apply "$p1"
+          tree1="$(git write-tree)"
+          echo "TREE_AFTER_PATCH1=$tree1"
+          echo "EXPECTED_FIRST_TREE=$EXPECTED_FIRST_TREE"
+          test "$tree1" = "$EXPECTED_FIRST_TREE"
+
+          echo "PATCH2=$p2"
+          git apply --check "$p2"
+          git apply "$p2"
+          tree2="$(git write-tree)"
+          echo "TREE_AFTER_PATCH2=$tree2"
+          git diff --check
+
+          echo 'KEY_FILES_AFTER_PATCH2_BEGIN'
+          find smartstore-bridge -type f \( -iname '*searchad*' -o -path '*/migrations/postgres/*' \) | sort | grep -E '(activation|canary|evidence|circuit|report|0008|0009|001[0-9])' || true
+          echo 'KEY_FILES_AFTER_PATCH2_END'
+
+          if [[ "$tree2" == 904b648* ]]; then
+            echo 'CHECKPOINT_RELATION=PATCH2_TREE_MATCHES_904b648_PREFIX'
+          else
+            echo 'CHECKPOINT_RELATION=PATCH2_TREE_DOES_NOT_MATCH_904b648_PREFIX'
+          fi
+
+      - name: Run recovered checkpoint regression without publishing
+        shell: bash
+        working-directory: smartstore-bridge
+        run: |
+          set -euo pipefail
+          npm ci
+          npm test
+
+      - name: Assert no publication occurred
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "DIAGNOSTIC_HEAD=$(git rev-parse HEAD)"
+          echo "DIAGNOSTIC_TREE=$(git write-tree)"
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          echo 'No commit, push, ref update, production deployment, or SearchAd live call is performed by this workflow.'
