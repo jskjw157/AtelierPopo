@@ -41,6 +41,8 @@ function gateEnabled(config, gate) {
   return Boolean(map[gate]);
 }
 
+const CANARY_MUTATION_GATES = new Set(['writes', 'creates', 'batchWrites', 'deletes', 'rollbacks']);
+
 function resourceKey(customerId, operation, input) {
   const pathValues = Object.values(input.pathParams || {}).map(String).filter(Boolean);
   const natural = pathValues[0] || input.body?.name || input.json?.name || operation.operationKey;
@@ -145,6 +147,37 @@ export class SearchAdOperationGateway {
     return { ok: true };
   }
 
+  canaryExecutionCheck(operation, input, { throwOnFailure = true } = {}) {
+    const fail = (code, message, status = 403) => {
+      if (throwOnFailure) throw new SearchAdGatewayError(code, message, { status });
+      return { ok: false, code, message, status };
+    };
+    if (!this.config.enabled) return fail('SEARCHAD_GATEWAY_DISABLED', 'SearchAd gateway is disabled.');
+    if (!this.config.configured) return fail('SEARCHAD_NOT_CONFIGURED', 'SearchAd credentials are not configured.', 503);
+    if (!this.config.allowActiveCanary) {
+      return fail('SEARCHAD_ACTIVE_CANARY_DISABLED', 'Active Canary gate is disabled.');
+    }
+    if (!operation.runtimeAllowlisted) {
+      return fail('SEARCHAD_OPERATION_NOT_ALLOWLISTED', `SearchAd operation is not runtime allowlisted: ${operation.operationKey}`);
+    }
+    if (operation.tier !== 'A' && operation.tier !== 'B' && !this.config.allowUnverifiedOperations) {
+      return fail('SEARCHAD_OPERATION_UNVERIFIED', 'SearchAd operation requires capability verification.');
+    }
+    if (!operation.sideEffect || !CANARY_MUTATION_GATES.has(operation.requiredGate)) {
+      return fail('SEARCHAD_CANARY_OPERATION_SCOPE_FORBIDDEN', 'Active Canary can execute only approved SearchAd mutation operations.', 403);
+    }
+    if (String(input.confirmation || '') !== String(operation.confirmation || '')) {
+      return fail('SEARCHAD_INVALID_CONFIRMATION', `confirmation must be exactly ${operation.confirmation}.`, 400);
+    }
+    if (operation.destructive) {
+      const expected = resourceKey(String(input.customerId || ''), operation, input);
+      if (String(input.secondConfirmation || '') !== expected) {
+        return fail('SEARCHAD_INVALID_SECOND_CONFIRMATION', 'secondConfirmation must match the preview resourceKey.', 400);
+      }
+    }
+    return { ok: true };
+  }
+
   async execute(operationKey, input = {}) {
     const operation = this.get(operationKey);
     this.executionCheck(operation, input, { throwOnFailure: true });
@@ -158,6 +191,38 @@ export class SearchAdOperationGateway {
       json: input.body ?? input.json,
       responseType: input.responseType || 'auto',
       retrySafe: !operation.sideEffect
+    });
+    return {
+      operation: this.registry.publicOperation(operation),
+      requestFingerprint: fingerprint({ operationKey, customerId, path, query: input.query || {}, body: input.body ?? input.json }),
+      upstream: {
+        status: result.status,
+        requestId: result.requestId,
+        attempts: result.attempts,
+        durationMs: result.durationMs,
+        headers: result.headers
+      },
+      data: redactSearchAdObject(result.data)
+    };
+  }
+
+  async executeCanary(operationKey, input = {}) {
+    const operation = this.get(operationKey);
+    this.canaryExecutionCheck(operation, input, { throwOnFailure: true });
+    const customerId = String(input.customerId || '').trim();
+    if (!customerId) {
+      throw new SearchAdGatewayError('SEARCHAD_CUSTOMER_ID_REQUIRED', 'customerId is required.', { status: 400 });
+    }
+    this.credentialsRegistry.resolve(customerId);
+    const path = interpolatePath(operation, input.pathParams || {});
+    const result = await this.client.request({
+      customerId,
+      method: operation.method,
+      path,
+      query: input.query || {},
+      json: input.body ?? input.json,
+      responseType: input.responseType || 'auto',
+      retrySafe: false
     });
     return {
       operation: this.registry.publicOperation(operation),
