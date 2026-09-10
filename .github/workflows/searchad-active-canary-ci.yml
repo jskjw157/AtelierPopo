@@ -9,9 +9,13 @@ on:
       - 'smartstore-bridge/src/naver/searchad/gateway.js'
       - 'smartstore-bridge/src/bootstrap-v05.js'
       - 'smartstore-bridge/src/http/server-v05.js'
+      - 'smartstore-bridge/src/http/searchad-access-control.js'
+      - 'smartstore-bridge/src/http/routes-searchad-canary.js'
+      - 'smartstore-bridge/src/http/openapi-searchad-canary.js'
       - 'smartstore-bridge/.env.searchad-write.example'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
       - 'smartstore-bridge/test/searchad-gateway-active-canary.test.js'
+      - 'smartstore-bridge/test/searchad-http-*.test.js'
       - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
       - 'smartstore-bridge/migrations/postgres/**'
       - '.github/workflows/searchad-active-canary-ci.yml'
@@ -23,9 +27,13 @@ on:
       - 'smartstore-bridge/src/naver/searchad/gateway.js'
       - 'smartstore-bridge/src/bootstrap-v05.js'
       - 'smartstore-bridge/src/http/server-v05.js'
+      - 'smartstore-bridge/src/http/searchad-access-control.js'
+      - 'smartstore-bridge/src/http/routes-searchad-canary.js'
+      - 'smartstore-bridge/src/http/openapi-searchad-canary.js'
       - 'smartstore-bridge/.env.searchad-write.example'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
       - 'smartstore-bridge/test/searchad-gateway-active-canary.test.js'
+      - 'smartstore-bridge/test/searchad-http-*.test.js'
       - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
       - 'smartstore-bridge/migrations/postgres/**'
       - '.github/workflows/searchad-active-canary-ci.yml'
@@ -47,9 +55,9 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci --no-audit --no-fund
-      - name: Active Canary contract tests
+      - name: Active Canary and SearchAd HTTP contract tests
         working-directory: smartstore-bridge
-        run: node --test test/searchad-active-canary-*.test.js test/searchad-gateway-active-canary.test.js
+        run: node --test test/searchad-active-canary-*.test.js test/searchad-gateway-active-canary.test.js test/searchad-http-*.test.js
       - name: Runtime wiring syntax
         working-directory: smartstore-bridge
         run: node --check src/bootstrap-v05.js && node --check src/http/server-v05.js && node --check src/naver/searchad/canary/runtime-production.js
