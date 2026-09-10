@@ -15,14 +15,11 @@ jobs:
   diagnose-bundle:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      EXPECTED_B64_SHA256: 7c55eaf56e78b65acc12a821bf2d0db47e7a075dd8e412c5153693aa75f8eb44
-      EXPECTED_TGZ_SHA256: ce87f97bef1b39e5c566e8c1441cd1186ddc883feb354ab999c20ff485db1eaf
     steps:
       - name: Checkout staging branch
         uses: actions/checkout@v4
 
-      - name: Diagnose immutable bundle transport only
+      - name: Locate invalid base64 boundary without applying bundle
         shell: bash
         run: |
           set -euo pipefail
@@ -44,49 +41,50 @@ jobs:
             .searchad-bootstrap/chunk-11a
             .searchad-bootstrap/chunk-11b
           )
+
+          cumulative=0
           for p in "${parts[@]}"; do
             test -s "$p" || { echo "missing bootstrap part: $p" >&2; exit 1; }
+            bytes="$(wc -c < "$p" | tr -d ' ')"
+            sha="$(sha256sum "$p" | awk '{print $1}')"
+            invalid_count="$(LC_ALL=C grep -ao '[^A-Za-z0-9+/=]' "$p" 2>/dev/null | wc -l | tr -d ' ')"
+            equals_count="$(LC_ALL=C grep -ao '=' "$p" 2>/dev/null | wc -l | tr -d ' ')"
+            prefix="$(head -c 24 "$p")"
+            suffix="$(tail -c 24 "$p")"
+            cumulative=$((cumulative + bytes))
+            echo "PART=$p BYTES=$bytes MOD4=$((bytes % 4)) CUMULATIVE=$cumulative CUM_MOD4=$((cumulative % 4)) INVALID=$invalid_count EQUALS=$equals_count SHA256=$sha"
+            echo "PART_PREFIX=$prefix"
+            echo "PART_SUFFIX=$suffix"
+            if [ "$invalid_count" -gt 0 ]; then
+              echo "INVALID_OFFSETS_BEGIN=$p"
+              LC_ALL=C grep -abo '[^A-Za-z0-9+/=]' "$p" | head -20 || true
+              echo "INVALID_OFFSETS_END=$p"
+            fi
+            if [ "$equals_count" -gt 0 ]; then
+              echo "PADDING_OFFSETS_BEGIN=$p"
+              LC_ALL=C grep -abo '=' "$p" | head -20 || true
+              echo "PADDING_OFFSETS_END=$p"
+            fi
           done
 
           cat "${parts[@]}" > /tmp/searchad-patches.raw.b64
-          tr -d '\r\n\t ' < /tmp/searchad-patches.raw.b64 > /tmp/searchad-patches.normalized.b64
+          echo "TOTAL_BYTES=$(wc -c < /tmp/searchad-patches.raw.b64 | tr -d ' ')"
+          echo "TOTAL_MOD4=$(( $(wc -c < /tmp/searchad-patches.raw.b64) % 4 ))"
+          echo "TOTAL_INVALID=$(LC_ALL=C grep -ao '[^A-Za-z0-9+/=]' /tmp/searchad-patches.raw.b64 2>/dev/null | wc -l | tr -d ' ')"
+          echo "TOTAL_PADDING=$(LC_ALL=C grep -ao '=' /tmp/searchad-patches.raw.b64 2>/dev/null | wc -l | tr -d ' ')"
+          echo 'FIRST_GLOBAL_INVALID_OFFSETS'
+          LC_ALL=C grep -abo '[^A-Za-z0-9+/=]' /tmp/searchad-patches.raw.b64 | head -20 || true
+          echo 'FIRST_GLOBAL_PADDING_OFFSETS'
+          LC_ALL=C grep -abo '=' /tmp/searchad-patches.raw.b64 | head -20 || true
 
-          raw_bytes="$(wc -c < /tmp/searchad-patches.raw.b64 | tr -d ' ')"
-          normalized_bytes="$(wc -c < /tmp/searchad-patches.normalized.b64 | tr -d ' ')"
-          whitespace_bytes="$((raw_bytes - normalized_bytes))"
-          raw_sha="$(sha256sum /tmp/searchad-patches.raw.b64 | awk '{print $1}')"
-          normalized_sha="$(sha256sum /tmp/searchad-patches.normalized.b64 | awk '{print $1}')"
+          set +e
+          base64 --decode /tmp/searchad-patches.raw.b64 > /tmp/searchad-patches.partial.tar.gz 2>/tmp/base64.err
+          decode_status=$?
+          set -e
+          echo "BASE64_DECODE_STATUS=$decode_status"
+          cat /tmp/base64.err || true
+          echo "PARTIAL_DECODE_BYTES=$(wc -c < /tmp/searchad-patches.partial.tar.gz | tr -d ' ')"
+          echo "PARTIAL_DECODE_SHA256=$(sha256sum /tmp/searchad-patches.partial.tar.gz | awk '{print $1}')"
 
-          echo "RAW_B64_BYTES=$raw_bytes"
-          echo "NORMALIZED_B64_BYTES=$normalized_bytes"
-          echo "TRANSPORT_WHITESPACE_BYTES=$whitespace_bytes"
-          echo "RAW_B64_SHA256=$raw_sha"
-          echo "NORMALIZED_B64_SHA256=$normalized_sha"
-          echo "EXPECTED_B64_SHA256=$EXPECTED_B64_SHA256"
-
-          base64 --decode /tmp/searchad-patches.normalized.b64 > /tmp/searchad-patches.tar.gz
-          tgz_bytes="$(wc -c < /tmp/searchad-patches.tar.gz | tr -d ' ')"
-          tgz_sha="$(sha256sum /tmp/searchad-patches.tar.gz | awk '{print $1}')"
-          echo "TGZ_BYTES=$tgz_bytes"
-          echo "TGZ_SHA256=$tgz_sha"
-          echo "EXPECTED_TGZ_SHA256=$EXPECTED_TGZ_SHA256"
-
-          echo 'BUNDLE_MEMBERS_BEGIN'
-          tar -tzf /tmp/searchad-patches.tar.gz | sort
-          echo 'BUNDLE_MEMBERS_END'
-
-          if [ "$tgz_sha" != "$EXPECTED_TGZ_SHA256" ]; then
-            echo 'DIAGNOSTIC_RESULT=TGZ_MISMATCH_DO_NOT_APPLY' >&2
-            exit 1
-          fi
-          if [ "$normalized_sha" = "$EXPECTED_B64_SHA256" ]; then
-            echo 'DIAGNOSTIC_RESULT=WHITESPACE_ONLY_TRANSPORT_MUTATION'
-          else
-            echo 'DIAGNOSTIC_RESULT=BINARY_INTACT_WRAPPER_DIFFERS'
-          fi
-
-      - name: Assert diagnostic has no publication capability
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo 'Diagnostic workflow intentionally performs no git apply, commit, push, or branch update.'
+          # This job is evidence gathering only. It must never apply, commit, or push the bundle.
+          exit 0
