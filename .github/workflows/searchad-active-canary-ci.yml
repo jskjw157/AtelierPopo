@@ -7,6 +7,9 @@ on:
     paths:
       - 'smartstore-bridge/src/naver/searchad/canary/**'
       - 'smartstore-bridge/src/naver/searchad/gateway.js'
+      - 'smartstore-bridge/src/bootstrap-v05.js'
+      - 'smartstore-bridge/src/http/server-v05.js'
+      - 'smartstore-bridge/.env.searchad-write.example'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
       - 'smartstore-bridge/test/searchad-gateway-active-canary.test.js'
       - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
@@ -18,6 +21,9 @@ on:
     paths:
       - 'smartstore-bridge/src/naver/searchad/canary/**'
       - 'smartstore-bridge/src/naver/searchad/gateway.js'
+      - 'smartstore-bridge/src/bootstrap-v05.js'
+      - 'smartstore-bridge/src/http/server-v05.js'
+      - 'smartstore-bridge/.env.searchad-write.example'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
       - 'smartstore-bridge/test/searchad-gateway-active-canary.test.js'
       - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
@@ -44,6 +50,9 @@ jobs:
       - name: Active Canary contract tests
         working-directory: smartstore-bridge
         run: node --test test/searchad-active-canary-*.test.js test/searchad-gateway-active-canary.test.js
+      - name: Runtime wiring syntax
+        working-directory: smartstore-bridge
+        run: node --check src/bootstrap-v05.js && node --check src/http/server-v05.js && node --check src/naver/searchad/canary/runtime-production.js
 
   active-canary-postgres:
     runs-on: ubuntu-latest
@@ -77,3 +86,20 @@ jobs:
       - name: PostgreSQL Active Canary persistence contract
         working-directory: smartstore-bridge
         run: node --test test/postgres-searchad-active-canary.integration.test.js
+
+  searchad-write-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: smartstore-bridge/package-lock.json
+      - name: Install dependencies
+        working-directory: smartstore-bridge
+        run: npm ci --no-audit --no-fund
+      - name: Existing SearchAd write regression
+        working-directory: smartstore-bridge
+        run: node --test test/searchad-write-*.test.js
