@@ -1,4 +1,4 @@
-name: SearchAd continuation bundle overlap diagnostic
+name: SearchAd continuation bundle padding diagnostic
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  diagnose-overlap:
+  diagnose-padding:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -21,7 +21,7 @@ jobs:
       - name: Checkout staging branch
         uses: actions/checkout@v4
 
-      - name: Test duplicate-suffix hypothesis only
+      - name: Test exact missing-padding hypothesis only
         shell: bash
         run: |
           set -euo pipefail
@@ -29,19 +29,7 @@ jobs:
           from pathlib import Path
           import base64, hashlib, io, tarfile
 
-          pairs = [
-              ('09', Path('.searchad-bootstrap/chunk-09a').read_bytes(), Path('.searchad-bootstrap/chunk-09b').read_bytes()),
-              ('10', Path('.searchad-bootstrap/chunk-10a').read_bytes(), Path('.searchad-bootstrap/chunk-10b').read_bytes()),
-              ('11', Path('.searchad-bootstrap/chunk-11a').read_bytes(), Path('.searchad-bootstrap/chunk-11b').read_bytes()),
-          ]
-          all_suffix = True
-          for label, a, b in pairs:
-              is_suffix = a.endswith(b)
-              pos = a.rfind(b)
-              print(f'PAIR={label} A_BYTES={len(a)} B_BYTES={len(b)} A_ENDS_WITH_B={is_suffix} B_START_IN_A={pos}')
-              all_suffix = all_suffix and is_suffix
-
-          candidate_names = [
+          names = [
               '.searchad-bootstrap/chunk-00',
               '.searchad-bootstrap/chunk-01',
               '.searchad-bootstrap/chunk-02',
@@ -53,45 +41,42 @@ jobs:
               '.searchad-bootstrap/chunk-08a',
               '.searchad-bootstrap/chunk-08b',
               '.searchad-bootstrap/chunk-09a',
+              '.searchad-bootstrap/chunk-09b',
               '.searchad-bootstrap/chunk-10a',
+              '.searchad-bootstrap/chunk-10b',
               '.searchad-bootstrap/chunk-11a',
+              '.searchad-bootstrap/chunk-11b',
           ]
-          raw = b''.join(Path(name).read_bytes() for name in candidate_names)
-          b64_sha = hashlib.sha256(raw).hexdigest()
-          print(f'ALL_B_ARE_SUFFIXES={all_suffix}')
-          print(f'CANDIDATE_B64_BYTES={len(raw)}')
-          print(f'CANDIDATE_B64_MOD4={len(raw)%4}')
-          print(f'CANDIDATE_B64_SHA256={b64_sha}')
+          raw = b''.join(Path(n).read_bytes() for n in names)
+          missing = (-len(raw)) % 4
+          print(f'RAW_BYTES={len(raw)}')
+          print(f'RAW_MOD4={len(raw)%4}')
+          print(f'RAW_SHA256={hashlib.sha256(raw).hexdigest()}')
+          print(f'PADDING_BYTES_NEEDED={missing}')
+          if missing not in (0, 1, 2):
+              raise SystemExit('STRUCTURALLY_INVALID_BASE64_LENGTH')
+          padded = raw + b'=' * missing
+          print(f'PADDED_BYTES={len(padded)}')
+          print(f'PADDED_SHA256={hashlib.sha256(padded).hexdigest()}')
           print('EXPECTED_B64_SHA256=' + '7c55eaf56e78b65acc12a821bf2d0db47e7a075dd8e412c5153693aa75f8eb44')
-
-          try:
-              decoded = base64.b64decode(raw, validate=True)
-          except Exception as exc:
-              print(f'CANDIDATE_BASE64_ERROR={type(exc).__name__}:{exc}')
-              raise SystemExit(2)
-
+          decoded = base64.b64decode(padded, validate=True)
           tgz_sha = hashlib.sha256(decoded).hexdigest()
-          print(f'CANDIDATE_TGZ_BYTES={len(decoded)}')
-          print(f'CANDIDATE_TGZ_SHA256={tgz_sha}')
+          print(f'TGZ_BYTES={len(decoded)}')
+          print(f'TGZ_SHA256={tgz_sha}')
           print('EXPECTED_TGZ_SHA256=' + 'ce87f97bef1b39e5c566e8c1441cd1186ddc883feb354ab999c20ff485db1eaf')
-
           try:
               with tarfile.open(fileobj=io.BytesIO(decoded), mode='r:gz') as tf:
                   members = sorted(tf.getnames())
           except Exception as exc:
-              print(f'CANDIDATE_TAR_ERROR={type(exc).__name__}:{exc}')
+              print(f'TAR_VALIDATE_ERROR={type(exc).__name__}:{exc}')
               raise SystemExit(3)
-
           print('BUNDLE_MEMBERS_BEGIN')
           for member in members:
               print(member)
           print('BUNDLE_MEMBERS_END')
-
-          if not all_suffix:
-              raise SystemExit('OVERLAP_HYPOTHESIS_REJECTED')
           if tgz_sha != 'ce87f97bef1b39e5c566e8c1441cd1186ddc883feb354ab999c20ff485db1eaf':
               raise SystemExit('TGZ_HASH_MISMATCH_DO_NOT_APPLY')
-          print('DIAGNOSTIC_RESULT=OVERLAP_HYPOTHESIS_CONFIRMED_BINARY_INTACT')
+          print('DIAGNOSTIC_RESULT=MISSING_PADDING_CONFIRMED_BINARY_INTACT')
           PY
 
           echo 'Diagnostic only: no git apply, commit, push, or branch update.'
