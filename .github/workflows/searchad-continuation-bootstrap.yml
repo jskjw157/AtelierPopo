@@ -1,4 +1,4 @@
-name: SearchAd continuation chunk subset diagnostic
+name: SearchAd continuation late-chunk permutation diagnostic
 
 on:
   push:
@@ -11,25 +11,24 @@ permissions:
   contents: read
 
 jobs:
-  search-subsets:
+  search-permutations:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      EXPECTED_B64_SHA256: 7c55eaf56e78b65acc12a821bf2d0db47e7a075dd8e412c5153693aa75f8eb44
     steps:
       - name: Checkout staging branch
         uses: actions/checkout@v4
 
-      - name: Exhaustively search order-preserving chunk subsets
+      - name: Search all late-chunk partial permutations by pinned hash
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          from itertools import permutations, combinations
           import hashlib
 
           expected = '7c55eaf56e78b65acc12a821bf2d0db47e7a075dd8e412c5153693aa75f8eb44'
-          names = [
+          fixed_names = [
               '.searchad-bootstrap/chunk-00',
               '.searchad-bootstrap/chunk-01',
               '.searchad-bootstrap/chunk-02',
@@ -38,6 +37,8 @@ jobs:
               '.searchad-bootstrap/chunk-05',
               '.searchad-bootstrap/chunk-06',
               '.searchad-bootstrap/chunk-07',
+          ]
+          late_names = [
               '.searchad-bootstrap/chunk-08a',
               '.searchad-bootstrap/chunk-08b',
               '.searchad-bootstrap/chunk-09a',
@@ -47,43 +48,43 @@ jobs:
               '.searchad-bootstrap/chunk-11a',
               '.searchad-bootstrap/chunk-11b',
           ]
-          blobs = [Path(name).read_bytes() for name in names]
+          fixed = b''.join(Path(n).read_bytes() for n in fixed_names)
+          late = {n: Path(n).read_bytes() for n in late_names}
           suffixes = [b'', b'=', b'==', b'\n']
-          found = []
+          base_state = hashlib.sha256(fixed)
           checked = 0
+          found = []
 
-          # DFS with hashlib state copies avoids rebuilding long prefixes at every leaf.
-          def walk(i, state, chosen, total_len):
-              global checked
-              if i == len(names):
-                  checked += 1
-                  for suffix in suffixes:
-                      h = state.copy()
-                      if suffix:
-                          h.update(suffix)
-                      if h.hexdigest() == expected:
-                          found.append((chosen.copy(), suffix, total_len + len(suffix)))
-                  return
-              walk(i + 1, state, chosen, total_len)
-              included = state.copy()
-              included.update(blobs[i])
-              chosen.append(names[i])
-              walk(i + 1, included, chosen, total_len + len(blobs[i]))
-              chosen.pop()
+          # Every ordered selection of 0..8 late chunks. Total ~109,601 sequences.
+          for k in range(0, len(late_names) + 1):
+              for chosen_set in combinations(late_names, k):
+                  for ordered in permutations(chosen_set):
+                      checked += 1
+                      h = base_state.copy()
+                      total = len(fixed)
+                      for name in ordered:
+                          h.update(late[name])
+                          total += len(late[name])
+                      for suffix in suffixes:
+                          hs = h.copy()
+                          hs.update(suffix)
+                          if hs.hexdigest() == expected:
+                              found.append((ordered, suffix, total + len(suffix)))
 
-          walk(0, hashlib.sha256(), [], 0)
-          print(f'CHECKED_SUBSETS={checked}')
+          print(f'CHECKED_ORDERED_SELECTIONS={checked}')
           print(f'MATCH_COUNT={len(found)}')
-          for idx, (chosen, suffix, total_len) in enumerate(found, 1):
-              print(f'MATCH_{idx}_LENGTH={total_len}')
+          for idx, (ordered, suffix, total) in enumerate(found, 1):
+              print(f'MATCH_{idx}_LENGTH={total}')
               print(f'MATCH_{idx}_SUFFIX={suffix!r}')
-              for name in chosen:
+              for name in fixed_names:
+                  print(f'MATCH_{idx}_PART={name}')
+              for name in ordered:
                   print(f'MATCH_{idx}_PART={name}')
 
           if found:
-              print('DIAGNOSTIC_RESULT=EXPECTED_HASH_RECONSTRUCTABLE_FROM_CURRENT_CHUNKS')
+              print('DIAGNOSTIC_RESULT=EXPECTED_HASH_RECONSTRUCTABLE_BY_LATE_PERMUTATION')
           else:
-              print('DIAGNOSTIC_RESULT=EXPECTED_HASH_NOT_AN_ORDER_PRESERVING_SUBSET')
+              print('DIAGNOSTIC_RESULT=EXPECTED_HASH_NOT_RECONSTRUCTABLE_FROM_CURRENT_LATE_CHUNKS')
           PY
 
           echo 'Diagnostic only: no decode, git apply, commit, push, ref update, or live SearchAd call.'
