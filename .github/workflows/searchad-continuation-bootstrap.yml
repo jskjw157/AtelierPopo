@@ -1,4 +1,4 @@
-name: SearchAd two-patch checkpoint diagnostic
+name: SearchAd continuation chunk subset diagnostic
 
 on:
   push:
@@ -11,96 +11,79 @@ permissions:
   contents: read
 
 jobs:
-  identify-checkpoint:
+  search-subsets:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     env:
-      BASE_SHA: 56abf47c1eeb8124fa9fb8f4f60b81e36376c109
-      EXPECTED_FIRST_TREE: 7ae8e35407de4b954d99f6fcb9b3f23e5e3e2045
+      EXPECTED_B64_SHA256: 7c55eaf56e78b65acc12a821bf2d0db47e7a075dd8e412c5153693aa75f8eb44
     steps:
       - name: Checkout staging branch
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Reassemble known-valid two-patch archive
+      - name: Exhaustively search order-preserving chunk subsets
         shell: bash
         run: |
           set -euo pipefail
-          parts=(
-            .searchad-bootstrap/chunk-00
-            .searchad-bootstrap/chunk-01
-            .searchad-bootstrap/chunk-02
-            .searchad-bootstrap/chunk-03
-            .searchad-bootstrap/chunk-04
-            .searchad-bootstrap/chunk-05
-            .searchad-bootstrap/chunk-06
-            .searchad-bootstrap/chunk-07
-            .searchad-bootstrap/chunk-08a
-            .searchad-bootstrap/chunk-08b
-            .searchad-bootstrap/chunk-09a
-            .searchad-bootstrap/chunk-10a
-            .searchad-bootstrap/chunk-11a
-          )
-          for p in "${parts[@]}"; do test -s "$p"; done
-          cat "${parts[@]}" > /tmp/searchad-two-patch.b64
-          echo "TWO_PATCH_B64_SHA256=$(sha256sum /tmp/searchad-two-patch.b64 | awk '{print $1}')"
-          base64 --decode /tmp/searchad-two-patch.b64 > /tmp/searchad-two-patch.tar.gz
-          echo "TWO_PATCH_TGZ_SHA256=$(sha256sum /tmp/searchad-two-patch.tar.gz | awk '{print $1}')"
-          mkdir -p /tmp/searchad-two-patch
-          tar -xzf /tmp/searchad-two-patch.tar.gz -C /tmp/searchad-two-patch
-          find /tmp/searchad-two-patch -maxdepth 2 -type f -print | sort
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
 
-      - name: Apply two patches from exact PR baseline without publishing
-        shell: bash
-        run: |
-          set -euo pipefail
-          git cat-file -e "$BASE_SHA^{commit}"
-          git reset --hard "$BASE_SHA"
-          git clean -fdx
+          expected = '7c55eaf56e78b65acc12a821bf2d0db47e7a075dd8e412c5153693aa75f8eb44'
+          names = [
+              '.searchad-bootstrap/chunk-00',
+              '.searchad-bootstrap/chunk-01',
+              '.searchad-bootstrap/chunk-02',
+              '.searchad-bootstrap/chunk-03',
+              '.searchad-bootstrap/chunk-04',
+              '.searchad-bootstrap/chunk-05',
+              '.searchad-bootstrap/chunk-06',
+              '.searchad-bootstrap/chunk-07',
+              '.searchad-bootstrap/chunk-08a',
+              '.searchad-bootstrap/chunk-08b',
+              '.searchad-bootstrap/chunk-09a',
+              '.searchad-bootstrap/chunk-09b',
+              '.searchad-bootstrap/chunk-10a',
+              '.searchad-bootstrap/chunk-10b',
+              '.searchad-bootstrap/chunk-11a',
+              '.searchad-bootstrap/chunk-11b',
+          ]
+          blobs = [Path(name).read_bytes() for name in names]
+          suffixes = [b'', b'=', b'==', b'\n']
+          found = []
+          checked = 0
 
-          p1="$(find /tmp/searchad-two-patch -type f -name '*56abf47*.patch' -print -quit)"
-          p2="$(find /tmp/searchad-two-patch -type f -name '*308_BASELINE*.patch' -print -quit)"
-          test -n "$p1" && test -n "$p2"
+          # DFS with hashlib state copies avoids rebuilding long prefixes at every leaf.
+          def walk(i, state, chosen, total_len):
+              global checked
+              if i == len(names):
+                  checked += 1
+                  for suffix in suffixes:
+                      h = state.copy()
+                      if suffix:
+                          h.update(suffix)
+                      if h.hexdigest() == expected:
+                          found.append((chosen.copy(), suffix, total_len + len(suffix)))
+                  return
+              walk(i + 1, state, chosen, total_len)
+              included = state.copy()
+              included.update(blobs[i])
+              chosen.append(names[i])
+              walk(i + 1, included, chosen, total_len + len(blobs[i]))
+              chosen.pop()
 
-          echo "PATCH1=$p1"
-          git apply --check "$p1"
-          git apply "$p1"
-          tree1="$(git write-tree)"
-          echo "TREE_AFTER_PATCH1=$tree1"
-          echo "EXPECTED_FIRST_TREE=$EXPECTED_FIRST_TREE"
-          test "$tree1" = "$EXPECTED_FIRST_TREE"
+          walk(0, hashlib.sha256(), [], 0)
+          print(f'CHECKED_SUBSETS={checked}')
+          print(f'MATCH_COUNT={len(found)}')
+          for idx, (chosen, suffix, total_len) in enumerate(found, 1):
+              print(f'MATCH_{idx}_LENGTH={total_len}')
+              print(f'MATCH_{idx}_SUFFIX={suffix!r}')
+              for name in chosen:
+                  print(f'MATCH_{idx}_PART={name}')
 
-          echo "PATCH2=$p2"
-          git apply --check "$p2"
-          git apply "$p2"
-          tree2="$(git write-tree)"
-          echo "TREE_AFTER_PATCH2=$tree2"
-          git diff --check
+          if found:
+              print('DIAGNOSTIC_RESULT=EXPECTED_HASH_RECONSTRUCTABLE_FROM_CURRENT_CHUNKS')
+          else:
+              print('DIAGNOSTIC_RESULT=EXPECTED_HASH_NOT_AN_ORDER_PRESERVING_SUBSET')
+          PY
 
-          echo 'KEY_FILES_AFTER_PATCH2_BEGIN'
-          find smartstore-bridge -type f \( -iname '*searchad*' -o -path '*/migrations/postgres/*' \) | sort | grep -E '(activation|canary|evidence|circuit|report|0008|0009|001[0-9])' || true
-          echo 'KEY_FILES_AFTER_PATCH2_END'
-
-          if [[ "$tree2" == 904b648* ]]; then
-            echo 'CHECKPOINT_RELATION=PATCH2_TREE_MATCHES_904b648_PREFIX'
-          else
-            echo 'CHECKPOINT_RELATION=PATCH2_TREE_DOES_NOT_MATCH_904b648_PREFIX'
-          fi
-
-      - name: Run recovered checkpoint regression without publishing
-        shell: bash
-        working-directory: smartstore-bridge
-        run: |
-          set -euo pipefail
-          npm ci
-          npm test
-
-      - name: Assert no publication occurred
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "DIAGNOSTIC_HEAD=$(git rev-parse HEAD)"
-          echo "DIAGNOSTIC_TREE=$(git write-tree)"
-          test "$(git rev-parse HEAD)" = "$BASE_SHA"
-          echo 'No commit, push, ref update, production deployment, or SearchAd live call is performed by this workflow.'
+          echo 'Diagnostic only: no decode, git apply, commit, push, ref update, or live SearchAd call.'
