@@ -180,7 +180,8 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     operationQueue.accepting = false;
     if (server.listening) await new Promise(resolve => server.close(() => resolve()));
     await operationQueue.close({ timeoutMs: httpConfig.shutdownTimeoutMs });
-    app.searchAdWriteRuntime?.close?.();
+    await app.searchAdActiveCanaryRuntime?.close?.();
+    await app.searchAdWriteRuntime?.close?.();
     app.ledger.close();
   }
 
@@ -207,6 +208,16 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
           activationMode: 'prevalidation',
           prevalidationGateTemporary: true,
           permanentWriteProhibition: false
+        }
+      },
+      searchAdActiveCanary: {
+        initialized: Boolean(app.searchAdActiveCanaryRuntime),
+        startupError: app.searchAdActiveCanaryStartupError || null,
+        status: app.searchAdActiveCanaryRuntime?.status?.() || {
+          enabled: false,
+          ready: false,
+          activationMode: 'prevalidation',
+          storage: { runtime: 'postgres', schemaReady: false }
         }
       },
       multiSourceCatalog: {
