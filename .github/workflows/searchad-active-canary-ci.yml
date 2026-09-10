@@ -7,6 +7,8 @@ on:
     paths:
       - 'smartstore-bridge/src/naver/searchad/canary/**'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
+      - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
+      - 'smartstore-bridge/migrations/postgres/**'
       - '.github/workflows/searchad-active-canary-ci.yml'
   pull_request:
     branches:
@@ -14,6 +16,8 @@ on:
     paths:
       - 'smartstore-bridge/src/naver/searchad/canary/**'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
+      - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
+      - 'smartstore-bridge/migrations/postgres/**'
       - '.github/workflows/searchad-active-canary-ci.yml'
 
 permissions:
@@ -36,3 +40,36 @@ jobs:
       - name: Active Canary contract tests
         working-directory: smartstore-bridge
         run: node --test test/searchad-active-canary-service.test.js
+
+  active-canary-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: atelier_canary_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d atelier_canary_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_canary_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: smartstore-bridge/package-lock.json
+      - name: Install dependencies
+        working-directory: smartstore-bridge
+        run: npm ci --no-audit --no-fund
+      - name: PostgreSQL Active Canary persistence contract
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-active-canary.integration.test.js
