@@ -1,4 +1,4 @@
-name: SearchAd continuation bootstrap
+name: SearchAd continuation bundle diagnostic
 
 on:
   push:
@@ -9,25 +9,20 @@ on:
       - '.github/workflows/searchad-continuation-bootstrap.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  verify-apply-test-publish:
+  diagnose-bundle:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     env:
-      BASE_SHA: 56abf47c1eeb8124fa9fb8f4f60b81e36376c109
       EXPECTED_B64_SHA256: 7c55eaf56e78b65acc12a821bf2d0db47e7a075dd8e412c5153693aa75f8eb44
       EXPECTED_TGZ_SHA256: ce87f97bef1b39e5c566e8c1441cd1186ddc883feb354ab999c20ff485db1eaf
-      EXPECTED_CANARY_TREE: 7ae8e35407de4b954d99f6fcb9b3f23e5e3e2045
-      TARGET_BRANCH: codex/searchad-continuation-20260909
     steps:
       - name: Checkout staging branch
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Reassemble and verify immutable bundle
+      - name: Diagnose immutable bundle transport only
         shell: bash
         run: |
           set -euo pipefail
@@ -52,58 +47,46 @@ jobs:
           for p in "${parts[@]}"; do
             test -s "$p" || { echo "missing bootstrap part: $p" >&2; exit 1; }
           done
-          cat "${parts[@]}" > /tmp/searchad-patches.tar.gz.b64
-          printf '%s  %s\n' "$EXPECTED_B64_SHA256" /tmp/searchad-patches.tar.gz.b64 | sha256sum -c -
-          base64 --decode /tmp/searchad-patches.tar.gz.b64 > /tmp/searchad-patches.tar.gz
-          printf '%s  %s\n' "$EXPECTED_TGZ_SHA256" /tmp/searchad-patches.tar.gz | sha256sum -c -
-          mkdir -p /tmp/searchad-patches
-          tar -xzf /tmp/searchad-patches.tar.gz -C /tmp/searchad-patches
-          find /tmp/searchad-patches -maxdepth 2 -type f -print | sort
 
-      - name: Apply exact checkpoint patches from exact PR baseline
+          cat "${parts[@]}" > /tmp/searchad-patches.raw.b64
+          tr -d '\r\n\t ' < /tmp/searchad-patches.raw.b64 > /tmp/searchad-patches.normalized.b64
+
+          raw_bytes="$(wc -c < /tmp/searchad-patches.raw.b64 | tr -d ' ')"
+          normalized_bytes="$(wc -c < /tmp/searchad-patches.normalized.b64 | tr -d ' ')"
+          whitespace_bytes="$((raw_bytes - normalized_bytes))"
+          raw_sha="$(sha256sum /tmp/searchad-patches.raw.b64 | awk '{print $1}')"
+          normalized_sha="$(sha256sum /tmp/searchad-patches.normalized.b64 | awk '{print $1}')"
+
+          echo "RAW_B64_BYTES=$raw_bytes"
+          echo "NORMALIZED_B64_BYTES=$normalized_bytes"
+          echo "TRANSPORT_WHITESPACE_BYTES=$whitespace_bytes"
+          echo "RAW_B64_SHA256=$raw_sha"
+          echo "NORMALIZED_B64_SHA256=$normalized_sha"
+          echo "EXPECTED_B64_SHA256=$EXPECTED_B64_SHA256"
+
+          base64 --decode /tmp/searchad-patches.normalized.b64 > /tmp/searchad-patches.tar.gz
+          tgz_bytes="$(wc -c < /tmp/searchad-patches.tar.gz | tr -d ' ')"
+          tgz_sha="$(sha256sum /tmp/searchad-patches.tar.gz | awk '{print $1}')"
+          echo "TGZ_BYTES=$tgz_bytes"
+          echo "TGZ_SHA256=$tgz_sha"
+          echo "EXPECTED_TGZ_SHA256=$EXPECTED_TGZ_SHA256"
+
+          echo 'BUNDLE_MEMBERS_BEGIN'
+          tar -tzf /tmp/searchad-patches.tar.gz | sort
+          echo 'BUNDLE_MEMBERS_END'
+
+          if [ "$tgz_sha" != "$EXPECTED_TGZ_SHA256" ]; then
+            echo 'DIAGNOSTIC_RESULT=TGZ_MISMATCH_DO_NOT_APPLY' >&2
+            exit 1
+          fi
+          if [ "$normalized_sha" = "$EXPECTED_B64_SHA256" ]; then
+            echo 'DIAGNOSTIC_RESULT=WHITESPACE_ONLY_TRANSPORT_MUTATION'
+          else
+            echo 'DIAGNOSTIC_RESULT=BINARY_INTACT_WRAPPER_DIFFERS'
+          fi
+
+      - name: Assert diagnostic has no publication capability
         shell: bash
         run: |
           set -euo pipefail
-          git cat-file -e "$BASE_SHA^{commit}"
-          git reset --hard "$BASE_SHA"
-          git clean -fdx
-
-          p1="$(find /tmp/searchad-patches -type f -name '*56abf47*.patch' -print -quit)"
-          p2="$(find /tmp/searchad-patches -type f -name '*308_BASELINE*.patch' -print -quit)"
-          p3="$(find /tmp/searchad-patches -type f -name '*904b648*.patch' -print -quit)"
-          test -n "$p1" && test -n "$p2" && test -n "$p3"
-
-          git apply --check "$p1"
-          git apply "$p1"
-          test "$(git write-tree)" = "$EXPECTED_CANARY_TREE"
-
-          git apply --check "$p2"
-          git apply "$p2"
-
-          git apply --check "$p3"
-          git apply "$p3"
-
-          git diff --check
-          echo "FINAL_TREE=$(git write-tree)" >> "$GITHUB_ENV"
-          git status --short
-
-      - name: Fresh install and full regression
-        shell: bash
-        working-directory: smartstore-bridge
-        run: |
-          set -euo pipefail
-          npm ci
-          npm test
-
-      - name: Commit verified checkpoint as a clean descendant of PR head
-        shell: bash
-        run: |
-          set -euo pipefail
-          git status --short
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'feat(searchad): publish validated activation through automation checkpoint'
-          test "$(git rev-parse HEAD^1)" = "$BASE_SHA"
-          test "$(git rev-parse HEAD^{tree})" = "$FINAL_TREE"
-          git push --force-with-lease origin "HEAD:refs/heads/$TARGET_BRANCH"
+          echo 'Diagnostic workflow intentionally performs no git apply, commit, push, or branch update.'
