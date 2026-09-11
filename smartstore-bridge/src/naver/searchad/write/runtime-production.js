@@ -27,6 +27,10 @@ export function createProductionSearchAdWriteRuntime({ gateway, activationGuard 
     planService,
     approvalService,
     executionService,
+    setOwnershipGuard(nextOwnershipGuard) {
+      executionService.ownershipGuard = nextOwnershipGuard || null;
+      return Boolean(executionService.ownershipGuard?.assertMutationNotCanaryOwned);
+    },
     status() {
       return {
         featureVersion: '0.7.0',
@@ -37,7 +41,7 @@ export function createProductionSearchAdWriteRuntime({ gateway, activationGuard 
         allowReconcile: config.allowReconcile,
         activationMode: config.initialActivationMode,
         activationGuardReady: Boolean(activationGuard?.assertMutationAllowed),
-        ownershipGuardReady: Boolean(ownershipGuard?.assertMutationNotCanaryOwned),
+        ownershipGuardReady: Boolean(executionService.ownershipGuard?.assertMutationNotCanaryOwned),
         storage: {
           runtime: 'sqlite',
           postgresSchemaAvailable: true,
