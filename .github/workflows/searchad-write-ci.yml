@@ -43,17 +43,25 @@ jobs:
       ATELIER_POSTGRES_SSL_MODE: disable
     steps:
       - uses: actions/checkout@v4
-      - name: Stage 0007 original blobs and baseline preservation
+      - name: Stage 0007 core and wiring provenance plus baseline preservation
         if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
         run: |
           set -euo pipefail
           baseline=0adbd11359440efe43fd07c279bd01a4d8914568
           git fetch --no-tags --depth=1 origin "$baseline"
+          # Each additional exception below is checked against its exact historical
+          # blob in ORIGINAL_BLOBS. No exception applies to the async write subsystem.
           git diff --exit-code "$baseline" HEAD -- \
             package.json package-lock.json \
             smartstore-bridge/package.json smartstore-bridge/package-lock.json \
             smartstore-bridge/src \
             ':(exclude)smartstore-bridge/src/naver/searchad/canary/**' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/gateway.js' \
+            ':(exclude)smartstore-bridge/src/bootstrap-v05.js' \
+            ':(exclude)smartstore-bridge/src/http/server-v05.js' \
+            ':(exclude)smartstore-bridge/src/http/searchad-access-control.js' \
+            ':(exclude)smartstore-bridge/src/http/routes-searchad-canary.js' \
+            ':(exclude)smartstore-bridge/src/http/openapi-searchad-canary.js' \
             'smartstore-bridge/migrations/postgres/000[1-6]_*.sql'
           while read -r expected source; do
             actual=$(git hash-object "$source")
@@ -69,6 +77,12 @@ jobs:
           b1e4f6face0ecc8fece48779bb70fb354f64f710 smartstore-bridge/src/naver/searchad/canary/remote-adapter.js
           6233bd56e73d84820bbebba8d561fab4013edfaa smartstore-bridge/src/naver/searchad/canary/runtime-production.js
           56a7856e067a5ec2e665da7ba06f0ac052f86177 smartstore-bridge/migrations/postgres/0007_searchad_active_canary.sql
+          0ce28568d406119369b2156bd1d87c49a32e8e5d smartstore-bridge/src/naver/searchad/gateway.js
+          c3c6fb479c4d6fac279ecc8f30276092b44d9572 smartstore-bridge/src/bootstrap-v05.js
+          6fe63d8981c7d818f55b2a6a78bf3c9a0b9ea9f9 smartstore-bridge/src/http/server-v05.js
+          7524eab3ebd31bb63bb34c4d58fc66b47cfff4e5 smartstore-bridge/src/http/searchad-access-control.js
+          c89df83aa2d24ead36980b6e407df63ac188452e smartstore-bridge/src/http/routes-searchad-canary.js
+          aaf96f35a39f3e16696a528dec217b4025f9fbb8 smartstore-bridge/src/http/openapi-searchad-canary.js
           ORIGINAL_BLOBS
       - uses: actions/setup-node@v4
         with:
@@ -87,12 +101,15 @@ jobs:
           node --check src/http/errors-v05.js
           node --check src/http/openapi-searchad-write.js
           node --check scripts/searchad-write-safety.mjs
-      - name: Restored Active Canary syntax and focused contracts
+      - name: Restored Canary gateway HTTP and core contracts
         if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
         working-directory: smartstore-bridge
         run: |
           find src/naver/searchad/canary -name '*.js' -print0 | xargs -0 -n1 node --check
-          node --test test/searchad-active-canary-*.test.js
+          node --check src/http/searchad-access-control.js
+          node --check src/http/routes-searchad-canary.js
+          node --check src/http/openapi-searchad-canary.js
+          node --test test/searchad-active-canary-*.test.js test/searchad-gateway-active-canary.test.js test/searchad-http-access.test.js test/searchad-http-canary-*.test.js
       - name: Existing static checks
         working-directory: smartstore-bridge
         run: npm run check
@@ -104,12 +121,12 @@ jobs:
         run: |
           test -n "$TEST_DATABASE_URL"
           node --test test/postgres-*.integration.test.js
-      - name: Repeated Active Canary PostgreSQL contract
+      - name: Repeated Canary PostgreSQL contracts including real gateway composition
         if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
         working-directory: smartstore-bridge
         run: |
           test -n "$TEST_DATABASE_URL"
-          node --test test/postgres-searchad-active-canary.integration.test.js
+          node --test test/postgres-searchad-active-canary.integration.test.js test/postgres-searchad-canary-wiring.integration.test.js
       - name: Full regression test suite
         working-directory: smartstore-bridge
         run: npm test
