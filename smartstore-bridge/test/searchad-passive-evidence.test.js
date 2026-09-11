@@ -35,7 +35,7 @@ function capabilityFixture() {
   return { service, getExecuteCount: () => executeCount };
 }
 
-function evidenceFixture({ probeSupported = true, invalidTargetOperationKey = null } = {}) {
+function evidenceFixture({ probeSupported = true, invalidTargetOperationKey = null, targetTierOverride = null } = {}) {
   let probeCount = 0;
   const stored = [];
   const targetScope = productionRecipe.STOPPED_WEB_SITE_CANARY_PASSIVE_SCOPE;
@@ -46,7 +46,7 @@ function evidenceFixture({ probeSupported = true, invalidTargetOperationKey = nu
         operationKey,
         runtimeAllowlisted: valid,
         state: valid ? 'public_documented' : 'internal_quarantined',
-        tier: valid ? 'B' : 'D'
+        tier: valid ? (targetTierOverride || 'B') : 'D'
       };
     }
   };
@@ -211,4 +211,12 @@ test('failed Passive probe or invalid target descriptor creates failed evidence,
   const targetEvidence = await invalidTarget.service.issue({ customerId: '100' }, operatorContext);
   assert.equal(targetEvidence.result, 'failed');
   assert.equal(targetEvidence.details.targetValidation.every(item => item.operationKey !== invalidOperationKey || item.verified === false), true);
+});
+
+test('Passive evidence accepts only public documented tier B target descriptors', async () => {
+  const f = evidenceFixture({ targetTierOverride: 'A' });
+  const evidence = await f.service.issue({ customerId: '100' }, operatorContext);
+
+  assert.equal(evidence.result, 'failed');
+  assert.equal(evidence.details.targetValidation.every(item => item.verified === false), true);
 });
