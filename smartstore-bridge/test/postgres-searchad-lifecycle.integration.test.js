@@ -28,10 +28,10 @@ test('PostgreSQL lifecycle schema 0009 is additive, idempotent, scoped and audit
   const eventId = randomUUID();
   try {
     const first = await runPostgresMigrations({ pool, migrationsDir });
-    assert.equal(first.currentVersion, '0009');
+    assert.equal(first.currentVersion, '0010');
     const second = await runPostgresMigrations({ pool, migrationsDir });
     assert.deepEqual(second.applied, []);
-    assert.equal(second.currentVersion, '0009');
+    assert.equal(second.currentVersion, '0010');
 
     const tables = await pool.query(`
       SELECT table_name FROM information_schema.tables
