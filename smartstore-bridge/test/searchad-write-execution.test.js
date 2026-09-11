@@ -87,7 +87,7 @@ async function approvedPlan(h, { bidAmt = 500 } = {}) {
       expectedBefore: { bidAmt: 300 }
     }
   });
-  const approval = h.approvalService.approve(plan.plan_id, {
+  const approval = await h.approvalService.approve(plan.plan_id, {
     actor: 'approver',
     confirmation: SEARCHAD_APPROVAL_CONFIRMATION
   });
