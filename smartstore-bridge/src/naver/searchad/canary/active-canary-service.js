@@ -26,6 +26,10 @@ function includesAll(actual = [], required = []) {
   return (required || []).every(value => values.has(String(value)));
 }
 
+function hasVerifiedSpendBaseline(value) {
+  return value !== null && value !== undefined && Number.isFinite(Number(value)) && Number(value) >= 0;
+}
+
 function normalizePrincipal(principal = {}) {
   return {
     principalId: String(principal?.principalId || '').trim(),
@@ -453,7 +457,7 @@ export class ActiveCanaryService {
 
     const snapshot = await this.readCampaignForRecovery({ ...run, remoteId });
     if (this.recipe.assertCleanup(snapshot)) {
-      if (!Number.isFinite(Number(run.beforeSpend))) {
+      if (!hasVerifiedSpendBaseline(run.beforeSpend)) {
         await this.addEvent(run, {
           phase: 'reconcile',
           status: 'cleanup_verified_spend_baseline_missing',
@@ -521,7 +525,7 @@ export class ActiveCanaryService {
       );
     }
 
-    if (!Number.isFinite(Number(run.beforeSpend))) {
+    if (!hasVerifiedSpendBaseline(run.beforeSpend)) {
       const cleanupVerifiedAt = nowIso(this.clock);
       if (typeof this.repository.updateObject === 'function') {
         await this.repository.updateObject(run.canaryRunId, remoteId, {
