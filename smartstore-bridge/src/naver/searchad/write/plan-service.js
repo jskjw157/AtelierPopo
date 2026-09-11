@@ -98,8 +98,8 @@ export class SearchAdChangePlanService {
       created_at: iso(nowMs),
       expires_at: iso(nowMs + ttlSeconds * 1000)
     };
-    const stored = this.repository.createPlan(plan);
-    this.repository.addAttempt({
+    const stored = await this.repository.createPlan(plan);
+    await this.repository.addAttempt({
       attempt_id: randomUUID(),
       plan_id: plan.plan_id,
       phase: 'plan',
@@ -112,13 +112,13 @@ export class SearchAdChangePlanService {
     return stored;
   }
 
-  get(planId) {
-    const plan = this.repository.getPlan(planId);
+  async get(planId) {
+    const plan = await this.repository.getPlan(planId);
     if (!plan) throw new SearchAdWriteError('SEARCHAD_CHANGE_PLAN_NOT_FOUND', 'SearchAd 변경 계획을 찾을 수 없습니다.', { planId }, 404);
-    return { ...plan, attempts: this.repository.listAttempts(planId) };
+    return { ...plan, attempts: await this.repository.listAttempts(planId) };
   }
 
-  list(filters = {}) {
+  async list(filters = {}) {
     return this.repository.listPlans(filters);
   }
 }
