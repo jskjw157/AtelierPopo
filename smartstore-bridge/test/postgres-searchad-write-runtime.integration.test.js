@@ -1,0 +1,104 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { createPostgresPool, closePostgresPool } from '../src/infrastructure/postgres/pool.js';
+import { runPostgresMigrations } from '../src/infrastructure/postgres/migrator.js';
+import { PostgresSearchAdWriteRepository } from '../src/naver/searchad/write/postgres-repository.js';
+
+async function resetSearchAdWriteTables(pool) {
+  await pool.query(`
+    TRUNCATE TABLE
+      searchad_write_attempts,
+      searchad_write_approvals,
+      searchad_write_locks,
+      searchad_write_change_plans
+    RESTART IDENTITY CASCADE
+  `);
+}
+
+function fixturePlan(planId, now = Date.now()) {
+  return {
+    plan_id: planId,
+    customer_id: 'customer-postgres-runtime',
+    mutation_operation_key: 'PUT:/ncc/campaigns/{nccCampaignId}#fields',
+    mutation_json: { operationKey: 'PUT:/ncc/campaigns/{nccCampaignId}#fields', pathParams: { nccCampaignId: 'cmp-1' }, body: { userLock: true } },
+    read_json: { operationKey: 'GET:/ncc/campaigns/{nccCampaignId}', pathParams: { nccCampaignId: 'cmp-1' }, extractPath: '' },
+    before_json: { nccCampaignId: 'cmp-1', userLock: false },
+    before_hash: 'a'.repeat(64),
+    expected_after_json: { userLock: true },
+    rollback_json: null,
+    reason: 'PostgreSQL runtime repository integration test',
+    status: 'planned',
+    created_by: 'integration-test',
+    created_at: new Date(now).toISOString(),
+    expires_at: new Date(now + 10 * 60_000).toISOString()
+  };
+}
+
+test('PostgreSQL SearchAd write repository durably persists plans approvals and attempts', async t => {
+  const url = process.env.TEST_DATABASE_URL;
+  if (!url) return t.skip('TEST_DATABASE_URL is required');
+
+  const pool = createPostgresPool({ connectionString: url, sslMode: 'disable' });
+  try {
+    await runPostgresMigrations({ pool, migrationsDir: path.resolve('migrations/postgres') });
+    await resetSearchAdWriteTables(pool);
+
+    const repository = new PostgresSearchAdWriteRepository({ pool });
+    const planId = randomUUID();
+    const now = Date.now();
+    const created = await repository.createPlan(fixturePlan(planId, now));
+    assert.equal(created.plan_id, planId);
+    assert.equal(created.status, 'planned');
+    assert.deepEqual(created.before_json, { nccCampaignId: 'cmp-1', userLock: false });
+
+    const approvalId = randomUUID();
+    const tokenHash = 'b'.repeat(64);
+    await repository.createApproval({
+      approval_id: approvalId,
+      plan_id: planId,
+      actor: 'approver',
+      confirmation: 'APPROVE_SEARCHAD_CHANGE',
+      token_hash: tokenHash,
+      created_at: new Date(now).toISOString(),
+      expires_at: new Date(now + 5 * 60_000).toISOString()
+    });
+
+    const claimed = await repository.claimApproval({
+      planId,
+      tokenHash,
+      now: new Date(now + 1_000).toISOString()
+    });
+    assert.equal(claimed.approval_id, approvalId);
+    assert.equal(typeof claimed.used_at, 'string');
+    await assert.rejects(
+      repository.claimApproval({ planId, tokenHash, now: new Date(now + 2_000).toISOString() }),
+      error => error?.code === 'SEARCHAD_EXECUTION_TOKEN_USED'
+    );
+
+    const attemptId = randomUUID();
+    await repository.addAttempt({
+      attempt_id: attemptId,
+      plan_id: planId,
+      phase: 'execute',
+      status: 'remote_accepted',
+      request_fingerprint: 'c'.repeat(64),
+      request_json: { operationKey: created.mutation_operation_key },
+      response_json: { ok: true },
+      remote_request_id: 'request-1',
+      created_at: new Date(now + 3_000).toISOString()
+    });
+
+    const reopened = new PostgresSearchAdWriteRepository({ pool });
+    const durablePlan = await reopened.getPlan(planId);
+    const attempts = await reopened.listAttempts(planId);
+    assert.equal(durablePlan.plan_id, planId);
+    assert.equal(attempts.length, 1);
+    assert.equal(attempts[0].attempt_id, attemptId);
+    assert.deepEqual(attempts[0].response_json, { ok: true });
+  } finally {
+    await resetSearchAdWriteTables(pool).catch(() => {});
+    await closePostgresPool(pool);
+  }
+});
