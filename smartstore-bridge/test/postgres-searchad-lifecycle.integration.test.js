@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 
 import { createPostgresPool, closePostgresPool } from '../src/infrastructure/postgres/pool.js';
 import { runPostgresMigrations } from '../src/infrastructure/postgres/migrator.js';
+import { PostgresSearchAdLifecycleRepository } from '../src/naver/searchad/lifecycle/postgres-repository.js';
 
 const migrationsDir = path.resolve('migrations/postgres');
 
@@ -94,6 +95,140 @@ test('PostgreSQL lifecycle schema 0009 is additive, idempotent, scoped and audit
     await assert.rejects(
       () => pool.query('DELETE FROM searchad_hierarchy_events WHERE event_id=$1', [eventId]),
       { code: 'P0001' }
+    );
+  } finally {
+    await closePostgresPool(pool);
+  }
+});
+
+test('hierarchy repository survives restart and enforces Customer-scoped returned-ID ownership', async t => {
+  if (!process.env.TEST_DATABASE_URL) return t.skip('TEST_DATABASE_URL is required');
+  const pool = createPostgresPool({ connectionString: process.env.TEST_DATABASE_URL, sslMode: 'disable' });
+  const customerId = `repo-${randomUUID()}`;
+  const otherCustomerId = `other-${randomUUID()}`;
+  const runId = randomUUID();
+  const campaignObjectId = randomUUID();
+  const adgroupObjectId = randomUUID();
+  const ownershipId = randomUUID();
+  const now = new Date().toISOString();
+  try {
+    await runPostgresMigrations({ pool, migrationsDir });
+    const repo = new PostgresSearchAdLifecycleRepository({ pool });
+
+    await repo.createRun({
+      hierarchyRunId: runId,
+      customerId,
+      recipeId: 'hierarchy_v1',
+      status: 'created',
+      startedByPrincipalId: 'admin-repository',
+      specSha: 'spec-repository',
+      credentialFingerprint: 'cred-repository',
+      upstreamBaseUrl: 'https://api.searchad.naver.com',
+      startedAt: now
+    });
+
+    await repo.createObject({
+      hierarchyObjectId: campaignObjectId,
+      hierarchyRunId: runId,
+      customerId,
+      objectType: 'campaign',
+      createOperationKey: 'campaign.create',
+      readOperationKey: 'campaign.read',
+      deleteOperationKey: 'campaign.delete',
+      state: 'planned',
+      createdAt: now,
+      updatedAt: now
+    });
+    await repo.updateObject(campaignObjectId, {
+      remoteId: 'returned-campaign-id',
+      state: 'owned',
+      updatedAt: now
+    });
+    await repo.holdOwnership({
+      ownershipId,
+      customerId,
+      objectType: 'campaign',
+      remoteId: 'returned-campaign-id',
+      ownerKind: 'hierarchy_canary',
+      ownerRunId: runId,
+      hierarchyObjectId: campaignObjectId,
+      createdOperationKey: 'campaign.create',
+      state: 'owned',
+      createdAt: now,
+      updatedAt: now
+    });
+
+    await repo.createObject({
+      hierarchyObjectId: adgroupObjectId,
+      hierarchyRunId: runId,
+      customerId,
+      objectType: 'adgroup',
+      parentObjectId: campaignObjectId,
+      createOperationKey: 'adgroup.create',
+      readOperationKey: 'adgroup.read',
+      deleteOperationKey: 'adgroup.delete',
+      state: 'planned',
+      createdAt: now,
+      updatedAt: now
+    });
+    await repo.addEvent({
+      eventId: randomUUID(),
+      hierarchyRunId: runId,
+      hierarchyObjectId: campaignObjectId,
+      customerId,
+      phase: 'campaign_create',
+      status: 'remote_accepted',
+      operationKey: 'campaign.create',
+      lifecycleKind: 'create',
+      requestId: 'request-repository',
+      details: { safe: true },
+      createdAt: now
+    });
+
+    const liveChildren = await repo.listLiveChildren(campaignObjectId);
+    assert.deepEqual(liveChildren.map(item => item.hierarchyObjectId), [adgroupObjectId]);
+
+    const restarted = new PostgresSearchAdLifecycleRepository({ pool });
+    const recoveredRun = await restarted.getRun(runId, customerId);
+    assert.equal(recoveredRun.customerId, customerId);
+    assert.equal(recoveredRun.status, 'created');
+
+    const recoveredObject = await restarted.getObject(campaignObjectId, customerId);
+    assert.equal(recoveredObject.remoteId, 'returned-campaign-id');
+    assert.equal(recoveredObject.state, 'owned');
+
+    const ownership = await restarted.getOwnership({
+      customerId,
+      objectType: 'campaign',
+      remoteId: 'returned-campaign-id'
+    });
+    assert.equal(ownership.ownerRunId, runId);
+    assert.equal(ownership.hierarchyObjectId, campaignObjectId);
+    assert.equal(await restarted.getOwnership({
+      customerId: otherCustomerId,
+      objectType: 'campaign',
+      remoteId: 'returned-campaign-id'
+    }), null);
+
+    const events = await restarted.listEvents(runId, customerId);
+    assert.equal(events.length, 1);
+    assert.deepEqual(events[0].details, { safe: true });
+
+    await assert.rejects(
+      () => restarted.holdOwnership({
+        ownershipId: randomUUID(),
+        customerId,
+        objectType: 'campaign',
+        remoteId: 'returned-campaign-id',
+        ownerKind: 'hierarchy_canary',
+        ownerRunId: runId,
+        hierarchyObjectId: campaignObjectId,
+        createdOperationKey: 'campaign.create',
+        state: 'owned',
+        createdAt: now,
+        updatedAt: now
+      }),
+      error => error?.code === '23505'
     );
   } finally {
     await closePostgresPool(pool);
