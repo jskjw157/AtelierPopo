@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { loadSearchAdConfig } from '../src/naver/searchad/config.js';
 import { SearchAdOperationGateway } from '../src/naver/searchad/gateway.js';
 import { SEARCHAD_REPORTING_OPERATIONS } from '../src/naver/searchad/reporting/operations.js';
 
@@ -99,6 +100,14 @@ function makeGateway({ allowReportingJobs = true, mutateOperation } = {}) {
     requests
   };
 }
+
+test('reporting jobs gate defaults OFF independently of all ad mutation gates', () => {
+  const config = loadSearchAdConfig({});
+  assert.equal(config.allowReportingJobs, false);
+  assert.equal(config.allowCreates, false);
+  assert.equal(config.allowWrites, false);
+  assert.equal(config.allowDeletes, false);
+});
 
 test('ordinary gateway execute stays blocked for report POST when global create gate is OFF', async () => {
   const { gateway, requests } = makeGateway();
