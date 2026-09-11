@@ -25,6 +25,7 @@ import { createDriveRoutes } from './routes-drive.js';
 import { createCommerceRoutes } from './routes-commerce.js';
 import { createSearchAdRoutes } from './routes-searchad.js';
 import { createSearchAdWriteRoutesV3 } from './routes-searchad-write-v3.js';
+import { createSearchAdCanaryRoutes } from './routes-searchad-canary.js';
 import { createMultiSourceCatalogRoutes } from './routes-multi-source-catalog.js';
 import { HttpError } from './errors.js';
 
@@ -80,6 +81,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createCommerceRoutes(routeContext),
     ...createSearchAdRoutes(routeContext),
     ...createSearchAdWriteRoutesV3(routeContext),
+    ...createSearchAdCanaryRoutes(routeContext),
     ...createMultiSourceCatalogRoutes(routeContext)
   ];
 
