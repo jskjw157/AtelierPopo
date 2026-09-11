@@ -5,8 +5,18 @@ import {
   validateReportDownloadUrl,
   SearchAdReportDownloadAdapter
 } from '../src/naver/searchad/reporting/download-adapter.js';
+import { NaverSearchAdClient } from '../src/naver/searchad/client.js';
+import { SearchAdCredentialsRegistry } from '../src/naver/searchad/auth.js';
 
 const UPSTREAM = 'https://api.searchad.naver.com';
+
+function credentialsRegistry() {
+  return new SearchAdCredentialsRegistry({
+    principals: [{ principalId: 'p', accessLicense: 'license', secretKey: 'secret', status: 'active' }],
+    customers: [{ customerId: '100', status: 'active' }],
+    grants: [{ principalId: 'p', customerId: '100', role: 'operator' }]
+  });
+}
 
 test('report download URL accepts only HTTPS current upstream exact origin and /report-download path', () => {
   const valid = validateReportDownloadUrl(
@@ -92,6 +102,35 @@ test('download adapter signs only normalized /report-download via SearchAd clien
   assert.equal(result.byteLength, bytes.length);
   assert.equal(result.contentType, 'text/csv');
   assert.equal(result.requestId, 'download-req-1');
+});
+
+test('NaverSearchAdClient forwards manual redirect mode and returns 3xx metadata without auto-follow', async () => {
+  let captured;
+  const client = new NaverSearchAdClient({
+    baseUrl: UPSTREAM,
+    credentialsRegistry: credentialsRegistry(),
+    clock: () => 1700000000000,
+    fetchImpl: async (url, options) => {
+      captured = { url: String(url), options };
+      return new Response('', {
+        status: 302,
+        headers: { location: 'https://evil.example/steal' }
+      });
+    }
+  });
+
+  const response = await client.request({
+    customerId: '100',
+    method: 'GET',
+    path: '/report-download',
+    query: { reportJobId: '123' },
+    responseType: 'arrayBuffer',
+    retrySafe: true,
+    redirect: 'manual'
+  });
+  assert.equal(captured.options.redirect, 'manual');
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.location, 'https://evil.example/steal');
 });
 
 test('download adapter enforces content-length/body size and rejects redirects instead of following them', async () => {
