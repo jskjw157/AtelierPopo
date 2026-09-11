@@ -40,7 +40,6 @@
     "@modelcontextprotocol/server": "2.0.0",
     "bcryptjs": "^3.0.3",
     "pg": "^8.16.0",
-    "sharp": "^0.35.3",
     "zod": "^4.4.3"
   }
 }
