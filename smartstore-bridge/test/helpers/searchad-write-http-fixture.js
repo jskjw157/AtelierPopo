@@ -13,6 +13,7 @@ import { createHttpApiV05 } from '../../src/http/server-v05.js';
 
 export const API_KEY = 'fixture-http-key-'.repeat(4);
 export const CUSTOMER_ID = '1001';
+export const OUTSIDER_CUSTOMER_ID = '2002';
 export const SEARCHAD_ROLE_KEYS = Object.freeze({
   reader: 'fixture-searchad-reader-key-'.repeat(2),
   operator: 'fixture-searchad-operator-key-'.repeat(2),
@@ -112,8 +113,8 @@ export async function startWriteFixture(t, { masterWrites = true, searchAdWrites
     ATELIER_SEARCHAD_EXECUTOR_CUSTOMERS: CUSTOMER_ID,
     ATELIER_SEARCHAD_EXECUTOR_PRINCIPAL_ID: 'fixture-executor',
     ATELIER_SEARCHAD_ADMIN_API_KEY: SEARCHAD_ROLE_KEYS.admin,
-    ATELIER_SEARCHAD_ADMIN_CUSTOMERS: CUSTOMER_ID,
-    ATELIER_SEARCHAD_ADMIN_PRINCIPAL_ID: 'fixture-admin'
+    ATELIER_SEARCHAD_ADMIN_CUSTOMERS: OUTSIDER_CUSTOMER_ID,
+    ATELIER_SEARCHAD_ADMIN_PRINCIPAL_ID: 'fixture-admin-outsider'
   };
   const api = createHttpApiV05({ app, env, logger });
   const address = await api.listen({ host: '127.0.0.1', port: 0 });
