@@ -254,5 +254,33 @@ export class PostgresSearchAdWriteRepository {
     return result.rows.map(hydrate);
   }
 
+  async tryAcquireLock({ planId, purpose, acquiredAt, staleBefore }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM searchad_write_locks WHERE acquired_at < $1::timestamptz', [staleBefore]);
+      const result = await client.query(`
+        INSERT INTO searchad_write_locks (plan_id, purpose, acquired_at)
+        VALUES ($1, $2, $3::timestamptz)
+        ON CONFLICT (plan_id, purpose) DO NOTHING
+        RETURNING plan_id
+      `, [planId, purpose, acquiredAt]);
+      await client.query('COMMIT');
+      return result.rowCount === 1;
+    } catch (error) {
+      await rollbackQuietly(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async releaseLock({ planId, purpose }) {
+    await this.pool.query(
+      'DELETE FROM searchad_write_locks WHERE plan_id = $1 AND purpose = $2',
+      [planId, purpose]
+    );
+  }
+
   async close() {}
 }
