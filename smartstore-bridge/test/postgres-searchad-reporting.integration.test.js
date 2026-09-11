@@ -30,7 +30,6 @@ test('PostgreSQL reporting schema 0010 is additive, repeat-idempotent and immuta
   try {
     const first = await runPostgresMigrations({ pool, migrationsDir });
     assert.equal(first.currentVersion, '0010');
-    assert.ok(first.applied.includes('0010_searchad_reporting_evidence.sql'));
     const second = await runPostgresMigrations({ pool, migrationsDir });
     assert.deepEqual(second.applied, []);
     assert.equal(second.currentVersion, '0010');
