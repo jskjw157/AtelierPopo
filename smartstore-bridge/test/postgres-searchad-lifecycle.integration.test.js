@@ -234,3 +234,131 @@ test('hierarchy repository survives restart and enforces Customer-scoped returne
     await closePostgresPool(pool);
   }
 });
+
+test('daily risk reservations are atomic, idempotent and Customer/day scoped', async t => {
+  if (!process.env.TEST_DATABASE_URL) return t.skip('TEST_DATABASE_URL is required');
+  const pool = createPostgresPool({ connectionString: process.env.TEST_DATABASE_URL, sslMode: 'disable' });
+  const customerId = `risk-${randomUUID()}`;
+  const otherCustomerId = `risk-other-${randomUUID()}`;
+  const riskDate = '2026-09-11';
+  const createdAt = '2026-09-11T04:50:00.000Z';
+  const repo = new PostgresSearchAdLifecycleRepository({ pool });
+  const reservationInput = intentId => ({
+    customerId,
+    intentId,
+    riskDate,
+    operationKey: 'campaign.create',
+    lifecycleKind: 'create',
+    units: 6,
+    capacityUnits: 10,
+    ownerKind: 'hierarchy_canary',
+    ownerRunId: 'risk-run-atomic',
+    createdAt
+  });
+  try {
+    await runPostgresMigrations({ pool, migrationsDir });
+    const inputs = [reservationInput('risk-intent-a'), reservationInput('risk-intent-b')];
+    const settled = await Promise.allSettled(inputs.map(input => repo.reserveRisk(input)));
+    const fulfilled = settled.filter(item => item.status === 'fulfilled');
+    const rejected = settled.filter(item => item.status === 'rejected');
+    assert.equal(fulfilled.length, 1);
+    assert.equal(rejected.length, 1);
+    assert.equal(rejected[0].reason?.code, 'SEARCHAD_RISK_CAPACITY_EXCEEDED');
+    assert.equal(rejected[0].reason?.status, 409);
+
+    const winnerIntentId = fulfilled[0].value.reservation.intentId;
+    const winnerInput = inputs.find(item => item.intentId === winnerIntentId);
+    const balance = await repo.getDailyRiskCapacity(customerId, riskDate);
+    assert.deepEqual({
+      customerId: balance.customerId,
+      riskDate: balance.riskDate,
+      capacityUnits: balance.capacityUnits,
+      reservedUnits: balance.reservedUnits,
+      consumedUnits: balance.consumedUnits
+    }, {
+      customerId,
+      riskDate,
+      capacityUnits: 10,
+      reservedUnits: 6,
+      consumedUnits: 0
+    });
+
+    const duplicate = await repo.reserveRisk(winnerInput);
+    assert.equal(duplicate.reservation.intentId, winnerIntentId);
+    assert.equal(duplicate.reservation.state, 'reserved');
+    const afterDuplicate = await repo.getDailyRiskCapacity(customerId, riskDate);
+    assert.equal(afterDuplicate.reservedUnits, 6);
+
+    await assert.rejects(
+      () => repo.reserveRisk({ ...winnerInput, units: 5 }),
+      error => error?.code === 'SEARCHAD_RISK_INTENT_CONFLICT' && error?.status === 409
+    );
+
+    const other = await repo.reserveRisk({
+      ...reservationInput('risk-other-intent'),
+      customerId: otherCustomerId,
+      units: 10
+    });
+    assert.equal(other.reservation.state, 'reserved');
+    const otherBalance = await repo.getDailyRiskCapacity(otherCustomerId, riskDate);
+    assert.equal(otherBalance.reservedUnits, 10);
+  } finally {
+    await closePostgresPool(pool);
+  }
+});
+
+test('risk consume and release transitions preserve consumed capacity and never recycle dispatched risk', async t => {
+  if (!process.env.TEST_DATABASE_URL) return t.skip('TEST_DATABASE_URL is required');
+  const pool = createPostgresPool({ connectionString: process.env.TEST_DATABASE_URL, sslMode: 'disable' });
+  const customerId = `risk-state-${randomUUID()}`;
+  const riskDate = '2026-09-11';
+  const repo = new PostgresSearchAdLifecycleRepository({ pool });
+  const common = {
+    customerId,
+    riskDate,
+    operationKey: 'campaign.create',
+    lifecycleKind: 'create',
+    capacityUnits: 10,
+    ownerKind: 'hierarchy_canary',
+    ownerRunId: 'risk-run-state',
+    createdAt: '2026-09-11T05:00:00.000Z'
+  };
+  try {
+    await runPostgresMigrations({ pool, migrationsDir });
+    await repo.reserveRisk({ ...common, intentId: 'risk-consume', units: 4 });
+    await repo.reserveRisk({ ...common, intentId: 'risk-release', units: 3 });
+
+    const consumed = await repo.consumeRisk({ intentId: 'risk-consume', updatedAt: '2026-09-11T05:01:00.000Z' });
+    assert.equal(consumed.reservation.state, 'consumed');
+    assert.equal(consumed.balance.reservedUnits, 3);
+    assert.equal(consumed.balance.consumedUnits, 4);
+    const consumedAgain = await repo.consumeRisk({ intentId: 'risk-consume', updatedAt: '2026-09-11T05:02:00.000Z' });
+    assert.equal(consumedAgain.reservation.state, 'consumed');
+    assert.equal(consumedAgain.balance.consumedUnits, 4);
+
+    const released = await repo.releaseRisk({ intentId: 'risk-release', updatedAt: '2026-09-11T05:03:00.000Z' });
+    assert.equal(released.reservation.state, 'released');
+    assert.equal(released.balance.reservedUnits, 0);
+    assert.equal(released.balance.consumedUnits, 4);
+    const releasedAgain = await repo.releaseRisk({ intentId: 'risk-release', updatedAt: '2026-09-11T05:04:00.000Z' });
+    assert.equal(releasedAgain.reservation.state, 'released');
+    assert.equal(releasedAgain.balance.consumedUnits, 4);
+
+    await assert.rejects(
+      () => repo.releaseRisk({ intentId: 'risk-consume', updatedAt: '2026-09-11T05:05:00.000Z' }),
+      error => error?.code === 'SEARCHAD_RISK_STATE_INVALID' && error?.status === 409
+    );
+    await assert.rejects(
+      () => repo.consumeRisk({ intentId: 'risk-release', updatedAt: '2026-09-11T05:06:00.000Z' }),
+      error => error?.code === 'SEARCHAD_RISK_STATE_INVALID' && error?.status === 409
+    );
+
+    const recovered = await repo.getRiskReservation('risk-consume');
+    assert.equal(recovered.state, 'consumed');
+    const balance = await repo.getDailyRiskCapacity(customerId, riskDate);
+    assert.equal(balance.consumedUnits, 4);
+    assert.equal(balance.reservedUnits, 0);
+  } finally {
+    await closePostgresPool(pool);
+  }
+});
