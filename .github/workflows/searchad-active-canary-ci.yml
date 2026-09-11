@@ -140,7 +140,7 @@ jobs:
           set -euo pipefail
           TESTS=(test/postgres-searchad-active-canary.integration.test.js)
           if [[ -f test/postgres-searchad-activation.integration.test.js ]]; then TESTS+=(test/postgres-searchad-activation.integration.test.js); fi
-          node --test "${TESTS[@]}"
+          node --test --test-concurrency=1 "${TESTS[@]}"
 
   searchad-write-regression:
     runs-on: ubuntu-latest
