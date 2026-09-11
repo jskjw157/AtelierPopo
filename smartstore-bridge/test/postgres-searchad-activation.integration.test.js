@@ -34,6 +34,7 @@ test('PostgreSQL SearchAd activation control is immutable, idempotent and restar
       upstreamBaseUrl: 'https://api.searchad.naver.com',
       operationKeys: ['campaign.update'],
       fieldScope: ['campaign.dailyBudget'],
+      lifecycleKinds: ['create'],
       result: 'verified',
       details: { probeOperations: [{ operationKey: 'campaign.list', supported: true, requestId: 'request-safe' }] },
       createdByPrincipalId: 'operator-activation',
@@ -52,6 +53,7 @@ test('PostgreSQL SearchAd activation control is immutable, idempotent and restar
       upstreamBaseUrl: 'https://api.searchad.naver.com',
       operationKeys: ['campaign.update'],
       fieldScope: ['campaign.dailyBudget'],
+      lifecycleKinds: ['create'],
       activatedByPrincipalId: 'admin-activation',
       activatedAt: now.toISOString(),
       expiresAt: expiresAt.toISOString()
@@ -68,6 +70,7 @@ test('PostgreSQL SearchAd activation control is immutable, idempotent and restar
     const restarted = new PostgresSearchAdActivationRepository({ pool });
     const evidence = await restarted.getEvidence(evidenceId);
     assert.equal(evidence.customerId, customerId);
+    assert.deepEqual(evidence.lifecycleKinds, ['create']);
     assert.deepEqual(evidence.details.probeOperations, [{ operationKey: 'campaign.list', supported: true, requestId: 'request-safe' }]);
     assert.equal(evidence.createdByPrincipalId, 'operator-activation');
     assert.equal(evidence.sourceRequestId, 'http-request-activation');
@@ -76,6 +79,7 @@ test('PostgreSQL SearchAd activation control is immutable, idempotent and restar
     assert.equal(activation.activationId, activationId);
     assert.equal(activation.activatedByPrincipalId, 'admin-activation');
     assert.deepEqual(activation.operationKeys, ['campaign.update']);
+    assert.deepEqual(activation.lifecycleKinds, ['create']);
 
     const account = await restarted.getAccount(customerId);
     assert.equal(account.suspended, true);
@@ -115,6 +119,7 @@ test('PostgreSQL SearchAd activation control is immutable, idempotent and restar
         upstreamBaseUrl: 'https://api.searchad.naver.com',
         operationKeys: ['campaign.update'],
         fieldScope: ['campaign.dailyBudget'],
+        lifecycleKinds: ['create'],
         activatedByPrincipalId: 'admin-activation',
         activatedAt: now.toISOString(),
         expiresAt: expiresAt.toISOString()
