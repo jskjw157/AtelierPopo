@@ -55,7 +55,7 @@ test('plan transitions reject an unexpected current state', () => {
   repository.close();
 });
 
-test('approval stores only a hash and the execution token is one-time', () => {
+test('approval stores only a hash and the execution token is one-time', async () => {
   const repository = createRepository();
   const clock = () => Date.parse('2026-09-02T00:10:00.000Z');
   const plan = seedPlan(repository);
@@ -64,7 +64,7 @@ test('approval stores only a hash and the execution token is one-time', () => {
     config: { approvalTtlSeconds: 600 },
     clock
   });
-  const approved = service.approve(plan.plan_id, {
+  const approved = await service.approve(plan.plan_id, {
     actor: 'approver',
     confirmation: SEARCHAD_APPROVAL_CONFIRMATION
   });
@@ -72,15 +72,15 @@ test('approval stores only a hash and the execution token is one-time', () => {
   const row = repository.getApproval(approved.approvalId);
   assert.notEqual(row.token_hash, approved.executionToken);
   assert.equal(Object.values(row).includes(approved.executionToken), false);
-  const claimed = service.claim(plan.plan_id, approved.executionToken);
+  const claimed = await service.claim(plan.plan_id, approved.executionToken);
   assert.ok(claimed.used_at);
-  assert.throws(() => service.claim(plan.plan_id, approved.executionToken), error =>
+  await assert.rejects(() => service.claim(plan.plan_id, approved.executionToken), error =>
     error.code === 'SEARCHAD_EXECUTION_TOKEN_USED'
   );
   repository.close();
 });
 
-test('expired plans cannot be approved', () => {
+test('expired plans cannot be approved', async () => {
   const repository = createRepository();
   const plan = seedPlan(repository, { expires_at: '2026-09-01T23:59:59.000Z' });
   const service = new SearchAdApprovalService({
@@ -88,7 +88,7 @@ test('expired plans cannot be approved', () => {
     config: { approvalTtlSeconds: 600 },
     clock: () => Date.parse('2026-09-02T00:10:00.000Z')
   });
-  assert.throws(() => service.approve(plan.plan_id, {
+  await assert.rejects(() => service.approve(plan.plan_id, {
     actor: 'approver',
     confirmation: SEARCHAD_APPROVAL_CONFIRMATION
   }), error => error.code === 'SEARCHAD_CHANGE_PLAN_EXPIRED');
