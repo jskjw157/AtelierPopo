@@ -22,6 +22,15 @@ export const SEARCHAD_ROLE_KEYS = Object.freeze({
 });
 const logger = { info() {}, warn() {}, error() {} };
 
+function inferredRole(method, route) {
+  if (route === '/api/v1/searchad/write/status') return 'reader';
+  if (!route.startsWith('/api/v1/searchad/changes')) return null;
+  if (method === 'GET') return 'reader';
+  if (method === 'POST' && route === '/api/v1/searchad/changes/plan') return 'operator';
+  if (method === 'POST' && /\/(approve|execute|reconcile|rollback)$/.test(route)) return 'executor';
+  return null;
+}
+
 // Only the network boundary is fake. The pinned manifest, signer, client,
 // gateway, adapter, SQLite services and HTTP server are production classes.
 export async function startWriteFixture(t, { masterWrites = true, searchAdWrites = true } = {}) {
@@ -120,8 +129,9 @@ export async function startWriteFixture(t, { masterWrites = true, searchAdWrites
   const address = await api.listen({ host: '127.0.0.1', port: 0 });
   t.after(async () => { await api.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const baseUrl = `http://127.0.0.1:${address.port}`;
-  const call = async (method, route, body, { authenticated = true, role = null } = {}) => {
-    const token = role ? SEARCHAD_ROLE_KEYS[role] : API_KEY;
+  const call = async (method, route, body, { authenticated = true, role = 'auto' } = {}) => {
+    const selectedRole = role === 'generic' ? null : (role === 'auto' ? inferredRole(method, route) : role);
+    const token = selectedRole ? SEARCHAD_ROLE_KEYS[selectedRole] : API_KEY;
     const response = await fetch(`${baseUrl}${route}`, {
       method, headers: { ...(authenticated ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) })
