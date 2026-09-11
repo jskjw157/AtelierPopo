@@ -331,6 +331,23 @@ export class PostgresSearchAdReportingRepository {
     return intentRow(result.rows[0]);
   }
 
+  async claimReportDispatch(reportIntentId, customerId, updatedAt) {
+    const result = await this.pool.query(
+      `UPDATE searchad_report_intents
+       SET status='dispatching', updated_at=$3
+       WHERE report_intent_id=$1 AND customer_id=$2 AND status='planned'
+       RETURNING *`,
+      [reportIntentId, String(customerId), updatedAt]
+    );
+    if (result.rows[0]) {
+      return { claimed: true, intent: intentRow(result.rows[0]) };
+    }
+    return {
+      claimed: false,
+      intent: await this.getReportIntent(reportIntentId, customerId)
+    };
+  }
+
   async updateReportIntent(reportIntentId, patch = {}, customerId = null) {
     return patchById(this.pool, {
       table: 'searchad_report_intents',
