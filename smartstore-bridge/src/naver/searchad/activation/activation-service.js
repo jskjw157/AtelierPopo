@@ -26,6 +26,7 @@ function publicGrant(grant) {
     credentialFingerprint: _credentialFingerprint,
     ...safe
   } = structuredClone(grant);
+  if (!Array.isArray(safe.lifecycleKinds)) safe.lifecycleKinds = [];
   return safe;
 }
 
@@ -44,8 +45,8 @@ function operationStillVerified(gateway, operationKey) {
 }
 
 function sameStringArray(left = [], right = []) {
-  const a = [...left].map(String).sort();
-  const b = [...right].map(String).sort();
+  const a = [...(Array.isArray(left) ? left : [])].map(String).sort();
+  const b = [...(Array.isArray(right) ? right : [])].map(String).sort();
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
@@ -60,6 +61,7 @@ function grantMatchesEvidence(grant, evidence) {
     normalizeBaseUrl(grant.upstreamBaseUrl) === normalizeBaseUrl(evidence.upstreamBaseUrl) &&
     sameStringArray(grant.operationKeys, evidence.operationKeys) &&
     sameStringArray(grant.fieldScope, evidence.fieldScope) &&
+    sameStringArray(grant.lifecycleKinds, evidence.lifecycleKinds) &&
     String(grant.expiresAt) === String(evidence.expiresAt)
   );
 }
@@ -126,8 +128,11 @@ export class SearchAdActivationService {
     if (evidence.result !== 'verified' || !Number.isFinite(expiresAt) || expiresAt <= now) {
       fail('SEARCHAD_ACTIVATION_EVIDENCE_INVALID', 'SearchAd evidence is not verified and current.', 409);
     }
-    if (!Array.isArray(evidence.operationKeys) || !evidence.operationKeys.length ||
-        !Array.isArray(evidence.fieldScope) || !evidence.fieldScope.length) {
+
+    const operationKeys = Array.isArray(evidence.operationKeys) ? evidence.operationKeys : [];
+    const fieldScope = Array.isArray(evidence.fieldScope) ? evidence.fieldScope : [];
+    const lifecycleKinds = Array.isArray(evidence.lifecycleKinds) ? evidence.lifecycleKinds : [];
+    if (!operationKeys.length || (!fieldScope.length && !lifecycleKinds.length)) {
       fail('SEARCHAD_ACTIVATION_SCOPE_INVALID', 'SearchAd evidence scope is empty or malformed.', 409);
     }
 
@@ -143,7 +148,7 @@ export class SearchAdActivationService {
       fail('SEARCHAD_ACTIVATION_CONTEXT_MISMATCH', 'SearchAd evidence no longer matches current spec, credential, or upstream context.', 409);
     }
 
-    if (!evidence.operationKeys.every(operationKey => operationStillVerified(this.gateway, operationKey))) {
+    if (!operationKeys.every(operationKey => operationStillVerified(this.gateway, operationKey))) {
       fail('SEARCHAD_ACTIVATION_SCOPE_INVALID', 'SearchAd evidence contains an operation that is no longer in the verified public tier.', 409);
     }
 
@@ -164,8 +169,9 @@ export class SearchAdActivationService {
       specSha: evidence.specSha,
       credentialFingerprint: evidence.credentialFingerprint,
       upstreamBaseUrl: normalizeBaseUrl(evidence.upstreamBaseUrl),
-      operationKeys: structuredClone(evidence.operationKeys),
-      fieldScope: structuredClone(evidence.fieldScope),
+      operationKeys: structuredClone(operationKeys),
+      fieldScope: structuredClone(fieldScope),
+      lifecycleKinds: structuredClone(lifecycleKinds),
       activatedByPrincipalId: principal.principalId,
       activatedAt,
       expiresAt: evidence.expiresAt
