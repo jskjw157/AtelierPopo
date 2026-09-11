@@ -136,6 +136,46 @@ test('report intent is idempotent by Customer/kind/intentKey and protects confli
   }
 });
 
+test('report dispatch claim is atomic so only one caller can cross the non-idempotent POST boundary', async t => {
+  if (!process.env.TEST_DATABASE_URL) return t.skip('TEST_DATABASE_URL is required');
+  const pool = createPostgresPool({ connectionString: process.env.TEST_DATABASE_URL, sslMode: 'disable' });
+  const customerId = `dispatch-${randomUUID()}`;
+  const reportIntentId = randomUUID();
+  try {
+    await runPostgresMigrations({ pool, migrationsDir });
+    const repo = new PostgresSearchAdReportingRepository({ pool });
+    await repo.createOrGetReportIntent({
+      reportIntentId,
+      customerId,
+      reportKind: 'stat',
+      intentKey: 'dispatch-once',
+      operationKey: 'report.post.register_report_job_using_post__p_stat_reports',
+      request: { reportTp: 'AD_DETAIL' },
+      requestSha256: sha('dispatch-once'),
+      status: 'planned',
+      createdByPrincipalId: 'operator-dispatch',
+      requestId: 'request-dispatch',
+      createdAt: '2026-09-11T07:34:00.000Z',
+      updatedAt: '2026-09-11T07:34:00.000Z'
+    });
+
+    const settled = await Promise.all([
+      repo.claimReportDispatch(reportIntentId, customerId, '2026-09-11T07:34:01.000Z'),
+      repo.claimReportDispatch(reportIntentId, customerId, '2026-09-11T07:34:02.000Z')
+    ]);
+    assert.equal(settled.filter(item => item.claimed).length, 1);
+    assert.equal(settled.filter(item => !item.claimed).length, 1);
+    assert.equal(settled.find(item => item.claimed).intent.status, 'dispatching');
+    assert.equal(settled.find(item => !item.claimed).intent.status, 'dispatching');
+
+    const persisted = await repo.getReportIntent(reportIntentId, customerId);
+    assert.equal(persisted.status, 'dispatching');
+    assert.equal(await repo.getReportIntent(reportIntentId, `other-${customerId}`), null);
+  } finally {
+    await closePostgresPool(pool);
+  }
+});
+
 test('report blobs are content-addressed and deduplicated by SHA-256', async t => {
   if (!process.env.TEST_DATABASE_URL) return t.skip('TEST_DATABASE_URL is required');
   const pool = createPostgresPool({ connectionString: process.env.TEST_DATABASE_URL, sslMode: 'disable' });
