@@ -43,6 +43,33 @@ jobs:
       ATELIER_POSTGRES_SSL_MODE: disable
     steps:
       - uses: actions/checkout@v4
+      - name: Stage 0007 original blobs and baseline preservation
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        run: |
+          set -euo pipefail
+          baseline=0adbd11359440efe43fd07c279bd01a4d8914568
+          git fetch --no-tags --depth=1 origin "$baseline"
+          git diff --exit-code "$baseline" HEAD -- \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src \
+            ':(exclude)smartstore-bridge/src/naver/searchad/canary/**' \
+            'smartstore-bridge/migrations/postgres/000[1-6]_*.sql'
+          while read -r expected source; do
+            actual=$(git hash-object "$source")
+            test "$actual" = "$expected" || { echo "Original blob mismatch: $source"; exit 1; }
+            echo "Verified original blob: $source $actual"
+          done <<'ORIGINAL_BLOBS'
+          3ff900a18b25e1bd411c87d36e6409ca50503a23 smartstore-bridge/src/naver/searchad/canary/active-canary-service.js
+          5bf189eceb22fb7bcc2f58ba78606788f3346bd0 smartstore-bridge/src/naver/searchad/canary/bootstrap.js
+          ff20a7acf03be04b9187f180a04ae68d47ed46d1 smartstore-bridge/src/naver/searchad/canary/config.js
+          0d8e052bffc3c54fd1400b3ad5c720520cefd4f5 smartstore-bridge/src/naver/searchad/canary/credential-fingerprint.js
+          db598e85224e3634cbcc992d730f9a5da66c1658 smartstore-bridge/src/naver/searchad/canary/postgres-repository.js
+          8660411a9a24f60bbd110704987242e65e7bec6d smartstore-bridge/src/naver/searchad/canary/production-recipe.js
+          b1e4f6face0ecc8fece48779bb70fb354f64f710 smartstore-bridge/src/naver/searchad/canary/remote-adapter.js
+          6233bd56e73d84820bbebba8d561fab4013edfaa smartstore-bridge/src/naver/searchad/canary/runtime-production.js
+          56a7856e067a5ec2e665da7ba06f0ac052f86177 smartstore-bridge/migrations/postgres/0007_searchad_active_canary.sql
+          ORIGINAL_BLOBS
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -60,6 +87,12 @@ jobs:
           node --check src/http/errors-v05.js
           node --check src/http/openapi-searchad-write.js
           node --check scripts/searchad-write-safety.mjs
+      - name: Restored Active Canary syntax and focused contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          find src/naver/searchad/canary -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --test test/searchad-active-canary-*.test.js
       - name: Existing static checks
         working-directory: smartstore-bridge
         run: npm run check
@@ -71,6 +104,12 @@ jobs:
         run: |
           test -n "$TEST_DATABASE_URL"
           node --test test/postgres-*.integration.test.js
+      - name: Repeated Active Canary PostgreSQL contract
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --test test/postgres-searchad-active-canary.integration.test.js
       - name: Full regression test suite
         working-directory: smartstore-bridge
         run: npm test
