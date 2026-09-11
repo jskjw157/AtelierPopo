@@ -51,7 +51,8 @@ function headerMetadata(headers) {
     'x-ratelimit-reset',
     'retry-after',
     'content-type',
-    'content-length'
+    'content-length',
+    'location'
   ]) {
     const value = headers.get(name);
     if (value !== null) entries[name] = value;
@@ -92,9 +93,14 @@ export class NaverSearchAdClient {
     body,
     headers = {},
     responseType = 'auto',
-    retrySafe
+    retrySafe,
+    redirect = 'follow'
   }) {
     const normalizedMethod = String(method).toUpperCase();
+    const redirectMode = String(redirect || 'follow');
+    if (!['follow', 'manual'].includes(redirectMode)) {
+      throw new TypeError('SearchAd redirect mode must be follow or manual.');
+    }
     const uri = normalizeSearchAdUri(path);
     const credentials = this.credentialsRegistry.resolve(customerId);
     const canRetry = retrySafe ?? ['GET', 'HEAD'].includes(normalizedMethod);
@@ -133,10 +139,25 @@ export class NaverSearchAdClient {
           headers: requestHeaders,
           body: ['GET', 'HEAD'].includes(normalizedMethod) ? undefined : requestBody,
           signal: controller.signal,
-          redirect: 'follow'
+          redirect: redirectMode
         });
         const data = await parseResponseBody(response, responseType);
         const requestId = response.headers.get('x-request-id') || response.headers.get('x-transaction-id') || null;
+        const responseMetadata = {
+          status: response.status,
+          data,
+          requestId,
+          attempts: attempt,
+          durationMs: Math.max(0, this.clock() - startedAt),
+          headers: headerMetadata(response.headers),
+          customerId: credentials.customerId,
+          principalId: credentials.principalId,
+          uri,
+          method: normalizedMethod
+        };
+        if (redirectMode === 'manual' && response.status >= 300 && response.status < 400) {
+          return responseMetadata;
+        }
         if (!response.ok) {
           const error = searchAdErrorFromResponse({ response, data, requestId });
           if (canRetry && error.retryable && attempt < maxAttempts) {
@@ -155,18 +176,7 @@ export class NaverSearchAdClient {
           }
           throw error;
         }
-        return {
-          status: response.status,
-          data,
-          requestId,
-          attempts: attempt,
-          durationMs: Math.max(0, this.clock() - startedAt),
-          headers: headerMetadata(response.headers),
-          customerId: credentials.customerId,
-          principalId: credentials.principalId,
-          uri,
-          method: normalizedMethod
-        };
+        return responseMetadata;
       } catch (error) {
         lastError = error;
         const aborted = error?.name === 'AbortError';
