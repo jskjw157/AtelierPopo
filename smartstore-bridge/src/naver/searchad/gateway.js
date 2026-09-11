@@ -42,6 +42,10 @@ function gateEnabled(config, gate) {
 }
 
 const CANARY_MUTATION_GATES = new Set(['writes', 'creates', 'batchWrites', 'deletes', 'rollbacks']);
+const REPORTING_JOB_CREATE_KEYS = new Set([
+  'report.post.register_report_job_using_post__p_stat_reports',
+  'master_report.post.create_master_report__p_master_reports'
+]);
 
 function resourceKey(customerId, operation, input) {
   const pathValues = Object.values(input.pathParams || {}).map(String).filter(Boolean);
@@ -81,6 +85,7 @@ export class SearchAdOperationGateway {
         rollbacks: this.config.allowRollbacks,
         deletes: this.config.allowDeletes,
         activeCanary: this.config.allowActiveCanary,
+        reportingJobs: this.config.allowReportingJobs,
         unverifiedOperations: this.config.allowUnverifiedOperations
       },
       automationMode: this.config.automationMode,
@@ -178,6 +183,39 @@ export class SearchAdOperationGateway {
     return { ok: true };
   }
 
+  reportingExecutionCheck(operation, input, { throwOnFailure = true } = {}) {
+    const fail = (code, message, status = 403) => {
+      if (throwOnFailure) throw new SearchAdGatewayError(code, message, { status });
+      return { ok: false, code, message, status };
+    };
+    if (!this.config.enabled) return fail('SEARCHAD_GATEWAY_DISABLED', 'SearchAd gateway is disabled.');
+    if (!this.config.configured) return fail('SEARCHAD_NOT_CONFIGURED', 'SearchAd credentials are not configured.', 503);
+    if (!this.config.allowReportingJobs) {
+      return fail('SEARCHAD_REPORTING_JOBS_DISABLED', 'SearchAd reporting job registration gate is disabled.', 403);
+    }
+    if (!REPORTING_JOB_CREATE_KEYS.has(operation.operationKey)) {
+      return fail(
+        'SEARCHAD_REPORTING_OPERATION_SCOPE_FORBIDDEN',
+        'Reporting execution can register only pinned SearchAd stat/master report jobs.',
+        403
+      );
+    }
+    if (!operation.runtimeAllowlisted) {
+      return fail('SEARCHAD_OPERATION_NOT_ALLOWLISTED', `SearchAd operation is not runtime allowlisted: ${operation.operationKey}`);
+    }
+    if (operation.tier !== 'A' && operation.tier !== 'B' && !this.config.allowUnverifiedOperations) {
+      return fail('SEARCHAD_OPERATION_UNVERIFIED', 'SearchAd operation requires capability verification.');
+    }
+    if (!operation.sideEffect || operation.action !== 'create' || operation.method !== 'POST') {
+      return fail(
+        'SEARCHAD_REPORTING_OPERATION_SCOPE_FORBIDDEN',
+        'Reporting execution requires a pinned report registration POST operation.',
+        403
+      );
+    }
+    return { ok: true };
+  }
+
   async execute(operationKey, input = {}) {
     const operation = this.get(operationKey);
     this.executionCheck(operation, input, { throwOnFailure: true });
@@ -237,6 +275,38 @@ export class SearchAdOperationGateway {
       data: redactSearchAdObject(result.data)
     };
   }
+
+  async executeReporting(operationKey, input = {}) {
+    const operation = this.get(operationKey);
+    this.reportingExecutionCheck(operation, input, { throwOnFailure: true });
+    const customerId = String(input.customerId || '').trim();
+    if (!customerId) {
+      throw new SearchAdGatewayError('SEARCHAD_CUSTOMER_ID_REQUIRED', 'customerId is required.', { status: 400 });
+    }
+    this.credentialsRegistry.resolve(customerId);
+    const path = interpolatePath(operation, input.pathParams || {});
+    const result = await this.client.request({
+      customerId,
+      method: operation.method,
+      path,
+      query: input.query || {},
+      json: input.body ?? input.json,
+      responseType: input.responseType || 'auto',
+      retrySafe: false
+    });
+    return {
+      operation: this.registry.publicOperation(operation),
+      requestFingerprint: fingerprint({ operationKey, customerId, path, query: input.query || {}, body: input.body ?? input.json }),
+      upstream: {
+        status: result.status,
+        requestId: result.requestId,
+        attempts: result.attempts,
+        durationMs: result.durationMs,
+        headers: result.headers
+      },
+      data: redactSearchAdObject(result.data)
+    };
+  }
 }
 
 export function toPublicSearchAdError(error) {
@@ -253,4 +323,11 @@ export function toPublicSearchAdError(error) {
   return { name: error?.name || 'Error', code: error?.code || null, status: error?.status || 500, message: error?.message || 'Unknown error' };
 }
 
-export const _internal = { canonicalize, fingerprint, interpolatePath, resourceKey, gateEnabled };
+export const _internal = {
+  canonicalize,
+  fingerprint,
+  interpolatePath,
+  resourceKey,
+  gateEnabled,
+  REPORTING_JOB_CREATE_KEYS
+};
