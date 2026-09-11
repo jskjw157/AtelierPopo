@@ -67,6 +67,11 @@ export async function startWriteFixture(t, { masterWrites = true, searchAdWrites
   const client = new NaverSearchAdClient({ credentialsRegistry: credentials, fetchImpl, maxRetries: 0, logger });
   const gateway = new SearchAdOperationGateway({ client, config, registry, credentialsRegistry: credentials, logger });
   const ledger = new Ledger(path.join(dir, 'ledger.sqlite'));
+  const activationGuard = {
+    async assertMutationAllowed() {
+      return { allowed: true, activationId: 'fixture-activation', evidenceId: 'fixture-active-canary-evidence' };
+    }
+  };
   const app = {
     config: { catalogRoot, workDir: dir, templateFile: path.join(dir, 'template.json'),
       databasePath: path.join(dir, 'ledger.sqlite'), categories: {},
@@ -77,7 +82,12 @@ export async function startWriteFixture(t, { masterWrites = true, searchAdWrites
     commerceGateway: { status() { return { ready: true }; } },
     searchAdConfig: config, searchAdRegistry: registry, searchAdCredentials: credentials,
     searchAdClient: client, searchAdGateway: gateway,
-    searchAdCapabilityService: new SearchAdCapabilityService({ gateway, config })
+    searchAdCapabilityService: new SearchAdCapabilityService({ gateway, config }),
+    searchAdActivationRuntime: {
+      guard: activationGuard,
+      status() { return { ready: true, storage: { runtime: 'fixture', schemaReady: true } }; },
+      async close() {}
+    }
   };
   const env = {
     ATELIER_API_KEY: API_KEY, ATELIER_HTTP_ALLOW_WRITES: String(masterWrites),
