@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { SearchAdWriteError } from '../write/errors.js';
+
 function cloneJson(value) {
   if (value == null) return value;
   return structuredClone(value);
@@ -5,6 +8,11 @@ function cloneJson(value) {
 
 function iso(value) {
   return value?.toISOString?.() || value;
+}
+
+function dateOnly(value) {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value ?? '');
 }
 
 function runRow(row) {
@@ -80,6 +88,38 @@ function ownershipRow(row) {
   };
 }
 
+function riskCapacityRow(row) {
+  if (!row) return null;
+  return {
+    customerId: row.customer_id,
+    riskDate: dateOnly(row.risk_date),
+    capacityUnits: Number(row.capacity_units),
+    reservedUnits: Number(row.reserved_units),
+    consumedUnits: Number(row.consumed_units),
+    updatedAt: iso(row.updated_at)
+  };
+}
+
+function riskReservationRow(row) {
+  if (!row) return null;
+  return {
+    reservationId: row.reservation_id,
+    intentId: row.intent_id,
+    customerId: row.customer_id,
+    riskDate: dateOnly(row.risk_date),
+    operationKey: row.operation_key,
+    lifecycleKind: row.lifecycle_kind,
+    units: Number(row.units),
+    state: row.state,
+    ownerKind: row.owner_kind,
+    ownerRunId: row.owner_run_id,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+    consumedAt: iso(row.consumed_at),
+    releasedAt: iso(row.released_at)
+  };
+}
+
 const RUN_PATCH_COLUMNS = Object.freeze({
   status: 'status',
   activationId: 'activation_id',
@@ -132,6 +172,49 @@ async function patchById(pool, { table, idColumn, id, customerId, patch, allowed
     values
   );
   return mapper(result.rows[0]);
+}
+
+function riskError(code, message, status, details = {}) {
+  return new SearchAdWriteError(code, message, details, status);
+}
+
+function sameReservation(existing, input) {
+  return existing.customerId === String(input.customerId)
+    && existing.riskDate === dateOnly(input.riskDate)
+    && existing.operationKey === String(input.operationKey)
+    && existing.lifecycleKind === String(input.lifecycleKind)
+    && existing.units === Number(input.units)
+    && existing.ownerKind === String(input.ownerKind)
+    && existing.ownerRunId === String(input.ownerRunId);
+}
+
+async function withTransaction(pool, work) {
+  if (typeof pool.connect !== 'function') throw new TypeError('PostgreSQL pool.connect is required for transactional lifecycle persistence');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function lockRiskIntent(client, intentId) {
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [String(intentId)]);
+}
+
+async function readRiskBalance(client, customerId, riskDate, { forUpdate = false } = {}) {
+  const result = await client.query(
+    `SELECT * FROM searchad_daily_risk_capacity
+     WHERE customer_id=$1 AND risk_date=$2::date${forUpdate ? ' FOR UPDATE' : ''}`,
+    [String(customerId), dateOnly(riskDate)]
+  );
+  return riskCapacityRow(result.rows[0]);
 }
 
 export class PostgresSearchAdLifecycleRepository {
@@ -387,6 +470,188 @@ export class PostgresSearchAdLifecycleRepository {
       mapper: ownershipRow
     });
   }
+
+  async getRiskReservation(intentId) {
+    const result = await this.pool.query(
+      'SELECT * FROM searchad_risk_reservations WHERE intent_id=$1',
+      [String(intentId)]
+    );
+    return riskReservationRow(result.rows[0]);
+  }
+
+  async getDailyRiskCapacity(customerId, riskDate) {
+    const result = await this.pool.query(
+      'SELECT * FROM searchad_daily_risk_capacity WHERE customer_id=$1 AND risk_date=$2::date',
+      [String(customerId), dateOnly(riskDate)]
+    );
+    return riskCapacityRow(result.rows[0]);
+  }
+
+  async reserveRisk(input = {}) {
+    return withTransaction(this.pool, async client => {
+      const intentId = String(input.intentId);
+      await lockRiskIntent(client, intentId);
+
+      const existingResult = await client.query(
+        'SELECT * FROM searchad_risk_reservations WHERE intent_id=$1 FOR UPDATE',
+        [intentId]
+      );
+      const existing = riskReservationRow(existingResult.rows[0]);
+      if (existing) {
+        if (!sameReservation(existing, input)) {
+          throw riskError('SEARCHAD_RISK_INTENT_CONFLICT', 'Risk intent is already bound to a different immutable reservation.', 409, { intentId });
+        }
+        const balance = await readRiskBalance(client, existing.customerId, existing.riskDate, { forUpdate: true });
+        return { reservation: existing, balance };
+      }
+
+      const customerId = String(input.customerId);
+      const riskDate = dateOnly(input.riskDate);
+      const units = Number(input.units);
+      const capacityUnits = Number(input.capacityUnits);
+      await client.query(
+        `INSERT INTO searchad_daily_risk_capacity (
+           customer_id, risk_date, capacity_units, reserved_units, consumed_units, updated_at
+         ) VALUES ($1,$2::date,$3,0,0,$4)
+         ON CONFLICT (customer_id, risk_date) DO NOTHING`,
+        [customerId, riskDate, capacityUnits, input.createdAt]
+      );
+
+      const balance = await readRiskBalance(client, customerId, riskDate, { forUpdate: true });
+      if (!balance) throw riskError('SEARCHAD_RISK_CAPACITY_MISSING', 'Risk capacity row could not be established.', 500);
+      if (balance.capacityUnits !== capacityUnits) {
+        throw riskError('SEARCHAD_RISK_CAPACITY_CONFLICT', 'Daily risk capacity is already fixed for this Customer and date.', 409, {
+          customerId,
+          riskDate
+        });
+      }
+      if (balance.reservedUnits + balance.consumedUnits + units > balance.capacityUnits) {
+        throw riskError('SEARCHAD_RISK_CAPACITY_EXCEEDED', 'Daily SearchAd risk capacity would be exceeded.', 409, {
+          customerId,
+          riskDate
+        });
+      }
+
+      const capacityResult = await client.query(
+        `UPDATE searchad_daily_risk_capacity
+         SET reserved_units=reserved_units+$3, updated_at=$4
+         WHERE customer_id=$1 AND risk_date=$2::date
+         RETURNING *`,
+        [customerId, riskDate, units, input.createdAt]
+      );
+      const reservationResult = await client.query(
+        `INSERT INTO searchad_risk_reservations (
+           reservation_id, intent_id, customer_id, risk_date, operation_key, lifecycle_kind,
+           units, state, owner_kind, owner_run_id, created_at, updated_at
+         ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,'reserved',$8,$9,$10,$10)
+         RETURNING *`,
+        [
+          randomUUID(),
+          intentId,
+          customerId,
+          riskDate,
+          String(input.operationKey),
+          String(input.lifecycleKind),
+          units,
+          String(input.ownerKind),
+          String(input.ownerRunId),
+          input.createdAt
+        ]
+      );
+      return {
+        reservation: riskReservationRow(reservationResult.rows[0]),
+        balance: riskCapacityRow(capacityResult.rows[0])
+      };
+    });
+  }
+
+  async consumeRisk({ intentId, updatedAt } = {}) {
+    return withTransaction(this.pool, async client => {
+      await lockRiskIntent(client, intentId);
+      const result = await client.query(
+        'SELECT * FROM searchad_risk_reservations WHERE intent_id=$1 FOR UPDATE',
+        [String(intentId)]
+      );
+      let reservation = riskReservationRow(result.rows[0]);
+      if (!reservation) {
+        throw riskError('SEARCHAD_RISK_RESERVATION_NOT_FOUND', 'Risk reservation was not found.', 404, { intentId: String(intentId) });
+      }
+      let balance = await readRiskBalance(client, reservation.customerId, reservation.riskDate, { forUpdate: true });
+      if (reservation.state === 'consumed') return { reservation, balance };
+      if (reservation.state !== 'reserved') {
+        throw riskError('SEARCHAD_RISK_STATE_INVALID', 'Only a reserved risk intent can be consumed.', 409, {
+          intentId: reservation.intentId,
+          state: reservation.state
+        });
+      }
+
+      const balanceResult = await client.query(
+        `UPDATE searchad_daily_risk_capacity
+         SET reserved_units=reserved_units-$3, consumed_units=consumed_units+$3, updated_at=$4
+         WHERE customer_id=$1 AND risk_date=$2::date
+         RETURNING *`,
+        [reservation.customerId, reservation.riskDate, reservation.units, updatedAt]
+      );
+      const reservationResult = await client.query(
+        `UPDATE searchad_risk_reservations
+         SET state='consumed', updated_at=$2, consumed_at=$2
+         WHERE intent_id=$1
+         RETURNING *`,
+        [reservation.intentId, updatedAt]
+      );
+      reservation = riskReservationRow(reservationResult.rows[0]);
+      balance = riskCapacityRow(balanceResult.rows[0]);
+      return { reservation, balance };
+    });
+  }
+
+  async releaseRisk({ intentId, updatedAt } = {}) {
+    return withTransaction(this.pool, async client => {
+      await lockRiskIntent(client, intentId);
+      const result = await client.query(
+        'SELECT * FROM searchad_risk_reservations WHERE intent_id=$1 FOR UPDATE',
+        [String(intentId)]
+      );
+      let reservation = riskReservationRow(result.rows[0]);
+      if (!reservation) {
+        throw riskError('SEARCHAD_RISK_RESERVATION_NOT_FOUND', 'Risk reservation was not found.', 404, { intentId: String(intentId) });
+      }
+      let balance = await readRiskBalance(client, reservation.customerId, reservation.riskDate, { forUpdate: true });
+      if (reservation.state === 'released') return { reservation, balance };
+      if (reservation.state !== 'reserved') {
+        throw riskError('SEARCHAD_RISK_STATE_INVALID', 'Consumed SearchAd risk cannot be released or recycled.', 409, {
+          intentId: reservation.intentId,
+          state: reservation.state
+        });
+      }
+
+      const balanceResult = await client.query(
+        `UPDATE searchad_daily_risk_capacity
+         SET reserved_units=reserved_units-$3, updated_at=$4
+         WHERE customer_id=$1 AND risk_date=$2::date
+         RETURNING *`,
+        [reservation.customerId, reservation.riskDate, reservation.units, updatedAt]
+      );
+      const reservationResult = await client.query(
+        `UPDATE searchad_risk_reservations
+         SET state='released', updated_at=$2, released_at=$2
+         WHERE intent_id=$1
+         RETURNING *`,
+        [reservation.intentId, updatedAt]
+      );
+      reservation = riskReservationRow(reservationResult.rows[0]);
+      balance = riskCapacityRow(balanceResult.rows[0]);
+      return { reservation, balance };
+    });
+  }
 }
 
-export const _internal = { runRow, objectRow, eventRow, ownershipRow };
+export const _internal = {
+  runRow,
+  objectRow,
+  eventRow,
+  ownershipRow,
+  riskCapacityRow,
+  riskReservationRow,
+  sameReservation
+};
