@@ -8,6 +8,11 @@ export const CANARY_OPERATION_KEYS = Object.freeze({
   readSingleStat: 'report.get.get_single_entity_stat_using_get__p_stats__q_breakdown_date_preset_fields_id_time_increment_time_range'
 });
 
+export const STOPPED_WEB_SITE_CANARY_PASSIVE_SCOPE = Object.freeze({
+  operationKeys: Object.freeze(Object.values(CANARY_OPERATION_KEYS)),
+  fieldScope: Object.freeze(['campaign.userLock', 'campaign.dailyBudget'])
+});
+
 function positiveNumber(value, label) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) {
@@ -83,7 +88,7 @@ export function createStoppedWebSiteCampaignRecipe({
 
   return Object.freeze({
     id: 'stopped_web_site_campaign_v1',
-    requiredOperationKeys: Object.freeze(Object.values(CANARY_OPERATION_KEYS)),
+    requiredOperationKeys: STOPPED_WEB_SITE_CANARY_PASSIVE_SCOPE.operationKeys,
     verifiedOperationScope: Object.freeze({
       operationKeys: Object.freeze([
         CANARY_OPERATION_KEYS.createCampaign,
@@ -91,7 +96,7 @@ export function createStoppedWebSiteCampaignRecipe({
         CANARY_OPERATION_KEYS.updateCampaign,
         CANARY_OPERATION_KEYS.deleteCampaign
       ]),
-      fieldScope: Object.freeze(['campaign.userLock', 'campaign.dailyBudget']),
+      fieldScope: STOPPED_WEB_SITE_CANARY_PASSIVE_SCOPE.fieldScope,
       campaignType: 'WEB_SITE'
     }),
 
