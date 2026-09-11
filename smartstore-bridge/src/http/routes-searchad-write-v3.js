@@ -50,9 +50,10 @@ export function createSearchAdWriteRoutesV3(context) {
     },
     {
       method: 'POST', pattern: /^\/api\/v1\/searchad\/changes\/(?<planId>[^/]+)\/approve$/, auth: true, write: true,
-      handler: async ({ req, res, match, body }) => sendJson(req, res, 200,
-        runtimeFor(context).approvalService.approve(planId(match), body)
-      )
+      handler: async ({ req, res, match, body }) => {
+        const result = await runtimeFor(context).approvalService.approve(planId(match), body);
+        sendJson(req, res, 200, result);
+      }
     },
     {
       method: 'POST', pattern: /^\/api\/v1\/searchad\/changes\/(?<planId>[^/]+)\/execute$/, auth: true, write: true,
