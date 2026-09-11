@@ -46,8 +46,8 @@ export class SearchAdExecutionService {
     return { result, value: structuredClone(extract(result.value, extractPath)) };
   }
 
-  get(planId) {
-    const plan = this.repository.getPlan(planId);
+  async get(planId) {
+    const plan = await this.repository.getPlan(planId);
     if (!plan) throw new SearchAdWriteError('SEARCHAD_CHANGE_PLAN_NOT_FOUND', 'SearchAd 변경 계획을 찾을 수 없습니다.', { planId }, 404);
     return plan;
   }
@@ -59,7 +59,7 @@ export class SearchAdExecutionService {
         requiredEnv: 'ATELIER_SEARCHAD_ALLOW_WRITES=true'
       }, 403);
     }
-    const plan = this.get(planId);
+    const plan = await this.get(planId);
     if (plan.customer_id !== String(input.customerId || plan.customer_id)) {
       throw new SearchAdWriteError('SEARCHAD_CUSTOMER_SCOPE_MISMATCH', '변경 계획의 광고계정 범위가 요청과 일치하지 않습니다.', { planId }, 403);
     }
@@ -68,7 +68,7 @@ export class SearchAdExecutionService {
     }
     const nowMs = this.clock();
     if (Date.parse(plan.expires_at) <= nowMs) {
-      this.repository.updatePlan(planId, { status: 'expired' }, { expectedStatuses: ['approved'] });
+      await this.repository.updatePlan(planId, { status: 'expired' }, { expectedStatuses: ['approved'] });
       throw new SearchAdWriteError('SEARCHAD_CHANGE_PLAN_EXPIRED', '변경 계획이 만료되었습니다.', { planId }, 409);
     }
 
@@ -78,16 +78,16 @@ export class SearchAdExecutionService {
       const error = new SearchAdWriteError('SEARCHAD_STALE_PLAN', '계획 작성 후 원격 값이 변경되어 실행을 중단했습니다.', {
         planId, expectedBeforeHash: plan.before_hash, actualBeforeHash
       }, 409);
-      this.repository.addAttempt({
+      await this.repository.addAttempt({
         attempt_id: randomUUID(), plan_id: planId, phase: 'preflight', status: 'stale',
         request_fingerprint: requestFingerprint(plan.mutation_json),
         response_json: { actualBeforeHash }, error_json: publicError(error), created_at: iso(this.clock)
       });
-      this.repository.updatePlan(planId, { status: 'stale', last_error_json: publicError(error) }, { expectedStatuses: ['approved'] });
+      await this.repository.updatePlan(planId, { status: 'stale', last_error_json: publicError(error) }, { expectedStatuses: ['approved'] });
       throw error;
     }
 
-    this.approvalService.claim(planId, input.executionToken);
+    await this.approvalService.claim(planId, input.executionToken);
 
     const attemptId = randomUUID();
     const mutation = { ...plan.mutation_json, customerId: plan.customer_id };
@@ -97,7 +97,7 @@ export class SearchAdExecutionService {
         requestId: context.requestId,
         idempotencyKey: input.idempotencyKey
       });
-      this.repository.addAttempt({
+      await this.repository.addAttempt({
         attempt_id: attemptId, plan_id: planId, phase: 'execute', status: 'remote_accepted',
         request_fingerprint: requestFingerprint(mutation), request_json: mutation,
         response_json: response, remote_request_id: remoteRequestId(response), created_at: iso(this.clock)
@@ -106,12 +106,12 @@ export class SearchAdExecutionService {
       const ambiguous = isAmbiguousSearchAdWriteError(error);
       const status = ambiguous ? 'unknown_outcome' : 'failed';
       const safe = publicError(error);
-      this.repository.addAttempt({
+      await this.repository.addAttempt({
         attempt_id: attemptId, plan_id: planId, phase: 'execute', status,
         request_fingerprint: requestFingerprint(mutation), request_json: mutation,
         error_json: safe, created_at: iso(this.clock)
       });
-      this.repository.updatePlan(planId, { status, last_error_json: safe }, { expectedStatuses: ['approved'] });
+      await this.repository.updatePlan(planId, { status, last_error_json: safe }, { expectedStatuses: ['approved'] });
       if (ambiguous) {
         throw new SearchAdWriteError('SEARCHAD_UNKNOWN_OUTCOME', '원격 결과가 불명확합니다. 동일 쓰기를 재시도하지 말고 reconcile을 실행하세요.', { planId, original: safe }, 409);
       }
@@ -123,11 +123,11 @@ export class SearchAdExecutionService {
       afterCheck = await this.readCurrent(plan, context);
     } catch (error) {
       const safe = publicError(error);
-      this.repository.addAttempt({
+      await this.repository.addAttempt({
         attempt_id: randomUUID(), plan_id: planId, phase: 'verify', status: 'failed',
         error_json: safe, created_at: iso(this.clock)
       });
-      this.repository.updatePlan(planId, {
+      await this.repository.updatePlan(planId, {
         status: 'verification_failed', last_error_json: safe
       }, { expectedStatuses: ['approved'] });
       throw new SearchAdWriteError('SEARCHAD_REMOTE_VERIFICATION_UNAVAILABLE', '원격 쓰기 응답은 수신했지만 변경 후 재조회에 실패했습니다. reconcile을 실행하세요.', { planId, original: safe }, 409);
@@ -138,11 +138,11 @@ export class SearchAdExecutionService {
       const error = new SearchAdWriteError('SEARCHAD_REMOTE_VERIFICATION_FAILED', '원격 변경 후 값이 계획과 일치하지 않습니다.', {
         planId, appliedAfterHash, expectedAfter: plan.expected_after_json
       }, 409);
-      this.repository.addAttempt({
+      await this.repository.addAttempt({
         attempt_id: randomUUID(), plan_id: planId, phase: 'verify', status: 'failed',
         response_json: { appliedAfter, appliedAfterHash }, error_json: publicError(error), created_at: iso(this.clock)
       });
-      this.repository.updatePlan(planId, {
+      await this.repository.updatePlan(planId, {
         status: 'verification_failed', applied_after_json: appliedAfter,
         applied_after_hash: appliedAfterHash, last_error_json: publicError(error)
       }, { expectedStatuses: ['approved'] });
@@ -150,12 +150,12 @@ export class SearchAdExecutionService {
     }
 
     const appliedAt = iso(this.clock);
-    const updated = this.repository.updatePlan(planId, {
+    const updated = await this.repository.updatePlan(planId, {
       status: 'applied', applied_at: appliedAt,
       applied_after_json: appliedAfter, applied_after_hash: appliedAfterHash,
       last_error_json: null
     }, { expectedStatuses: ['approved'] });
-    this.repository.addAttempt({
+    await this.repository.addAttempt({
       attempt_id: randomUUID(), plan_id: planId, phase: 'verify', status: 'succeeded',
       response_json: { appliedAfterHash }, created_at: appliedAt
     });
@@ -166,7 +166,7 @@ export class SearchAdExecutionService {
     if (!this.config.enabled || !this.config.allowReconcile) {
       throw new SearchAdWriteError('SEARCHAD_RECONCILE_DISABLED', 'SearchAd reconcile 기능이 비활성화되어 있습니다.', {}, 403);
     }
-    const plan = this.get(planId);
+    const plan = await this.get(planId);
     if (!['unknown_outcome', 'verification_failed'].includes(plan.status)) {
       throw new SearchAdWriteError('SEARCHAD_CHANGE_PLAN_NOT_RECONCILABLE', '현재 상태에서는 reconcile할 수 없습니다.', { planId, status: plan.status }, 409);
     }
@@ -179,8 +179,8 @@ export class SearchAdExecutionService {
     const patch = status === 'applied_reconciled'
       ? { status, applied_at: plan.applied_at || now, applied_after_json: current.value, applied_after_hash: currentHash, last_error_json: null }
       : { status, last_error_json: status === 'manual_review' ? { code: 'SEARCHAD_RECONCILE_MANUAL_REVIEW', message: '현재 원격값이 변경 전·예상 변경 후 어느 쪽과도 일치하지 않습니다.' } : null };
-    const updated = this.repository.updatePlan(planId, patch, { expectedStatuses: [plan.status] });
-    this.repository.addAttempt({
+    const updated = await this.repository.updatePlan(planId, patch, { expectedStatuses: [plan.status] });
+    await this.repository.addAttempt({
       attempt_id: randomUUID(), plan_id: planId, phase: 'reconcile', status,
       response_json: { currentHash }, created_at: now
     });
@@ -191,7 +191,7 @@ export class SearchAdExecutionService {
     if (!this.config.enabled || !this.config.allowRollback) {
       throw new SearchAdWriteError('SEARCHAD_ROLLBACK_PREVALIDATION_GATED', 'SearchAd 롤백은 Capability·Canary 검증 전 임시 게이트 상태입니다.', { requiredEnv: 'ATELIER_SEARCHAD_ALLOW_ROLLBACK=true' }, 403);
     }
-    const plan = this.get(planId);
+    const plan = await this.get(planId);
     if (!['applied', 'applied_reconciled'].includes(plan.status)) {
       throw new SearchAdWriteError('SEARCHAD_CHANGE_PLAN_NOT_ROLLBACKABLE', '적용 완료된 변경 계획만 롤백할 수 있습니다.', { planId, status: plan.status }, 409);
     }
@@ -215,7 +215,7 @@ export class SearchAdExecutionService {
         requestId: context.requestId,
         idempotencyKey: input.idempotencyKey
       });
-      this.repository.addAttempt({
+      await this.repository.addAttempt({
         attempt_id: randomUUID(), plan_id: planId, phase: 'rollback', status: 'remote_accepted',
         request_fingerprint: requestFingerprint(mutation), request_json: mutation,
         response_json: response, remote_request_id: remoteRequestId(response), created_at: iso(this.clock)
@@ -223,8 +223,8 @@ export class SearchAdExecutionService {
     } catch (error) {
       const status = isAmbiguousSearchAdWriteError(error) ? 'rollback_unknown_outcome' : 'rollback_failed';
       const safe = publicError(error);
-      this.repository.updatePlan(planId, { status, last_error_json: safe }, { expectedStatuses: [plan.status] });
-      this.repository.addAttempt({
+      await this.repository.updatePlan(planId, { status, last_error_json: safe }, { expectedStatuses: [plan.status] });
+      await this.repository.addAttempt({
         attempt_id: randomUUID(), plan_id: planId, phase: 'rollback', status,
         request_fingerprint: requestFingerprint(mutation), request_json: mutation,
         error_json: safe, created_at: iso(this.clock)
@@ -234,14 +234,14 @@ export class SearchAdExecutionService {
     const after = await this.readCurrent(plan, context);
     if (!isSubset(after.value, plan.rollback_json.expectedBefore)) {
       const error = new SearchAdWriteError('SEARCHAD_ROLLBACK_VERIFICATION_FAILED', '롤백 후 원격값이 변경 전 상태와 일치하지 않습니다.', { planId }, 409);
-      this.repository.updatePlan(planId, { status: 'rollback_verification_failed', last_error_json: publicError(error) }, { expectedStatuses: [plan.status] });
+      await this.repository.updatePlan(planId, { status: 'rollback_verification_failed', last_error_json: publicError(error) }, { expectedStatuses: [plan.status] });
       throw error;
     }
     const rolledBackAt = iso(this.clock);
-    const updated = this.repository.updatePlan(planId, {
+    const updated = await this.repository.updatePlan(planId, {
       status: 'rolled_back', rolled_back_at: rolledBackAt, last_error_json: null
     }, { expectedStatuses: [plan.status] });
-    this.repository.addAttempt({
+    await this.repository.addAttempt({
       attempt_id: randomUUID(), plan_id: planId, phase: 'rollback_verify', status: 'succeeded',
       response_json: { currentHash: contentHash(after.value) }, created_at: rolledBackAt
     });
