@@ -92,6 +92,14 @@ export class SearchAdWriteRepository {
       );
       CREATE INDEX IF NOT EXISTS searchad_write_attempts_plan_idx
         ON searchad_write_attempts(plan_id, created_at ASC);
+      CREATE TABLE IF NOT EXISTS searchad_write_locks (
+        plan_id TEXT NOT NULL REFERENCES searchad_write_change_plans(plan_id) ON DELETE CASCADE,
+        purpose TEXT NOT NULL,
+        acquired_at TEXT NOT NULL,
+        PRIMARY KEY (plan_id, purpose)
+      );
+      CREATE INDEX IF NOT EXISTS searchad_write_locks_acquired_idx
+        ON searchad_write_locks(acquired_at);
     `);
   }
 
@@ -205,6 +213,19 @@ export class SearchAdWriteRepository {
 
   listAttempts(planId) {
     return this.database.prepare('SELECT * FROM searchad_write_attempts WHERE plan_id = ? ORDER BY created_at ASC').all(planId).map(hydrate);
+  }
+
+  tryAcquireLock({ planId, purpose, acquiredAt, staleBefore }) {
+    this.database.prepare('DELETE FROM searchad_write_locks WHERE acquired_at < ?').run(staleBefore);
+    const result = this.database.prepare(`
+      INSERT OR IGNORE INTO searchad_write_locks (plan_id, purpose, acquired_at)
+      VALUES (?, ?, ?)
+    `).run(planId, purpose, acquiredAt);
+    return Number(result.changes) === 1;
+  }
+
+  releaseLock({ planId, purpose }) {
+    this.database.prepare('DELETE FROM searchad_write_locks WHERE plan_id = ? AND purpose = ?').run(planId, purpose);
   }
 
   close() {
