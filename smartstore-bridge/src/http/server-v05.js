@@ -180,7 +180,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     operationQueue.accepting = false;
     if (server.listening) await new Promise(resolve => server.close(() => resolve()));
     await operationQueue.close({ timeoutMs: httpConfig.shutdownTimeoutMs });
-    app.searchAdWriteRuntime?.close?.();
+    await app.searchAdWriteRuntime?.close?.();
     app.ledger.close();
   }
 
