@@ -6,17 +6,30 @@ on:
       - codex/searchad-active-canary-20260910
     paths:
       - 'smartstore-bridge/src/naver/searchad/canary/**'
+      - 'smartstore-bridge/src/naver/searchad/activation/**'
+      - 'smartstore-bridge/src/naver/searchad/capability.js'
       - 'smartstore-bridge/src/naver/searchad/gateway.js'
+      - 'smartstore-bridge/src/naver/searchad/write/**'
       - 'smartstore-bridge/src/bootstrap-v05.js'
       - 'smartstore-bridge/src/http/server-v05.js'
       - 'smartstore-bridge/src/http/searchad-access-control.js'
+      - 'smartstore-bridge/src/http/searchad-write-runtime.js'
       - 'smartstore-bridge/src/http/routes-searchad-canary.js'
+      - 'smartstore-bridge/src/http/routes-searchad-write-v3.js'
+      - 'smartstore-bridge/src/http/routes-searchad-activation.js'
       - 'smartstore-bridge/src/http/openapi-searchad-canary.js'
+      - 'smartstore-bridge/src/http/openapi-searchad-activation.js'
       - 'smartstore-bridge/.env.searchad-write.example'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
+      - 'smartstore-bridge/test/searchad-passive-evidence.test.js'
+      - 'smartstore-bridge/test/searchad-activation-*.test.js'
+      - 'smartstore-bridge/test/searchad-account-control.test.js'
+      - 'smartstore-bridge/test/searchad-write-activation.test.js'
+      - 'smartstore-bridge/test/searchad-write-access.test.js'
       - 'smartstore-bridge/test/searchad-gateway-active-canary.test.js'
       - 'smartstore-bridge/test/searchad-http-*.test.js'
       - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
+      - 'smartstore-bridge/test/postgres-searchad-activation.integration.test.js'
       - 'smartstore-bridge/migrations/postgres/**'
       - '.github/workflows/searchad-active-canary-ci.yml'
   pull_request:
@@ -24,17 +37,30 @@ on:
       - main
     paths:
       - 'smartstore-bridge/src/naver/searchad/canary/**'
+      - 'smartstore-bridge/src/naver/searchad/activation/**'
+      - 'smartstore-bridge/src/naver/searchad/capability.js'
       - 'smartstore-bridge/src/naver/searchad/gateway.js'
+      - 'smartstore-bridge/src/naver/searchad/write/**'
       - 'smartstore-bridge/src/bootstrap-v05.js'
       - 'smartstore-bridge/src/http/server-v05.js'
       - 'smartstore-bridge/src/http/searchad-access-control.js'
+      - 'smartstore-bridge/src/http/searchad-write-runtime.js'
       - 'smartstore-bridge/src/http/routes-searchad-canary.js'
+      - 'smartstore-bridge/src/http/routes-searchad-write-v3.js'
+      - 'smartstore-bridge/src/http/routes-searchad-activation.js'
       - 'smartstore-bridge/src/http/openapi-searchad-canary.js'
+      - 'smartstore-bridge/src/http/openapi-searchad-activation.js'
       - 'smartstore-bridge/.env.searchad-write.example'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
+      - 'smartstore-bridge/test/searchad-passive-evidence.test.js'
+      - 'smartstore-bridge/test/searchad-activation-*.test.js'
+      - 'smartstore-bridge/test/searchad-account-control.test.js'
+      - 'smartstore-bridge/test/searchad-write-activation.test.js'
+      - 'smartstore-bridge/test/searchad-write-access.test.js'
       - 'smartstore-bridge/test/searchad-gateway-active-canary.test.js'
       - 'smartstore-bridge/test/searchad-http-*.test.js'
       - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
+      - 'smartstore-bridge/test/postgres-searchad-activation.integration.test.js'
       - 'smartstore-bridge/migrations/postgres/**'
       - '.github/workflows/searchad-active-canary-ci.yml'
 
@@ -57,10 +83,27 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Active Canary and SearchAd HTTP contract tests
         working-directory: smartstore-bridge
-        run: node --test test/searchad-active-canary-*.test.js test/searchad-gateway-active-canary.test.js test/searchad-http-*.test.js
+        run: |
+          set -euo pipefail
+          TESTS=(test/searchad-active-canary-*.test.js test/searchad-gateway-active-canary.test.js test/searchad-http-*.test.js)
+          for file in \
+            test/searchad-passive-evidence.test.js \
+            test/searchad-activation-service.test.js \
+            test/searchad-activation-runtime.test.js \
+            test/searchad-activation-guard.test.js \
+            test/searchad-account-control.test.js \
+            test/searchad-write-activation.test.js \
+            test/searchad-write-access.test.js; do
+            if [[ -f "$file" ]]; then TESTS+=("$file"); fi
+          done
+          node --test "${TESTS[@]}"
       - name: Runtime wiring syntax
         working-directory: smartstore-bridge
-        run: node --check src/bootstrap-v05.js && node --check src/http/server-v05.js && node --check src/naver/searchad/canary/runtime-production.js
+        run: |
+          node --check src/bootstrap-v05.js
+          node --check src/http/server-v05.js
+          node --check src/naver/searchad/canary/runtime-production.js
+          if [[ -f src/naver/searchad/activation/runtime-production.js ]]; then node --check src/naver/searchad/activation/runtime-production.js; fi
 
   active-canary-postgres:
     runs-on: ubuntu-latest
@@ -91,9 +134,13 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci --no-audit --no-fund
-      - name: PostgreSQL Active Canary persistence contract
+      - name: PostgreSQL Active Canary and activation persistence contracts
         working-directory: smartstore-bridge
-        run: node --test test/postgres-searchad-active-canary.integration.test.js
+        run: |
+          set -euo pipefail
+          TESTS=(test/postgres-searchad-active-canary.integration.test.js)
+          if [[ -f test/postgres-searchad-activation.integration.test.js ]]; then TESTS+=(test/postgres-searchad-activation.integration.test.js); fi
+          node --test "${TESTS[@]}"
 
   searchad-write-regression:
     runs-on: ubuntu-latest
