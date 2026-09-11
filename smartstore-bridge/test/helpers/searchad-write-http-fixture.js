@@ -13,6 +13,12 @@ import { createHttpApiV05 } from '../../src/http/server-v05.js';
 
 export const API_KEY = 'fixture-http-key-'.repeat(4);
 export const CUSTOMER_ID = '1001';
+export const SEARCHAD_ROLE_KEYS = Object.freeze({
+  reader: 'fixture-searchad-reader-key-'.repeat(2),
+  operator: 'fixture-searchad-operator-key-'.repeat(2),
+  executor: 'fixture-searchad-executor-key-'.repeat(2),
+  admin: 'fixture-searchad-admin-key-'.repeat(2)
+});
 const logger = { info() {}, warn() {}, error() {} };
 
 // Only the network boundary is fake. The pinned manifest, signer, client,
@@ -90,18 +96,33 @@ export async function startWriteFixture(t, { masterWrites = true, searchAdWrites
     }
   };
   const env = {
-    ATELIER_API_KEY: API_KEY, ATELIER_HTTP_ALLOW_WRITES: String(masterWrites),
-    ATELIER_SEARCHAD_ALLOW_WRITES: String(searchAdWrites), ATELIER_SEARCHAD_ALLOW_ROLLBACK: 'true',
+    ATELIER_API_KEY: API_KEY,
+    ATELIER_HTTP_ALLOW_WRITES: String(masterWrites),
+    ATELIER_SEARCHAD_ALLOW_WRITES: String(searchAdWrites),
+    ATELIER_SEARCHAD_ALLOW_ROLLBACK: 'true',
     ATELIER_SEARCHAD_WRITE_DB_PATH: path.join(dir, 'writes.sqlite'),
-    ATELIER_WRITE_RATE_LIMIT_PER_MINUTE: '1000'
+    ATELIER_WRITE_RATE_LIMIT_PER_MINUTE: '1000',
+    ATELIER_SEARCHAD_READER_API_KEY: SEARCHAD_ROLE_KEYS.reader,
+    ATELIER_SEARCHAD_READER_CUSTOMERS: CUSTOMER_ID,
+    ATELIER_SEARCHAD_READER_PRINCIPAL_ID: 'fixture-reader',
+    ATELIER_SEARCHAD_OPERATOR_API_KEY: SEARCHAD_ROLE_KEYS.operator,
+    ATELIER_SEARCHAD_OPERATOR_CUSTOMERS: CUSTOMER_ID,
+    ATELIER_SEARCHAD_OPERATOR_PRINCIPAL_ID: 'fixture-operator',
+    ATELIER_SEARCHAD_EXECUTOR_API_KEY: SEARCHAD_ROLE_KEYS.executor,
+    ATELIER_SEARCHAD_EXECUTOR_CUSTOMERS: CUSTOMER_ID,
+    ATELIER_SEARCHAD_EXECUTOR_PRINCIPAL_ID: 'fixture-executor',
+    ATELIER_SEARCHAD_ADMIN_API_KEY: SEARCHAD_ROLE_KEYS.admin,
+    ATELIER_SEARCHAD_ADMIN_CUSTOMERS: CUSTOMER_ID,
+    ATELIER_SEARCHAD_ADMIN_PRINCIPAL_ID: 'fixture-admin'
   };
   const api = createHttpApiV05({ app, env, logger });
   const address = await api.listen({ host: '127.0.0.1', port: 0 });
   t.after(async () => { await api.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const baseUrl = `http://127.0.0.1:${address.port}`;
-  const call = async (method, route, body, { authenticated = true } = {}) => {
+  const call = async (method, route, body, { authenticated = true, role = null } = {}) => {
+    const token = role ? SEARCHAD_ROLE_KEYS[role] : API_KEY;
     const response = await fetch(`${baseUrl}${route}`, {
-      method, headers: { ...(authenticated ? { Authorization: `Bearer ${API_KEY}` } : {}), 'Content-Type': 'application/json' },
+      method, headers: { ...(authenticated ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) })
     });
     return { status: response.status, body: await response.json() };
