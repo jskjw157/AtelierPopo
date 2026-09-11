@@ -200,6 +200,7 @@ export function loadSearchAdConfig(env = process.env, { cwd = process.cwd() } = 
     allowBillingReads: asBoolean(env.ATELIER_SEARCHAD_ALLOW_BILLING_READS, true),
     allowAccountAdmin: asBoolean(env.ATELIER_SEARCHAD_ALLOW_ACCOUNT_ADMIN, false),
     allowActiveCanary: asBoolean(env.ATELIER_SEARCHAD_ALLOW_ACTIVE_CANARY, false),
+    allowReportingJobs: asBoolean(env.ATELIER_SEARCHAD_ALLOW_REPORTING_JOBS, false),
     allowUnverifiedOperations: asBoolean(env.ATELIER_SEARCHAD_ALLOW_UNVERIFIED_OPERATIONS, false),
     automationMode,
     passiveProbeLimit: asInteger(env.ATELIER_SEARCHAD_PASSIVE_PROBE_LIMIT, 12, { min: 1, max: 50 }),
@@ -238,6 +239,7 @@ export function publicSearchAdConfig(config) {
       billingReads: config.allowBillingReads,
       accountAdmin: config.allowAccountAdmin,
       activeCanary: config.allowActiveCanary,
+      reportingJobs: config.allowReportingJobs,
       unverifiedOperations: config.allowUnverifiedOperations
     },
     automationMode: config.automationMode,
