@@ -20,6 +20,7 @@ function evidenceRow(row) {
     upstreamBaseUrl: row.upstream_base_url,
     operationKeys: cloneJson(row.operation_keys_json || []),
     fieldScope: cloneJson(row.field_scope_json || []),
+    lifecycleKinds: cloneJson(row.lifecycle_kinds_json || []),
     result: row.result,
     sourceRunId: row.source_run_id,
     recipeId: row.recipe_id,
@@ -43,6 +44,7 @@ function activationRow(row) {
     upstreamBaseUrl: row.upstream_base_url,
     operationKeys: cloneJson(row.operation_keys_json || []),
     fieldScope: cloneJson(row.field_scope_json || []),
+    lifecycleKinds: cloneJson(row.lifecycle_kinds_json || []),
     activatedByPrincipalId: row.activated_by_principal_id,
     activatedAt: iso(row.activated_at),
     expiresAt: iso(row.expires_at)
@@ -68,11 +70,11 @@ export class PostgresSearchAdActivationRepository {
     const result = await this.pool.query(
       `INSERT INTO searchad_verification_evidence (
          evidence_id, evidence_type, customer_id, spec_sha, credential_fingerprint,
-         upstream_base_url, operation_keys_json, field_scope_json, result,
+         upstream_base_url, operation_keys_json, field_scope_json, lifecycle_kinds_json, result,
          source_run_id, recipe_id, details_json, created_by_principal_id,
          source_request_id, created_at, expires_at
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12::jsonb,$13,$14,$15,$16
+         $1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13::jsonb,$14,$15,$16,$17
        ) RETURNING *`,
       [
         String(evidence.evidenceId),
@@ -83,6 +85,7 @@ export class PostgresSearchAdActivationRepository {
         String(evidence.upstreamBaseUrl),
         JSON.stringify(evidence.operationKeys || []),
         JSON.stringify(evidence.fieldScope || []),
+        JSON.stringify(evidence.lifecycleKinds || []),
         String(evidence.result),
         evidence.sourceRunId == null ? null : String(evidence.sourceRunId),
         evidence.recipeId == null ? null : String(evidence.recipeId),
@@ -129,8 +132,8 @@ export class PostgresSearchAdActivationRepository {
       `INSERT INTO searchad_activation_grants (
          activation_id, evidence_id, evidence_type, customer_id, spec_sha,
          credential_fingerprint, upstream_base_url, operation_keys_json,
-         field_scope_json, activated_by_principal_id, activated_at, expires_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12)
+         field_scope_json, lifecycle_kinds_json, activated_by_principal_id, activated_at, expires_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12,$13)
        RETURNING *`,
       [
         grant.activationId,
@@ -142,6 +145,7 @@ export class PostgresSearchAdActivationRepository {
         String(grant.upstreamBaseUrl),
         JSON.stringify(grant.operationKeys || []),
         JSON.stringify(grant.fieldScope || []),
+        JSON.stringify(grant.lifecycleKinds || []),
         String(grant.activatedByPrincipalId),
         grant.activatedAt,
         grant.expiresAt
