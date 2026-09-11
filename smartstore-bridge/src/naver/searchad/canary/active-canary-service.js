@@ -239,6 +239,39 @@ export class ActiveCanaryService {
     return spend;
   }
 
+  async readCampaignForRecovery(run) {
+    try {
+      return await this.remote.read(this.recipe.readCampaign({
+        customerId: run.customerId,
+        remoteId: run.remoteId
+      }));
+    } catch (error) {
+      const status = Number(error?.status || error?.statusCode || 0);
+      if (status === 404) return null;
+      throw error;
+    }
+  }
+
+  async markCleanupVerified(run, phase) {
+    const cleanupVerifiedAt = nowIso(this.clock);
+    if (typeof this.repository.updateObject === 'function') {
+      await this.repository.updateObject(run.canaryRunId, run.remoteId, {
+        cleanupStatus: 'deleted_verified',
+        cleanedAt: cleanupVerifiedAt
+      });
+    }
+    await this.addEvent(run, {
+      phase,
+      status: 'deleted_verified',
+      operationKey: this.recipe.readCampaign({ customerId: run.customerId, remoteId: run.remoteId })?.operationKey
+    });
+    return this.repository.updateRun(run.canaryRunId, {
+      status: 'spend_check_pending',
+      cleanupVerifiedAt,
+      lastError: null
+    });
+  }
+
   async start(input = {}, context = {}) {
     const { customerId, passiveEvidenceId } = this.assertStartInput(input);
     const principal = this.assertAdminForCustomer(customerId, context);
@@ -390,6 +423,125 @@ export class ActiveCanaryService {
       beforeSpend,
       cleanupVerifiedAt
     });
+  }
+
+  async reconcile(canaryRunId, context = {}) {
+    const run = await this.repository.getRun(canaryRunId);
+    if (!run) fail('SEARCHAD_CANARY_NOT_FOUND', 'Active Canary run을 찾을 수 없습니다.', { canaryRunId }, 404);
+    this.assertAdminForCustomer(run.customerId, context);
+
+    if (run.status === 'spend_check_pending' || run.status === 'passed') return run;
+    if (!['cleanup_required', 'unknown_outcome'].includes(String(run.status))) {
+      fail(
+        'SEARCHAD_CANARY_RECONCILE_NOT_ALLOWED',
+        '현재 Canary 상태에서는 read-only reconcile을 수행할 수 없습니다.',
+        { status: run.status },
+        409
+      );
+    }
+
+    const remoteId = String(run.remoteId || '').trim();
+    if (!remoteId) {
+      await this.addEvent(run, { phase: 'reconcile', status: 'unresolved_no_remote_id' });
+      fail(
+        'SEARCHAD_CANARY_RECONCILE_UNRESOLVED',
+        'returned remote ID가 없어 이름 검색 없이 안전하게 reconcile할 수 없습니다.',
+        { canaryRunId },
+        409
+      );
+    }
+
+    const snapshot = await this.readCampaignForRecovery({ ...run, remoteId });
+    if (this.recipe.assertCleanup(snapshot)) {
+      if (!Number.isFinite(Number(run.beforeSpend))) {
+        await this.addEvent(run, {
+          phase: 'reconcile',
+          status: 'cleanup_verified_spend_baseline_missing',
+          operationKey: this.recipe.readCampaign({ customerId: run.customerId, remoteId })?.operationKey
+        });
+        return this.repository.updateRun(run.canaryRunId, {
+          status: 'cleanup_required',
+          cleanupVerifiedAt: nowIso(this.clock)
+        });
+      }
+      return this.markCleanupVerified({ ...run, remoteId }, 'reconcile');
+    }
+
+    await this.addEvent(run, {
+      phase: 'reconcile',
+      status: 'remote_object_present',
+      operationKey: this.recipe.readCampaign({ customerId: run.customerId, remoteId })?.operationKey
+    });
+    return run;
+  }
+
+  async cleanup(canaryRunId, context = {}) {
+    const run = await this.repository.getRun(canaryRunId);
+    if (!run) fail('SEARCHAD_CANARY_NOT_FOUND', 'Active Canary run을 찾을 수 없습니다.', { canaryRunId }, 404);
+    this.assertAdminForCustomer(run.customerId, context);
+
+    if (run.status !== 'cleanup_required') {
+      fail(
+        'SEARCHAD_CANARY_CLEANUP_NOT_ALLOWED',
+        '현재 Canary 상태에서는 cleanup mutation을 수행할 수 없습니다.',
+        { status: run.status },
+        409
+      );
+    }
+
+    const remoteId = String(run.remoteId || '').trim();
+    if (!remoteId) {
+      fail(
+        'SEARCHAD_CANARY_REMOTE_ID_REQUIRED',
+        'persisted returned remote ID 없이는 Canary cleanup을 수행할 수 없습니다.',
+        { canaryRunId },
+        409
+      );
+    }
+
+    await this.mutateOnce(
+      run,
+      'campaign_cleanup_recovery',
+      this.recipe.cleanupCampaign({ customerId: run.customerId, remoteId })
+    );
+
+    const snapshot = await this.readCampaignForRecovery({ ...run, remoteId });
+    if (!this.recipe.assertCleanup(snapshot)) {
+      await this.repository.updateRun(run.canaryRunId, { status: 'cleanup_required' });
+      await this.addEvent(run, {
+        phase: 'campaign_cleanup_recovery_verify',
+        status: 'remote_object_present',
+        operationKey: this.recipe.readCampaign({ customerId: run.customerId, remoteId })?.operationKey
+      });
+      fail(
+        'SEARCHAD_CANARY_CLEANUP_REQUIRED',
+        'Canary campaign 정리가 원격에서 검증되지 않았습니다.',
+        { remoteId },
+        409
+      );
+    }
+
+    if (!Number.isFinite(Number(run.beforeSpend))) {
+      const cleanupVerifiedAt = nowIso(this.clock);
+      if (typeof this.repository.updateObject === 'function') {
+        await this.repository.updateObject(run.canaryRunId, remoteId, {
+          cleanupStatus: 'deleted_verified',
+          cleanedAt: cleanupVerifiedAt
+        });
+      }
+      await this.addEvent(run, {
+        phase: 'campaign_cleanup_recovery_verify',
+        status: 'deleted_verified_spend_baseline_missing',
+        operationKey: this.recipe.readCampaign({ customerId: run.customerId, remoteId })?.operationKey
+      });
+      return this.repository.updateRun(run.canaryRunId, {
+        status: 'cleanup_required',
+        cleanupVerifiedAt,
+        lastError: null
+      });
+    }
+
+    return this.markCleanupVerified({ ...run, remoteId }, 'campaign_cleanup_recovery_verify');
   }
 
   async verifySpend(canaryRunId, context = {}) {
