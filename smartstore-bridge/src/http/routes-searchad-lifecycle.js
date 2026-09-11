@@ -129,7 +129,7 @@ function context(principal, requestId) {
 export function createSearchAdLifecycleRoutes({ app } = {}) {
   return [
     {
-      method: 'GET', pattern: /^\/api\/v1\/searchad\/lifecycle\/runs$/, searchAdRole: 'reader',
+      method: 'GET', pattern: /^\/api\/v1\/searchad\/lifecycle\/runs$/, auth: true, write: false, searchAdRole: 'reader',
       async handler({ res, principal, url }) {
         const runtime = runtimeFor(app);
         const ids = principalCustomerIds(principal);
@@ -142,7 +142,7 @@ export function createSearchAdLifecycleRoutes({ app } = {}) {
       }
     },
     {
-      method: 'GET', pattern: /^\/api\/v1\/searchad\/lifecycle\/runs\/([^/]+)$/, searchAdRole: 'reader',
+      method: 'GET', pattern: /^\/api\/v1\/searchad\/lifecycle\/runs\/([^/]+)$/, auth: true, write: false, searchAdRole: 'reader',
       async handler({ res, principal, match }) {
         const runtime = runtimeFor(app);
         const run = await findRunForPrincipal(runtime.repository, match[1], principal);
@@ -158,7 +158,7 @@ export function createSearchAdLifecycleRoutes({ app } = {}) {
       }
     },
     {
-      method: 'POST', pattern: /^\/api\/v1\/searchad\/lifecycle\/runs$/, searchAdRole: 'admin',
+      method: 'POST', pattern: /^\/api\/v1\/searchad\/lifecycle\/runs$/, auth: true, write: true, searchAdRole: 'admin',
       async handler({ res, principal, body, requestId }) {
         const runtime = runtimeFor(app);
         assertExactBody(body, ['customerId', 'planId', 'executionToken'], ['customerId', 'planId', 'executionToken']);
@@ -172,7 +172,7 @@ export function createSearchAdLifecycleRoutes({ app } = {}) {
       ['keywords', 'createKeywords'],
       ['creative', 'createCreative']
     ].map(([segment, method]) => ({
-      method: 'POST', pattern: new RegExp(`^/api/v1/searchad/lifecycle/runs/([^/]+)/${segment}$`), searchAdRole: 'admin',
+      method: 'POST', pattern: new RegExp(`^/api/v1/searchad/lifecycle/runs/([^/]+)/${segment}$`), auth: true, write: true, searchAdRole: 'admin',
       async handler({ res, principal, body, match, requestId }) {
         const runtime = runtimeFor(app);
         assertExactBody(body, ['parentObjectId', 'planId', 'executionToken'], ['parentObjectId', 'planId', 'executionToken']);
@@ -187,7 +187,7 @@ export function createSearchAdLifecycleRoutes({ app } = {}) {
       }
     })),
     {
-      method: 'POST', pattern: /^\/api\/v1\/searchad\/lifecycle\/runs\/([^/]+)\/cleanup-next$/, searchAdRole: 'admin',
+      method: 'POST', pattern: /^\/api\/v1\/searchad\/lifecycle\/runs\/([^/]+)\/cleanup-next$/, auth: true, write: true, searchAdRole: 'admin',
       async handler({ res, principal, body, match, requestId }) {
         const runtime = runtimeFor(app);
         assertExactBody(body, ['planId', 'executionToken'], ['planId', 'executionToken']);
@@ -201,7 +201,7 @@ export function createSearchAdLifecycleRoutes({ app } = {}) {
       }
     },
     {
-      method: 'POST', pattern: /^\/api\/v1\/searchad\/lifecycle\/runs\/([^/]+)\/reconcile$/, searchAdRole: 'admin',
+      method: 'POST', pattern: /^\/api\/v1\/searchad\/lifecycle\/runs\/([^/]+)\/reconcile$/, auth: true, write: true, searchAdRole: 'admin',
       async handler({ res, principal, body, match, requestId }) {
         const runtime = runtimeFor(app);
         assertExactBody(body || {}, [], []);
