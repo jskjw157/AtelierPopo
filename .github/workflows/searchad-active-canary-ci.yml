@@ -105,7 +105,46 @@ jobs:
           node --check src/bootstrap-v05.js
           node --check src/http/server-v05.js
           node --check src/naver/searchad/canary/runtime-production.js
-          if [[ -f src/naver/searchad/activation/runtime-production.js ]]; then node --check src/naver/searchad/activation/runtime-production.js; fi
+          node --check src/naver/searchad/activation/runtime-production.js
+
+  searchad-activation-focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: smartstore-bridge/package-lock.json
+      - name: Install dependencies
+        working-directory: smartstore-bridge
+        run: npm ci --no-audit --no-fund
+      - name: Passive evidence and activation focused suite
+        working-directory: smartstore-bridge
+        run: |
+          node --test \
+            test/searchad-passive-evidence.test.js \
+            test/searchad-activation-service.test.js \
+            test/searchad-activation-runtime.test.js \
+            test/searchad-activation-guard.test.js \
+            test/searchad-account-control.test.js \
+            test/searchad-write-activation.test.js \
+            test/searchad-write-access.test.js \
+            test/searchad-http-activation.test.js
+      - name: Production SearchAd mutation gates default OFF
+        working-directory: smartstore-bridge
+        run: |
+          node --input-type=module <<'NODE'
+          import { loadSearchAdConfig } from './src/naver/searchad/config.js';
+          const config = loadSearchAdConfig({});
+          const gates = ['allowWrites', 'allowCreates', 'allowBatchWrites', 'allowRollbacks', 'allowDeletes', 'allowActiveCanary'];
+          for (const gate of gates) {
+            if (config[gate] !== false) throw new Error(`${gate} must default to false`);
+          }
+          if (config.automationMode !== 'observe') throw new Error('automationMode must default to observe');
+          console.log('SearchAd mutation defaults verified OFF; automation default verified observe.');
+          NODE
 
   active-canary-postgres:
     runs-on: ubuntu-latest
@@ -140,9 +179,9 @@ jobs:
         working-directory: smartstore-bridge
         run: |
           set -euo pipefail
-          TESTS=(test/postgres-searchad-active-canary.integration.test.js)
-          if [[ -f test/postgres-searchad-activation.integration.test.js ]]; then TESTS+=(test/postgres-searchad-activation.integration.test.js); fi
-          node --test --test-concurrency=1 "${TESTS[@]}"
+          node --test --test-concurrency=1 \
+            test/postgres-searchad-active-canary.integration.test.js \
+            test/postgres-searchad-activation.integration.test.js
 
   searchad-write-regression:
     runs-on: ubuntu-latest
