@@ -8,6 +8,7 @@ import { SearchAdWriteRepository } from '../src/naver/searchad/write/repository.
 import { SearchAdChangePlanService } from '../src/naver/searchad/write/plan-service.js';
 import { SearchAdApprovalService, SEARCHAD_APPROVAL_CONFIRMATION } from '../src/naver/searchad/write/approval-service.js';
 import { SearchAdExecutionService } from '../src/naver/searchad/write/execution-service.js';
+import { createProductionSearchAdWriteRuntime } from '../src/naver/searchad/write/runtime-production.js';
 
 const CAMPAIGN_UPDATE = 'ncc.put.modify_using_put_5__p_ncc_campaigns_campaign_id__q_fields';
 
@@ -169,4 +170,22 @@ test('normal non-owned write remains unchanged when ownership guard allows the t
   assert.equal(h.getApprovalClaims(), 1);
   assert.equal(h.getMutateCalls(), 1);
   h.repository.close();
+});
+
+test('production write runtime forwards the Canary ownership guard into execution service', () => {
+  const ownershipGuard = { async assertMutationNotCanaryOwned() { return { allowed: true }; } };
+  const activationGuard = { async assertMutationAllowed() { return { allowed: true }; } };
+  const runtime = createProductionSearchAdWriteRuntime({
+    gateway: {},
+    activationGuard,
+    ownershipGuard,
+    database: new DatabaseSync(':memory:'),
+    env: {
+      ATELIER_SEARCHAD_WRITE_EXECUTION_ENABLED: 'true',
+      ATELIER_SEARCHAD_ALLOW_CHANGE_PLANS: 'true',
+      ATELIER_SEARCHAD_ALLOW_WRITES: 'false'
+    }
+  });
+  assert.equal(runtime.executionService.ownershipGuard, ownershipGuard);
+  runtime.close();
 });
