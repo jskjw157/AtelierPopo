@@ -18,6 +18,7 @@ import {
   normalizePathname,
   sendJson
 } from './runtime.js';
+import { loadSearchAdHttpAccessControl } from './searchad-access-control.js';
 import { createSystemRoutesV04, readinessV04 } from './routes-system-v04.js';
 import { createProductRoutesV03 } from './routes-products-v03.js';
 import { createLedgerRoutesV03 } from './routes-ledger-v03.js';
@@ -36,6 +37,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
   if (!app) throw new Error('createHttpApiV05에는 bootstrap 결과 app이 필요합니다.');
   if (!app.commerceGateway) throw new Error('네이버 커머스API gateway가 초기화되지 않았습니다.');
   const httpConfig = loadHttpConfig(env);
+  const searchAdAccessControl = loadSearchAdHttpAccessControl(env);
   const rateLimiter = new FixedWindowRateLimiter();
   const operationQueue = new OperationQueue({
     ledger: app.ledger,
@@ -117,12 +119,20 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       selected.pattern.lastIndex = 0;
       const match = selected.pattern.exec(pathname);
       let authenticatedToken = '';
+      let tokenFingerprint = '';
+      let principal = null;
       if (selected.auth) {
-        authenticatedToken = verifyApiKey(req, { ...httpConfig, apiKeys: configuredApiKeys(httpConfig) });
+        if (selected.searchAdRole) {
+          const authenticated = searchAdAccessControl.authenticateRequest(req, { minimumRole: selected.searchAdRole });
+          principal = authenticated.principal;
+          tokenFingerprint = authenticated.tokenFingerprint;
+        } else {
+          authenticatedToken = verifyApiKey(req, { ...httpConfig, apiKeys: configuredApiKeys(httpConfig) });
+          tokenFingerprint = authenticatedToken.slice(0, 8);
+        }
       }
       if (selected.auth) {
         const ip = clientIp(req, httpConfig);
-        const tokenFingerprint = authenticatedToken.slice(0, 8);
         const limit = selected.write ? httpConfig.writeRateLimitPerMinute : httpConfig.readRateLimitPerMinute;
         const rate = rateLimiter.consume(`${ip}:${tokenFingerprint}:${selected.write ? 'write' : 'read'}`, limit);
         res.setHeader('X-RateLimit-Limit', String(rate.limit));
@@ -136,9 +146,15 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       const bodyLimit = Math.max(httpConfig.maxBodyBytes, Number(selected.maxBodyBytes || 0));
       const body = BODY_METHODS.has(req.method || '') ? await readJsonBody(req, bodyLimit) : {};
       logger.info('HTTP request', {
-        requestId, method: req.method, pathname, authenticated: selected.auth, write: selected.write, bodyLimit
+        requestId,
+        method: req.method,
+        pathname,
+        authenticated: selected.auth,
+        write: selected.write,
+        searchAdRole: selected.searchAdRole || null,
+        bodyLimit
       });
-      await selected.handler({ req, res, url, pathname, match, body, requestId });
+      await selected.handler({ req, res, url, pathname, match, body, requestId, principal });
     } catch (error) {
       const { status, body } = errorPayloadV05(error, requestId, { exposeInternal: httpConfig.exposeInternalErrors });
       logger.error('HTTP request failed', {
@@ -190,6 +206,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
   return {
     server,
     httpConfig,
+    searchAdAccessControl,
     operationQueue,
     listen,
     close,
@@ -215,6 +232,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       searchAdActiveCanary: {
         initialized: Boolean(app.searchAdActiveCanaryRuntime),
         startupError: app.searchAdActiveCanaryStartupError || null,
+        access: searchAdAccessControl.status(),
         status: app.searchAdActiveCanaryRuntime?.status?.() || {
           enabled: false,
           ready: false,
