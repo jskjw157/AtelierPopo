@@ -20,19 +20,19 @@ export class ProductionSearchAdExecutionService extends SafeSearchAdExecutionSer
       try {
         return await SearchAdExecutionService.prototype.rollback.call(this, planId, input, context);
       } catch (error) {
-        const plan = this.repository.getPlan(planId);
-        const attempts = this.repository.listAttempts(planId);
+        const plan = await this.repository.getPlan(planId);
+        const attempts = await this.repository.listAttempts(planId);
         const remoteAccepted = attempts.some(attempt =>
           attempt.phase === 'rollback' && attempt.status === 'remote_accepted'
         );
         if (remoteAccepted && ['applied', 'applied_reconciled'].includes(plan?.status)) {
           const now = new Date(this.clock()).toISOString();
           const storedError = safeError(error);
-          this.repository.updatePlan(planId, {
+          await this.repository.updatePlan(planId, {
             status: 'rollback_unknown_outcome',
             last_error_json: storedError
           }, { expectedStatuses: [plan.status] });
-          this.repository.addAttempt({
+          await this.repository.addAttempt({
             attempt_id: randomUUID(),
             plan_id: planId,
             phase: 'rollback_verify',
