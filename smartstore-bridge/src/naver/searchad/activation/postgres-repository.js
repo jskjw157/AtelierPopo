@@ -203,6 +203,26 @@ export class PostgresSearchAdActivationRepository {
     return activationRow(result.rows[0]);
   }
 
+  async findUsableLifecycleActivation({ customerId, operationKey, lifecycleKind, now = new Date() } = {}) {
+    const result = await this.pool.query(
+      `SELECT * FROM searchad_activation_grants
+       WHERE customer_id=$1
+         AND evidence_type='active_canary'
+         AND expires_at>$2
+         AND operation_keys_json @> $3::jsonb
+         AND lifecycle_kinds_json @> $4::jsonb
+       ORDER BY activated_at DESC
+       LIMIT 1`,
+      [
+        String(customerId),
+        now,
+        JSON.stringify([String(operationKey)]),
+        JSON.stringify([String(lifecycleKind)])
+      ]
+    );
+    return activationRow(result.rows[0]);
+  }
+
   async getAccount(customerId) {
     const result = await this.pool.query(
       'SELECT * FROM searchad_canary_accounts WHERE customer_id=$1',
