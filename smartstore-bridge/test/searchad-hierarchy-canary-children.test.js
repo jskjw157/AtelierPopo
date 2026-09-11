@@ -75,10 +75,10 @@ function serviceFixture({ campaignStopped = true, mutateImpl, deleteReadsAs404 =
       return { ok: true };
     },
     async read(descriptor) {
+      if (deleteReadsAs404) throw Object.assign(new Error('not found'), { status: 404 });
       if (descriptor.operationKey === SEARCHAD_HIERARCHY_OPERATIONS.campaign.read) {
         return { data: { nccCampaignId: 'cmp-100', campaignTp: 'WEB_SITE', userLock: campaignStopped } };
       }
-      if (deleteReadsAs404) throw Object.assign(new Error('not found'), { status: 404 });
       return { data: { exists: true } };
     }
   };
