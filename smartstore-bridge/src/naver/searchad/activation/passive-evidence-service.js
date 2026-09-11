@@ -23,8 +23,8 @@ function validateTargetOperation(gateway, operationKey) {
     const verified = Boolean(
       operation &&
       operation.runtimeAllowlisted === true &&
-      ['A', 'B'].includes(String(operation.tier || '')) &&
-      String(operation.state || '') !== 'internal_quarantined'
+      String(operation.state || '') === 'public_documented' &&
+      String(operation.tier || '') === 'B'
     );
     return {
       operationKey: String(operationKey),
