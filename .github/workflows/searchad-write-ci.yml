@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/searchad-write-execution-v0.7.0
+      - codex/searchad-recovery-2026-09-11
     paths:
       - 'smartstore-bridge/**'
       - '.github/workflows/searchad-write-ci.yml'
