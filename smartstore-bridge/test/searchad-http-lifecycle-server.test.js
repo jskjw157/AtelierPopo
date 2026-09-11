@@ -23,7 +23,10 @@ function createFixture() {
   let closeCalls = 0;
   const runs = [{ hierarchyRunId: 'run-100', customerId: '100', status: 'active', createdAt: '2026-09-11T00:00:00Z' }];
   const repository = {
-    async listRuns({ customerId }) { calls.push({ type: 'listRuns', customerId }); return runs.filter(run => run.customerId === customerId); },
+    async listRuns({ customerIds = [], statuses = [], limit = 100 } = {}) {
+      calls.push({ type: 'listRuns', customerIds: [...customerIds], statuses: [...statuses], limit });
+      return runs.filter(run => customerIds.includes(run.customerId) && (!statuses.length || statuses.includes(run.status))).slice(0, limit);
+    },
     async getRun(id, customerId) { calls.push({ type: 'getRun', id, customerId }); return runs.find(run => run.hierarchyRunId === id && (!customerId || run.customerId === customerId)) || null; }
   };
   const service = {
@@ -90,10 +93,24 @@ async function startFixture() {
 async function request(fixture, key, method, pathname, body) {
   return fetch(`${fixture.baseUrl}${pathname}`, {
     method,
-    headers: { Authorization: `Bearer ${key}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    headers: { ...(key ? { Authorization: `Bearer ${key}` } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
 }
+
+test('V05 lifecycle routes require SearchAd role authentication and reject generic HAAR credentials', async () => {
+  const fixture = await startFixture();
+  try {
+    const unauthenticated = await request(fixture, null, 'GET', '/api/v1/searchad/lifecycle/runs');
+    assert.equal(unauthenticated.status, 401);
+    const generic = await request(fixture, GENERIC_KEY, 'GET', '/api/v1/searchad/lifecycle/runs');
+    assert.equal(generic.status, 401);
+    assert.equal(fixture.calls.some(call => call.type === 'listRuns'), false);
+  } finally {
+    await fixture.api.close();
+    fs.rmSync(fixture.dir, { recursive: true, force: true });
+  }
+});
 
 test('V05 server exposes Customer-scoped lifecycle routes and readiness', async () => {
   const fixture = await startFixture();
@@ -102,7 +119,7 @@ test('V05 server exposes Customer-scoped lifecycle routes and readiness', async 
     assert.equal(response.status, 200);
     const payload = await response.json();
     assert.deepEqual(payload.items.map(item => item.customerId), ['100']);
-    assert.deepEqual(fixture.calls.filter(call => call.type === 'listRuns').map(call => call.customerId), ['100']);
+    assert.deepEqual(fixture.calls.filter(call => call.type === 'listRuns').map(call => call.customerIds), [['100']]);
     const readiness = fixture.api.readiness();
     assert.equal(readiness.searchAdLifecycle?.initialized, true);
     assert.equal(readiness.searchAdLifecycle?.ready, true);
