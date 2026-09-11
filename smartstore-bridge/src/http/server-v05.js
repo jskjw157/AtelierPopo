@@ -198,6 +198,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     operationQueue.accepting = false;
     if (server.listening) await new Promise(resolve => server.close(() => resolve()));
     await operationQueue.close({ timeoutMs: httpConfig.shutdownTimeoutMs });
+    await app.searchAdActivationRuntime?.close?.();
     await app.searchAdActiveCanaryRuntime?.close?.();
     await app.searchAdWriteRuntime?.close?.();
     app.ledger.close();
@@ -227,6 +228,17 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
           activationMode: 'prevalidation',
           prevalidationGateTemporary: true,
           permanentWriteProhibition: false
+        }
+      },
+      searchAdActivation: {
+        initialized: Boolean(app.searchAdActivationRuntime),
+        ready: Boolean(app.searchAdActivationRuntime?.status?.().ready),
+        startupError: app.searchAdActivationStartupError || null,
+        status: app.searchAdActivationRuntime?.status?.() || {
+          ready: false,
+          storage: { runtime: 'postgres', schemaReady: false },
+          targetOperationCount: 0,
+          targetFieldCount: 0
         }
       },
       searchAdActiveCanary: {
