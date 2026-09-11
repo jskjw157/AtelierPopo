@@ -26,13 +26,17 @@ export function createSearchAdWriteRoutesV3(context) {
     },
     {
       method: 'GET', pattern: /^\/api\/v1\/searchad\/changes$/, auth: true, write: false,
-      handler: async ({ req, res, url }) => sendJson(req, res, 200, {
-        items: runtimeFor(context).planService.list(filters(url))
-      })
+      handler: async ({ req, res, url }) => {
+        const items = await runtimeFor(context).planService.list(filters(url));
+        sendJson(req, res, 200, { items });
+      }
     },
     {
       method: 'GET', pattern: /^\/api\/v1\/searchad\/changes\/(?<planId>[^/]+)$/, auth: true, write: false,
-      handler: async ({ req, res, match }) => sendJson(req, res, 200, runtimeFor(context).planService.get(planId(match)))
+      handler: async ({ req, res, match }) => {
+        const result = await runtimeFor(context).planService.get(planId(match));
+        sendJson(req, res, 200, result);
+      }
     },
     {
       method: 'POST', pattern: /^\/api\/v1\/searchad\/changes\/plan$/, auth: true, write: true,
