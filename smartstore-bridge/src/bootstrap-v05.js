@@ -6,6 +6,8 @@ import { loadSearchAdSpecRegistry } from './naver/searchad/spec-registry.js';
 import { SearchAdOperationGateway } from './naver/searchad/gateway.js';
 import { SearchAdCapabilityService } from './naver/searchad/capability.js';
 import { bootstrapSearchAdActivationRuntime } from './naver/searchad/activation/bootstrap.js';
+import { createProductionSearchAdWriteRuntime } from './naver/searchad/write/runtime-production.js';
+import { bootstrapSearchAdLifecycleRuntime } from './naver/searchad/lifecycle/bootstrap.js';
 import { bootstrapActiveCanaryRuntime } from './naver/searchad/canary/bootstrap.js';
 import { bootstrapMultiSourceCatalog } from './catalog/multi-source/bootstrap.js';
 import { logger } from './infrastructure/logger.js';
@@ -64,6 +66,41 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
     logger
   });
 
+  let searchAdWriteRuntime = null;
+  let searchAdWriteStartupError = null;
+  if (searchAdGateway) {
+    try {
+      searchAdWriteRuntime = createProductionSearchAdWriteRuntime({
+        gateway: searchAdGateway,
+        activationGuard: searchAdActivationRuntime?.guard || null,
+        ownershipGuard: null,
+        env,
+        baseDir: app.config?.workDir || process.cwd()
+      });
+    } catch (error) {
+      searchAdWriteStartupError = {
+        code: String(error?.code || 'SEARCHAD_WRITE_STARTUP_FAILED'),
+        message: 'SearchAd write runtime startup failed; SearchAd writes remain unavailable.'
+      };
+      logger.error('SearchAd write runtime startup failed', { code: searchAdWriteStartupError.code });
+    }
+  }
+
+  const {
+    runtime: searchAdLifecycleRuntime,
+    startupError: searchAdLifecycleStartupError
+  } = await bootstrapSearchAdLifecycleRuntime({
+    app: {
+      ...app,
+      searchAdGateway,
+      searchAdCredentials,
+      searchAdActivationRuntime,
+      searchAdWriteRuntime
+    },
+    env,
+    logger
+  });
+
   const {
     runtime: searchAdActiveCanaryRuntime,
     startupError: searchAdActiveCanaryStartupError
@@ -105,6 +142,10 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
     searchAdStartupError,
     searchAdActivationRuntime,
     searchAdActivationStartupError,
+    searchAdWriteRuntime,
+    searchAdWriteStartupError,
+    searchAdLifecycleRuntime,
+    searchAdLifecycleStartupError,
     searchAdActiveCanaryRuntime,
     searchAdActiveCanaryStartupError,
     multiSourceCatalogConfig,
