@@ -27,11 +27,12 @@ function publicError(error) {
 }
 
 export class SearchAdExecutionService {
-  constructor({ repository, remote, approvalService, activationGuard = null, config, clock = () => Date.now() }) {
+  constructor({ repository, remote, approvalService, activationGuard = null, ownershipGuard = null, config, clock = () => Date.now() }) {
     this.repository = repository;
     this.remote = remote;
     this.approvalService = approvalService;
     this.activationGuard = activationGuard;
+    this.ownershipGuard = ownershipGuard;
     this.config = config;
     this.clock = clock;
   }
@@ -51,6 +52,15 @@ export class SearchAdExecutionService {
     const plan = this.repository.getPlan(planId);
     if (!plan) throw new SearchAdWriteError('SEARCHAD_CHANGE_PLAN_NOT_FOUND', 'SearchAd 변경 계획을 찾을 수 없습니다.', { planId }, 404);
     return plan;
+  }
+
+  async assertOwnershipAvailable(plan, descriptor = plan.mutation_json) {
+    if (!this.ownershipGuard?.assertMutationNotCanaryOwned) return { allowed: true, skipped: true };
+    return this.ownershipGuard.assertMutationNotCanaryOwned({
+      customerId: plan.customer_id,
+      descriptor: structuredClone(descriptor),
+      planId: plan.plan_id
+    });
   }
 
   async execute(planId, input = {}, context = {}) {
@@ -101,6 +111,7 @@ export class SearchAdExecutionService {
       descriptor: structuredClone(plan.mutation_json),
       planId
     });
+    await this.assertOwnershipAvailable(plan);
 
     this.approvalService.claim(planId, input.executionToken);
 
@@ -223,6 +234,7 @@ export class SearchAdExecutionService {
         planId, expectedAppliedHash: plan.applied_after_hash, currentHash
       }, 409);
     }
+    await this.assertOwnershipAvailable(plan, plan.rollback_json.mutation);
     const mutation = { ...plan.rollback_json.mutation, customerId: plan.customer_id };
     try {
       const response = await this.remote.mutate(mutation, {
