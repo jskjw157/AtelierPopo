@@ -8,6 +8,9 @@ on:
       - 'smartstore-bridge/src/naver/searchad/canary/**'
       - 'smartstore-bridge/src/naver/searchad/activation/**'
       - 'smartstore-bridge/src/naver/searchad/lifecycle/**'
+      - 'smartstore-bridge/src/naver/searchad/reporting/**'
+      - 'smartstore-bridge/src/naver/searchad/circuit/**'
+      - 'smartstore-bridge/src/naver/searchad/automation/**'
       - 'smartstore-bridge/src/naver/searchad/capability.js'
       - 'smartstore-bridge/src/naver/searchad/gateway.js'
       - 'smartstore-bridge/src/naver/searchad/write/**'
@@ -19,9 +22,15 @@ on:
       - 'smartstore-bridge/src/http/routes-searchad-write-v3.js'
       - 'smartstore-bridge/src/http/routes-searchad-activation.js'
       - 'smartstore-bridge/src/http/routes-searchad-lifecycle.js'
+      - 'smartstore-bridge/src/http/routes-searchad-reporting.js'
+      - 'smartstore-bridge/src/http/routes-searchad-circuit.js'
+      - 'smartstore-bridge/src/http/routes-searchad-automation.js'
       - 'smartstore-bridge/src/http/openapi-searchad-canary.js'
       - 'smartstore-bridge/src/http/openapi-searchad-activation.js'
       - 'smartstore-bridge/src/http/openapi-searchad-lifecycle.js'
+      - 'smartstore-bridge/src/http/openapi-searchad-reporting.js'
+      - 'smartstore-bridge/src/http/openapi-searchad-circuit.js'
+      - 'smartstore-bridge/src/http/openapi-searchad-automation.js'
       - 'smartstore-bridge/.env.searchad-write.example'
       - 'smartstore-bridge/test/helpers/searchad-write-http-fixture.js'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
@@ -33,9 +42,15 @@ on:
       - 'smartstore-bridge/test/searchad-http-*.test.js'
       - 'smartstore-bridge/test/searchad-hierarchy-*.test.js'
       - 'smartstore-bridge/test/searchad-lifecycle-*.test.js'
+      - 'smartstore-bridge/test/searchad-reporting-*.test.js'
+      - 'smartstore-bridge/test/searchad-circuit-*.test.js'
+      - 'smartstore-bridge/test/searchad-automation-*.test.js'
       - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
       - 'smartstore-bridge/test/postgres-searchad-activation.integration.test.js'
       - 'smartstore-bridge/test/postgres-searchad-lifecycle.integration.test.js'
+      - 'smartstore-bridge/test/postgres-searchad-reporting*.integration.test.js'
+      - 'smartstore-bridge/test/postgres-searchad-circuit*.integration.test.js'
+      - 'smartstore-bridge/test/postgres-searchad-automation*.integration.test.js'
       - 'smartstore-bridge/migrations/postgres/**'
       - '.github/workflows/searchad-active-canary-ci.yml'
   pull_request:
@@ -45,6 +60,9 @@ on:
       - 'smartstore-bridge/src/naver/searchad/canary/**'
       - 'smartstore-bridge/src/naver/searchad/activation/**'
       - 'smartstore-bridge/src/naver/searchad/lifecycle/**'
+      - 'smartstore-bridge/src/naver/searchad/reporting/**'
+      - 'smartstore-bridge/src/naver/searchad/circuit/**'
+      - 'smartstore-bridge/src/naver/searchad/automation/**'
       - 'smartstore-bridge/src/naver/searchad/capability.js'
       - 'smartstore-bridge/src/naver/searchad/gateway.js'
       - 'smartstore-bridge/src/naver/searchad/write/**'
@@ -56,9 +74,15 @@ on:
       - 'smartstore-bridge/src/http/routes-searchad-write-v3.js'
       - 'smartstore-bridge/src/http/routes-searchad-activation.js'
       - 'smartstore-bridge/src/http/routes-searchad-lifecycle.js'
+      - 'smartstore-bridge/src/http/routes-searchad-reporting.js'
+      - 'smartstore-bridge/src/http/routes-searchad-circuit.js'
+      - 'smartstore-bridge/src/http/routes-searchad-automation.js'
       - 'smartstore-bridge/src/http/openapi-searchad-canary.js'
       - 'smartstore-bridge/src/http/openapi-searchad-activation.js'
       - 'smartstore-bridge/src/http/openapi-searchad-lifecycle.js'
+      - 'smartstore-bridge/src/http/openapi-searchad-reporting.js'
+      - 'smartstore-bridge/src/http/openapi-searchad-circuit.js'
+      - 'smartstore-bridge/src/http/openapi-searchad-automation.js'
       - 'smartstore-bridge/.env.searchad-write.example'
       - 'smartstore-bridge/test/helpers/searchad-write-http-fixture.js'
       - 'smartstore-bridge/test/searchad-active-canary-*.test.js'
@@ -70,9 +94,15 @@ on:
       - 'smartstore-bridge/test/searchad-http-*.test.js'
       - 'smartstore-bridge/test/searchad-hierarchy-*.test.js'
       - 'smartstore-bridge/test/searchad-lifecycle-*.test.js'
+      - 'smartstore-bridge/test/searchad-reporting-*.test.js'
+      - 'smartstore-bridge/test/searchad-circuit-*.test.js'
+      - 'smartstore-bridge/test/searchad-automation-*.test.js'
       - 'smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js'
       - 'smartstore-bridge/test/postgres-searchad-activation.integration.test.js'
       - 'smartstore-bridge/test/postgres-searchad-lifecycle.integration.test.js'
+      - 'smartstore-bridge/test/postgres-searchad-reporting*.integration.test.js'
+      - 'smartstore-bridge/test/postgres-searchad-circuit*.integration.test.js'
+      - 'smartstore-bridge/test/postgres-searchad-automation*.integration.test.js'
       - 'smartstore-bridge/migrations/postgres/**'
       - '.github/workflows/searchad-active-canary-ci.yml'
 
@@ -99,8 +129,14 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           TESTS=(test/searchad-active-canary-*.test.js test/searchad-gateway-active-canary.test.js test/searchad-http-*.test.js)
-          LIFECYCLE_TESTS=(test/searchad-hierarchy-*.test.js test/searchad-lifecycle-*.test.js)
-          TESTS+=("${LIFECYCLE_TESTS[@]}")
+          DOMAIN_TESTS=(
+            test/searchad-hierarchy-*.test.js
+            test/searchad-lifecycle-*.test.js
+            test/searchad-reporting-*.test.js
+            test/searchad-circuit-*.test.js
+            test/searchad-automation-*.test.js
+          )
+          TESTS+=("${DOMAIN_TESTS[@]}")
           for file in \
             test/searchad-passive-evidence.test.js \
             test/searchad-activation-service.test.js \
@@ -120,6 +156,9 @@ jobs:
           node --check src/naver/searchad/canary/runtime-production.js
           node --check src/naver/searchad/activation/runtime-production.js
           if [[ -f src/naver/searchad/lifecycle/runtime-production.js ]]; then node --check src/naver/searchad/lifecycle/runtime-production.js; fi
+          if [[ -f src/naver/searchad/reporting/runtime-production.js ]]; then node --check src/naver/searchad/reporting/runtime-production.js; fi
+          if [[ -f src/naver/searchad/circuit/runtime-production.js ]]; then node --check src/naver/searchad/circuit/runtime-production.js; fi
+          if [[ -f src/naver/searchad/automation/runtime-production.js ]]; then node --check src/naver/searchad/automation/runtime-production.js; fi
 
   searchad-activation-focused:
     runs-on: ubuntu-latest
@@ -189,7 +228,7 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci --no-audit --no-fund
-      - name: PostgreSQL Active Canary, activation, and lifecycle persistence contracts
+      - name: PostgreSQL SearchAd persistence contracts
         working-directory: smartstore-bridge
         run: |
           set -euo pipefail
@@ -197,7 +236,13 @@ jobs:
             test/postgres-searchad-active-canary.integration.test.js
             test/postgres-searchad-activation.integration.test.js
           )
-          if [[ -f test/postgres-searchad-lifecycle.integration.test.js ]]; then TESTS+=(test/postgres-searchad-lifecycle.integration.test.js); fi
+          for file in \
+            test/postgres-searchad-lifecycle.integration.test.js \
+            test/postgres-searchad-reporting.integration.test.js \
+            test/postgres-searchad-circuit.integration.test.js \
+            test/postgres-searchad-automation.integration.test.js; do
+            if [[ -f "$file" ]]; then TESTS+=("$file"); fi
+          done
           node --test --test-concurrency=1 "${TESTS[@]}"
 
   searchad-write-regression:
