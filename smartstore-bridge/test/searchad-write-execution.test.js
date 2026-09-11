@@ -7,7 +7,7 @@ import { SearchAdApprovalService, SEARCHAD_APPROVAL_CONFIRMATION } from '../src/
 import { ProductionSearchAdExecutionService } from '../src/naver/searchad/write/production-execution-service.js';
 import { SearchAdGatewayRemoteAdapter } from '../src/naver/searchad/write/remote-adapter.js';
 
-function harness({ allowWrites = true, allowRollback = true, mutateHook, readHook } = {}) {
+function harness({ allowWrites = true, allowRollback = true, mutateHook, readHook, activationGuard = { async assertMutationAllowed() { return { allowed: true }; } } } = {}) {
   let currentTime = Date.parse('2026-09-02T01:00:00.000Z');
   let state = { keywordId: 'kw-1', bidAmt: 300, editTm: 'initial' };
   let readCalls = 0;
@@ -46,7 +46,7 @@ function harness({ allowWrites = true, allowRollback = true, mutateHook, readHoo
   const approvalService = new SearchAdApprovalService({ repository, config, clock });
   const planService = new SearchAdChangePlanService({ repository, remote, config, clock });
   const executionService = new ProductionSearchAdExecutionService({
-    repository, remote, approvalService, config, clock, lockTtlMs: 60_000
+    repository, remote, approvalService, activationGuard, config, clock, lockTtlMs: 60_000
   });
   return {
     repository, remote, config, clock, approvalService, planService, executionService,
