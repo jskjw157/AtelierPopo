@@ -84,8 +84,6 @@ export function createSearchAdRoutes(context) {
         sendJson(req, res, 200, { ok: true, result });
         return;
       }
-      // Preserve the public endpoint, but never allow it to bypass the same
-      // persisted approval, single-use token, drift and remote-readback flow.
       requireSearchAdHttpWrites(context);
       const planId = String(body.planId || '').trim();
       if (!planId) {
@@ -99,7 +97,7 @@ export function createSearchAdRoutes(context) {
         throw new HttpError(400, 'SEARCHAD_APPROVED_PLAN_OVERRIDE_FORBIDDEN', '승인된 계획의 요청값은 실행 시 덮어쓸 수 없습니다.', { fields: overrides });
       }
       const runtime = getSearchAdWriteRuntime(context);
-      const plan = runtime.planService.get(planId);
+      const plan = await runtime.planService.get(planId);
       if (plan.mutation_operation_key !== operationKey) {
         throw new HttpError(409, 'SEARCHAD_CHANGE_OPERATION_MISMATCH', '변경 계획과 실행 operation이 일치하지 않습니다.');
       }
