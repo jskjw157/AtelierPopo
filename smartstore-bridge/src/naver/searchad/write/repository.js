@@ -93,7 +93,7 @@ export class SearchAdWriteRepository {
       CREATE INDEX IF NOT EXISTS searchad_write_attempts_plan_idx
         ON searchad_write_attempts(plan_id, created_at ASC);
       CREATE TABLE IF NOT EXISTS searchad_write_locks (
-        plan_id TEXT NOT NULL REFERENCES searchad_write_change_plans(plan_id) ON DELETE CASCADE,
+        plan_id TEXT NOT NULL,
         purpose TEXT NOT NULL,
         acquired_at TEXT NOT NULL,
         PRIMARY KEY (plan_id, purpose)
