@@ -130,3 +130,101 @@ test('PostgreSQL SearchAd activation control is immutable, idempotent and restar
     await closePostgresPool(pool);
   }
 });
+
+test('PostgreSQL lifecycle activation lookup requires exact Customer operation kind and active-canary evidence', async t => {
+  if (!process.env.TEST_DATABASE_URL) return t.skip('TEST_DATABASE_URL is required');
+  const pool = createPostgresPool({ connectionString: process.env.TEST_DATABASE_URL, sslMode: 'disable' });
+  const customerId = `lifecycle-activation-${randomUUID()}`;
+  const operationKey = 'fixture.lifecycle.create';
+  const activeEvidenceId = `active-evidence-${randomUUID()}`;
+  const passiveEvidenceId = `passive-evidence-${randomUUID()}`;
+  const activeActivationId = randomUUID();
+  const passiveActivationId = randomUUID();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 86_400_000);
+  try {
+    await runPostgresMigrations({ pool, migrationsDir });
+    const repo = new PostgresSearchAdActivationRepository({ pool });
+
+    for (const [evidenceId, evidenceType] of [
+      [activeEvidenceId, 'active_canary'],
+      [passiveEvidenceId, 'passive_capability']
+    ]) {
+      await repo.createEvidence({
+        evidenceId,
+        evidenceType,
+        customerId,
+        specSha: 'spec-lifecycle',
+        credentialFingerprint: 'credential-lifecycle',
+        upstreamBaseUrl: 'https://api.searchad.naver.com',
+        operationKeys: [operationKey],
+        fieldScope: [],
+        lifecycleKinds: ['create'],
+        result: 'verified',
+        createdAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString()
+      });
+    }
+
+    await repo.createActivation({
+      activationId: activeActivationId,
+      evidenceId: activeEvidenceId,
+      evidenceType: 'active_canary',
+      customerId,
+      specSha: 'spec-lifecycle',
+      credentialFingerprint: 'credential-lifecycle',
+      upstreamBaseUrl: 'https://api.searchad.naver.com',
+      operationKeys: [operationKey],
+      fieldScope: [],
+      lifecycleKinds: ['create'],
+      activatedByPrincipalId: 'admin-lifecycle',
+      activatedAt: now.toISOString(),
+      expiresAt: expiresAt.toISOString()
+    });
+    await repo.createActivation({
+      activationId: passiveActivationId,
+      evidenceId: passiveEvidenceId,
+      evidenceType: 'passive_capability',
+      customerId,
+      specSha: 'spec-lifecycle',
+      credentialFingerprint: 'credential-lifecycle',
+      upstreamBaseUrl: 'https://api.searchad.naver.com',
+      operationKeys: [operationKey],
+      fieldScope: [],
+      lifecycleKinds: ['create'],
+      activatedByPrincipalId: 'admin-lifecycle',
+      activatedAt: new Date(now.getTime() + 1_000).toISOString(),
+      expiresAt: expiresAt.toISOString()
+    });
+
+    const exact = await repo.findUsableLifecycleActivation({
+      customerId,
+      operationKey,
+      lifecycleKind: 'create',
+      now
+    });
+    assert.equal(exact.activationId, activeActivationId);
+    assert.equal(exact.evidenceType, 'active_canary');
+
+    assert.equal(await repo.findUsableLifecycleActivation({
+      customerId,
+      operationKey,
+      lifecycleKind: 'delete',
+      now
+    }), null);
+    assert.equal(await repo.findUsableLifecycleActivation({
+      customerId,
+      operationKey: 'fixture.lifecycle.other',
+      lifecycleKind: 'create',
+      now
+    }), null);
+    assert.equal(await repo.findUsableLifecycleActivation({
+      customerId: `other-${customerId}`,
+      operationKey,
+      lifecycleKind: 'create',
+      now
+    }), null);
+  } finally {
+    await closePostgresPool(pool);
+  }
+});
