@@ -31,7 +31,7 @@ test('SearchAd write control-plane route metadata enforces Reader Operator Execu
 test('generic HAAR API key cannot authenticate the SearchAd write control plane', async t => {
   const f = await startWriteFixture(t);
   assert.ok(API_KEY);
-  const result = await f.call('GET', '/api/v1/searchad/changes');
+  const result = await f.call('GET', '/api/v1/searchad/changes', undefined, { role: 'generic' });
   assert.equal(result.status, 401, JSON.stringify(result));
 });
 
