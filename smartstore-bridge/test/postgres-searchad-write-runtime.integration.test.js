@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { createPostgresPool, closePostgresPool } from '../src/infrastructure/postgres/pool.js';
 import { runPostgresMigrations } from '../src/infrastructure/postgres/migrator.js';
 import { PostgresSearchAdWriteRepository } from '../src/naver/searchad/write/postgres-repository.js';
+import { createProductionSearchAdWriteRuntime } from '../src/naver/searchad/write/runtime-production.js';
 
 async function resetSearchAdWriteTables(pool) {
   await pool.query(`
@@ -33,6 +34,20 @@ function fixturePlan(planId, now = Date.now()) {
     created_by: 'integration-test',
     created_at: new Date(now).toISOString(),
     expires_at: new Date(now + 10 * 60_000).toISOString()
+  };
+}
+
+function gatewayFixture() {
+  const operations = new Map([
+    ['fixture.read', { operationKey: 'fixture.read', sideEffect: false }],
+    ['fixture.write', { operationKey: 'fixture.write', sideEffect: true }]
+  ]);
+  return {
+    get(operationKey) { return operations.get(operationKey); },
+    async execute(operationKey) {
+      if (operationKey === 'fixture.read') return { body: { id: 'fixture-1', userLock: false } };
+      return { body: { id: 'fixture-1', userLock: true } };
+    }
   };
 }
 
@@ -97,6 +112,50 @@ test('PostgreSQL SearchAd write repository durably persists plans approvals and 
     assert.equal(attempts.length, 1);
     assert.equal(attempts[0].attempt_id, attemptId);
     assert.deepEqual(attempts[0].response_json, { ok: true });
+  } finally {
+    await resetSearchAdWriteTables(pool).catch(() => {});
+    await closePostgresPool(pool);
+  }
+});
+
+test('production SearchAd runtime uses PostgreSQL repository and async services when configured', async t => {
+  const url = process.env.TEST_DATABASE_URL;
+  if (!url) return t.skip('TEST_DATABASE_URL is required');
+
+  const pool = createPostgresPool({ connectionString: url, sslMode: 'disable' });
+  try {
+    await runPostgresMigrations({ pool, migrationsDir: path.resolve('migrations/postgres') });
+    await resetSearchAdWriteTables(pool);
+
+    const runtime = createProductionSearchAdWriteRuntime({
+      gateway: gatewayFixture(),
+      postgresPool: pool,
+      env: {
+        ATELIER_SEARCHAD_WRITE_EXECUTION_ENABLED: 'true',
+        ATELIER_SEARCHAD_ALLOW_CHANGE_PLANS: 'true',
+        ATELIER_SEARCHAD_WRITE_STORAGE: 'postgres'
+      }
+    });
+    const status = runtime.status();
+    assert.equal(status.storage.runtime, 'postgres');
+    assert.equal(status.storage.postgresRuntimeAdapter, true);
+
+    const plan = await runtime.planService.create({
+      customerId: 'customer-postgres-runtime',
+      reason: 'runtime integration',
+      createdBy: 'integration-test',
+      mutation: { operationKey: 'fixture.write', body: { userLock: true } },
+      verification: {
+        read: { operationKey: 'fixture.read' },
+        expectedAfter: { userLock: true }
+      }
+    });
+    assert.equal(plan.customer_id, 'customer-postgres-runtime');
+
+    const fetched = await runtime.planService.get(plan.plan_id);
+    assert.equal(fetched.plan_id, plan.plan_id);
+    assert.equal(fetched.attempts.length, 1);
+    assert.equal(fetched.attempts[0].phase, 'plan');
   } finally {
     await resetSearchAdWriteTables(pool).catch(() => {});
     await closePostgresPool(pool);
