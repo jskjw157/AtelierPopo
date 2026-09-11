@@ -5,7 +5,7 @@ import { SearchAdChangePlanService } from './plan-service.js';
 import { SearchAdApprovalService } from './approval-service.js';
 import { ProductionSearchAdExecutionService } from './production-execution-service.js';
 
-export function createProductionSearchAdWriteRuntime({ gateway, activationGuard = null, env = process.env, baseDir, database, clock } = {}) {
+export function createProductionSearchAdWriteRuntime({ gateway, activationGuard = null, ownershipGuard = null, env = process.env, baseDir, database, clock } = {}) {
   const config = loadSearchAdWriteConfig(env, { baseDir });
   const repository = new SearchAdWriteRepository({ databasePath: config.databasePath, database });
   const remote = new SafeSearchAdGatewayRemoteAdapter({ gateway });
@@ -16,6 +16,7 @@ export function createProductionSearchAdWriteRuntime({ gateway, activationGuard 
     remote,
     approvalService,
     activationGuard,
+    ownershipGuard,
     config,
     clock
   });
@@ -36,6 +37,7 @@ export function createProductionSearchAdWriteRuntime({ gateway, activationGuard 
         allowReconcile: config.allowReconcile,
         activationMode: config.initialActivationMode,
         activationGuardReady: Boolean(activationGuard?.assertMutationAllowed),
+        ownershipGuardReady: Boolean(ownershipGuard?.assertMutationNotCanaryOwned),
         storage: {
           runtime: 'sqlite',
           postgresSchemaAvailable: true,
