@@ -51,6 +51,26 @@ function gatewayFixture() {
   };
 }
 
+function statefulGatewayFixture() {
+  const operations = new Map([
+    ['fixture.read', { operationKey: 'fixture.read', sideEffect: false }],
+    ['fixture.write', { operationKey: 'fixture.write', sideEffect: true }]
+  ]);
+  const state = { id: 'fixture-1', userLock: false };
+  return {
+    state,
+    get(operationKey) { return operations.get(operationKey); },
+    async execute(operationKey, input = {}) {
+      if (operationKey === 'fixture.read') return { body: structuredClone(state) };
+      if (operationKey === 'fixture.write') {
+        Object.assign(state, input.body || {});
+        return { body: structuredClone(state), requestId: 'fixture-write-request' };
+      }
+      throw new Error(`Unexpected fixture operation: ${operationKey}`);
+    }
+  };
+}
+
 test('PostgreSQL SearchAd write repository durably persists plans approvals and attempts', async t => {
   const url = process.env.TEST_DATABASE_URL;
   if (!url) return t.skip('TEST_DATABASE_URL is required');
@@ -156,6 +176,58 @@ test('production SearchAd runtime uses PostgreSQL repository and async services 
     assert.equal(fetched.plan_id, plan.plan_id);
     assert.equal(fetched.attempts.length, 1);
     assert.equal(fetched.attempts[0].phase, 'plan');
+  } finally {
+    await resetSearchAdWriteTables(pool).catch(() => {});
+    await closePostgresPool(pool);
+  }
+});
+
+test('PostgreSQL production runtime approves and executes a verified one-time-token mutation', async t => {
+  const url = process.env.TEST_DATABASE_URL;
+  if (!url) return t.skip('TEST_DATABASE_URL is required');
+
+  const pool = createPostgresPool({ connectionString: url, sslMode: 'disable' });
+  try {
+    await runPostgresMigrations({ pool, migrationsDir: path.resolve('migrations/postgres') });
+    await resetSearchAdWriteTables(pool);
+    const gateway = statefulGatewayFixture();
+    const runtime = createProductionSearchAdWriteRuntime({
+      gateway,
+      postgresPool: pool,
+      env: {
+        ATELIER_SEARCHAD_WRITE_EXECUTION_ENABLED: 'true',
+        ATELIER_SEARCHAD_ALLOW_CHANGE_PLANS: 'true',
+        ATELIER_SEARCHAD_ALLOW_WRITES: 'true',
+        ATELIER_SEARCHAD_WRITE_STORAGE: 'postgres'
+      }
+    });
+
+    const plan = await runtime.planService.create({
+      customerId: 'customer-postgres-runtime',
+      reason: 'verified PostgreSQL execute path',
+      createdBy: 'integration-test',
+      mutation: { operationKey: 'fixture.write', body: { userLock: true } },
+      verification: {
+        read: { operationKey: 'fixture.read' },
+        expectedAfter: { userLock: true }
+      }
+    });
+    const approval = await runtime.approvalService.approve(plan.plan_id, {
+      actor: 'approver',
+      confirmation: 'APPROVE_SEARCHAD_CHANGE'
+    });
+    const applied = await runtime.executionService.execute(plan.plan_id, {
+      customerId: 'customer-postgres-runtime',
+      executionToken: approval.executionToken,
+      idempotencyKey: 'postgres-execute-1'
+    });
+
+    assert.equal(applied.status, 'applied');
+    assert.equal(gateway.state.userLock, true);
+    const durable = await runtime.planService.get(plan.plan_id);
+    assert.equal(durable.status, 'applied');
+    assert.ok(durable.attempts.some(attempt => attempt.phase === 'execute' && attempt.status === 'remote_accepted'));
+    assert.ok(durable.attempts.some(attempt => attempt.phase === 'verify' && attempt.status === 'succeeded'));
   } finally {
     await resetSearchAdWriteTables(pool).catch(() => {});
     await closePostgresPool(pool);
