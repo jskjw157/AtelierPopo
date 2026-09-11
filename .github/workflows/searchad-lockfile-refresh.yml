@@ -1,0 +1,40 @@
+name: SearchAd lockfile refresh
+
+on:
+  push:
+    branches:
+      - codex/searchad-lockfile-refresh-2026-09-11
+    paths:
+      - '.github/workflows/searchad-lockfile-refresh.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: smartstore-bridge/package-lock.json
+      - name: Remove unused vulnerable sharp dependency
+        working-directory: smartstore-bridge
+        run: npm uninstall sharp --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify regenerated lockfile installs
+        working-directory: smartstore-bridge
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify production dependency audit
+        working-directory: smartstore-bridge
+        run: npm audit --omit=dev --audit-level=high
+      - uses: actions/upload-artifact@v4
+        with:
+          name: searchad-refreshed-package-files
+          path: |
+            smartstore-bridge/package.json
+            smartstore-bridge/package-lock.json
+          if-no-files-found: error
+          retention-days: 1
