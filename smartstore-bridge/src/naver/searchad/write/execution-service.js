@@ -27,10 +27,11 @@ function publicError(error) {
 }
 
 export class SearchAdExecutionService {
-  constructor({ repository, remote, approvalService, config, clock = () => Date.now() }) {
+  constructor({ repository, remote, approvalService, activationGuard = null, config, clock = () => Date.now() }) {
     this.repository = repository;
     this.remote = remote;
     this.approvalService = approvalService;
+    this.activationGuard = activationGuard;
     this.config = config;
     this.clock = clock;
   }
@@ -86,6 +87,20 @@ export class SearchAdExecutionService {
       this.repository.updatePlan(planId, { status: 'stale', last_error_json: publicError(error) }, { expectedStatuses: ['approved'] });
       throw error;
     }
+
+    if (!this.activationGuard?.assertMutationAllowed) {
+      throw new SearchAdWriteError(
+        'SEARCHAD_ACTIVATION_GUARD_NOT_READY',
+        'SearchAd activation guard가 준비되지 않아 새 쓰기를 실행할 수 없습니다.',
+        { planId },
+        503
+      );
+    }
+    await this.activationGuard.assertMutationAllowed({
+      customerId: plan.customer_id,
+      descriptor: structuredClone(plan.mutation_json),
+      planId
+    });
 
     this.approvalService.claim(planId, input.executionToken);
 
