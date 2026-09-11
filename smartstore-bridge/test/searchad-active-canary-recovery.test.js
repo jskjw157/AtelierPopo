@@ -171,3 +171,13 @@ test('ambiguous cleanup is never blindly resent on a second cleanup request', as
   );
   assert.equal(f.calls.filter(call => call.type === 'mutate').length, 1);
 });
+
+test('verified cleanup with a missing baseline spend never advances to spend-check pending', async () => {
+  const f = fixture({ beforeSpend: null, readResult: notFoundError() });
+
+  const result = await f.service.cleanup('run-100', { principal: admin, requestId: 'req-cleanup-missing-baseline' });
+
+  assert.equal(result.status, 'cleanup_required');
+  assert.ok(result.cleanupVerifiedAt);
+  assert.equal(f.calls.filter(call => call.type === 'mutate').length, 1);
+});
