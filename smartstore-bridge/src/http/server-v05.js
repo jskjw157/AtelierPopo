@@ -28,6 +28,7 @@ import { createSearchAdRoutes } from './routes-searchad.js';
 import { createSearchAdWriteRoutesV3 } from './routes-searchad-write-v3.js';
 import { createSearchAdCanaryRoutes } from './routes-searchad-canary.js';
 import { createSearchAdActivationRoutes } from './routes-searchad-activation.js';
+import { createSearchAdLifecycleRoutes } from './routes-searchad-lifecycle.js';
 import { createMultiSourceCatalogRoutes } from './routes-multi-source-catalog.js';
 import { HttpError } from './errors.js';
 
@@ -86,6 +87,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createSearchAdWriteRoutesV3(routeContext),
     ...createSearchAdCanaryRoutes(routeContext),
     ...createSearchAdActivationRoutes(routeContext),
+    ...createSearchAdLifecycleRoutes(routeContext),
     ...createMultiSourceCatalogRoutes(routeContext)
   ];
 
@@ -200,6 +202,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     operationQueue.accepting = false;
     if (server.listening) await new Promise(resolve => server.close(() => resolve()));
     await operationQueue.close({ timeoutMs: httpConfig.shutdownTimeoutMs });
+    await app.searchAdLifecycleRuntime?.close?.();
     await app.searchAdActivationRuntime?.close?.();
     await app.searchAdActiveCanaryRuntime?.close?.();
     await app.searchAdWriteRuntime?.close?.();
@@ -224,6 +227,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       searchAdWrite: {
         featureVersion: '0.7.0',
         initialized: Boolean(app.searchAdWriteRuntime),
+        startupError: app.searchAdWriteStartupError || null,
         status: app.searchAdWriteRuntime?.status?.() || {
           enabled: true,
           allowWrites: false,
@@ -241,6 +245,18 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
           storage: { runtime: 'postgres', schemaReady: false },
           targetOperationCount: 0,
           targetFieldCount: 0
+        }
+      },
+      searchAdLifecycle: {
+        initialized: Boolean(app.searchAdLifecycleRuntime),
+        ready: Boolean(app.searchAdLifecycleRuntime?.status?.().ready),
+        startupError: app.searchAdLifecycleStartupError || null,
+        status: app.searchAdLifecycleRuntime?.status?.() || {
+          ready: false,
+          mutationEnabled: false,
+          activationReady: false,
+          gatewayReady: false,
+          storage: { runtime: 'postgres', schemaReady: false }
         }
       },
       searchAdActiveCanary: {
