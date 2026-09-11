@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { SearchAdWriteError, isAmbiguousSearchAdWriteError } from '../write/errors.js';
-import { assertNoCallerRemoteIds } from './hierarchy-validator.js';
+import { assertNoCallerRemoteIds, assertTopCampaignStopped } from './hierarchy-validator.js';
 import { SEARCHAD_HIERARCHY_OPERATIONS } from './operations.js';
 
 const START_KEYS = new Set(['customerId', 'planId', 'executionToken']);
@@ -12,6 +12,7 @@ const UNRESOLVED_RUN_STATUSES = Object.freeze([
   'unknown_outcome',
   'manual_review'
 ]);
+const CLEANUP_PRIORITY = Object.freeze({ creative: 4, keyword: 3, adgroup: 2, campaign: 1 });
 
 function fail(code, message, details = {}, status = 400) {
   throw new SearchAdWriteError(code, message, details, status);
@@ -40,6 +41,36 @@ function normalizePrincipal(context = {}) {
 
 function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/$/, '');
+}
+
+function remoteValue(result) {
+  if (result && typeof result === 'object' && Object.hasOwn(result, 'data')) return result.data;
+  if (result && typeof result === 'object' && Object.hasOwn(result, 'value')) return result.value;
+  if (result && typeof result === 'object' && Object.hasOwn(result, 'body')) return result.body;
+  return result;
+}
+
+function requiredExecutionInput(input = {}) {
+  assertNoCallerRemoteIds(input);
+  const hierarchyRunId = String(input?.hierarchyRunId || '').trim();
+  const parentObjectId = String(input?.parentObjectId || '').trim();
+  const planId = String(input?.planId || '').trim();
+  const executionToken = String(input?.executionToken || '').trim();
+  if (!hierarchyRunId || !parentObjectId || !planId || !executionToken) {
+    fail('SEARCHAD_HIERARCHY_INPUT_INVALID', 'hierarchyRunId, parentObjectId, planId and executionToken are required.');
+  }
+  return { hierarchyRunId, parentObjectId, planId, executionToken };
+}
+
+function requiredCleanupInput(input = {}) {
+  assertNoCallerRemoteIds(input);
+  const hierarchyRunId = String(input?.hierarchyRunId || '').trim();
+  const planId = String(input?.planId || '').trim();
+  const executionToken = String(input?.executionToken || '').trim();
+  if (!hierarchyRunId || !planId || !executionToken) {
+    fail('SEARCHAD_HIERARCHY_INPUT_INVALID', 'hierarchyRunId, planId and executionToken are required.');
+  }
+  return { hierarchyRunId, planId, executionToken };
 }
 
 export class HierarchyCanaryService {
@@ -92,8 +123,6 @@ export class HierarchyCanaryService {
   }
 
   assertStartInput(input = {}) {
-    // Target-ID injection is checked before the generic shape error so callers
-    // cannot smuggle an existing remote object by adding an otherwise unknown field.
     assertNoCallerRemoteIds(input);
     const extra = Object.keys(input || {}).filter(key => !START_KEYS.has(key));
     if (extra.length) {
@@ -139,7 +168,7 @@ export class HierarchyCanaryService {
     });
   }
 
-  async markCreateUnknown(run, object, descriptor, error) {
+  async markCreateUnknown(run, object, descriptor, error, { phase = 'campaign_create', lifecycleKind = 'create' } = {}) {
     const updatedAt = nowIso(this.clock);
     await this.repository.updateObject(object.hierarchyObjectId, {
       state: 'create_unknown',
@@ -150,10 +179,10 @@ export class HierarchyCanaryService {
       lastError: safeError(error)
     }, run.customerId);
     await this.addEvent(run, object, {
-      phase: 'campaign_create',
+      phase,
       status: 'unknown_outcome',
       operationKey: descriptor?.operationKey,
-      lifecycleKind: 'create',
+      lifecycleKind,
       error
     });
     fail(
@@ -234,8 +263,6 @@ export class HierarchyCanaryService {
       throw error;
     }
 
-    // Consuming risk before writing dispatch intent is conservative: once the one-time
-    // approval is claimed, failure after this point never gives capacity back for reuse.
     await this.riskService.consume({ intentId });
     const dispatchAt = nowIso(this.clock);
     await this.repository.updateObject(hierarchyObjectId, { state: 'dispatching', updatedAt: dispatchAt }, customerId);
@@ -268,8 +295,6 @@ export class HierarchyCanaryService {
     try {
       remoteId = this.campaignRecipe.extractCampaignId(createResult);
     } catch (error) {
-      // A remote create response without one trustworthy returned ID must be treated
-      // as ambiguous even if the HTTP request itself returned successfully.
       return this.markCreateUnknown(run, object, descriptor, error);
     }
 
@@ -304,6 +329,419 @@ export class HierarchyCanaryService {
     return { run: activeRun, object: ownedObject };
   }
 
+  async loadChildContext(input = {}, context = {}) {
+    const { hierarchyRunId, parentObjectId, planId, executionToken } = requiredExecutionInput(input);
+    const run = await this.repository.getRun(hierarchyRunId);
+    if (!run) fail('SEARCHAD_HIERARCHY_NOT_FOUND', 'Hierarchy Canary run was not found.', { hierarchyRunId }, 404);
+    this.assertAdminForCustomer(run.customerId, context);
+    if (run.status !== 'active') {
+      fail('SEARCHAD_HIERARCHY_MUTATION_NOT_ALLOWED', 'Hierarchy child mutation is allowed only for an active run.', { status: run.status }, 409);
+    }
+    const parent = await this.repository.getObject(parentObjectId, run.customerId);
+    const objects = await this.repository.listObjects(run.hierarchyRunId, run.customerId);
+    const campaign = objects.find(object => object.objectType === 'campaign' && object.parentObjectId == null && object.state === 'owned');
+    if (!campaign) fail('SEARCHAD_HIERARCHY_CAMPAIGN_REQUIRED', 'An owned top campaign is required before child mutation.', {}, 409);
+
+    const campaignSnapshot = await this.remote.read(this.campaignRecipe.readCampaign({
+      customerId: run.customerId,
+      hierarchyRunId: run.hierarchyRunId,
+      object: campaign
+    }));
+    assertTopCampaignStopped(remoteValue(campaignSnapshot));
+    return { run, parent, planId, executionToken };
+  }
+
+  async dispatchSingleChild({ run, parent, planId, executionToken, objectType, lifecycleKind, descriptor, extractId, phase }) {
+    const operation = SEARCHAD_HIERARCHY_OPERATIONS[objectType];
+    const activation = await this.activationGuard.assertLifecycleMutationAllowed({
+      customerId: run.customerId,
+      operationKey: operation.create,
+      lifecycleKind
+    });
+    const createdAt = nowIso(this.clock);
+    const object = {
+      hierarchyObjectId: randomUUID(),
+      hierarchyRunId: run.hierarchyRunId,
+      customerId: run.customerId,
+      objectType,
+      parentObjectId: parent.hierarchyObjectId,
+      createOperationKey: operation.create,
+      readOperationKey: operation.read,
+      deleteOperationKey: operation.delete,
+      remoteId: null,
+      state: 'planned',
+      createdAt,
+      updatedAt: createdAt,
+      deletedAt: null
+    };
+    await this.repository.createObject(object);
+    const intentId = `hierarchy:${run.hierarchyRunId}:${object.hierarchyObjectId}:${lifecycleKind}`;
+    await this.riskService.reserve({
+      customerId: run.customerId,
+      intentId,
+      operationKey: operation.create,
+      lifecycleKind,
+      ownerKind: 'hierarchy_canary',
+      ownerRunId: run.hierarchyRunId
+    });
+    try {
+      await this.approvalService.claim(planId, executionToken);
+    } catch (error) {
+      try { await this.riskService.release({ intentId }); } catch {}
+      await this.repository.updateObject(object.hierarchyObjectId, { state: 'manual_review', updatedAt: nowIso(this.clock) }, run.customerId);
+      throw error;
+    }
+    await this.riskService.consume({ intentId });
+    await this.repository.updateObject(object.hierarchyObjectId, { state: 'dispatching', updatedAt: nowIso(this.clock) }, run.customerId);
+    await this.addEvent(run, object, {
+      phase,
+      status: 'dispatch_intent',
+      operationKey: descriptor.operationKey,
+      lifecycleKind,
+      details: { intentId, activationId: activation.activationId || null }
+    });
+
+    let result;
+    try {
+      result = await this.remote.mutate(descriptor);
+    } catch (error) {
+      if (isAmbiguousSearchAdWriteError(error)) {
+        return this.markCreateUnknown(run, object, descriptor, error, { phase, lifecycleKind });
+      }
+      await this.repository.updateObject(object.hierarchyObjectId, { state: 'manual_review', updatedAt: nowIso(this.clock) }, run.customerId);
+      throw error;
+    }
+
+    let remoteId;
+    try {
+      remoteId = extractId(result);
+    } catch (error) {
+      return this.markCreateUnknown(run, object, descriptor, error, { phase, lifecycleKind });
+    }
+    const ownedAt = nowIso(this.clock);
+    const ownedObject = await this.repository.updateObject(object.hierarchyObjectId, { remoteId, state: 'owned', updatedAt: ownedAt }, run.customerId);
+    await this.repository.holdOwnership({
+      ownershipId: randomUUID(),
+      customerId: run.customerId,
+      objectType,
+      remoteId,
+      ownerKind: 'hierarchy_canary',
+      ownerRunId: run.hierarchyRunId,
+      hierarchyObjectId: object.hierarchyObjectId,
+      parentHierarchyObjectId: parent.hierarchyObjectId,
+      createdOperationKey: operation.create,
+      state: 'owned',
+      createdAt: ownedAt,
+      updatedAt: ownedAt
+    });
+    await this.addEvent(run, ownedObject, {
+      phase,
+      status: 'remote_accepted',
+      operationKey: descriptor.operationKey,
+      lifecycleKind,
+      requestId: result?.requestId || result?.upstream?.requestId || null
+    });
+    return { run, object: ownedObject };
+  }
+
+  async createAdgroup(input = {}, context = {}) {
+    const { run, parent, planId, executionToken } = await this.loadChildContext(input, context);
+    const descriptor = this.childRecipe.createAdgroup({
+      customerId: run.customerId,
+      hierarchyRunId: run.hierarchyRunId,
+      parent
+    });
+    return this.dispatchSingleChild({
+      run,
+      parent,
+      planId,
+      executionToken,
+      objectType: 'adgroup',
+      lifecycleKind: 'create',
+      descriptor,
+      extractId: result => this.childRecipe.extractAdgroupId(result),
+      phase: 'adgroup_create'
+    });
+  }
+
+  async createCreative(input = {}, context = {}) {
+    const { run, parent, planId, executionToken } = await this.loadChildContext(input, context);
+    const descriptor = this.childRecipe.createCreative({
+      customerId: run.customerId,
+      hierarchyRunId: run.hierarchyRunId,
+      parent
+    });
+    return this.dispatchSingleChild({
+      run,
+      parent,
+      planId,
+      executionToken,
+      objectType: 'creative',
+      lifecycleKind: 'create',
+      descriptor,
+      extractId: result => this.childRecipe.extractCreativeId(result),
+      phase: 'creative_create'
+    });
+  }
+
+  async createKeywords(input = {}, context = {}) {
+    const { run, parent, planId, executionToken } = await this.loadChildContext(input, context);
+    const descriptor = this.childRecipe.createKeywords({
+      customerId: run.customerId,
+      hierarchyRunId: run.hierarchyRunId,
+      parent
+    });
+    await this.activationGuard.assertLifecycleMutationAllowed({
+      customerId: run.customerId,
+      operationKey: SEARCHAD_HIERARCHY_OPERATIONS.keyword.create,
+      lifecycleKind: 'batch_create'
+    });
+
+    const count = Array.isArray(descriptor.body) ? descriptor.body.length : 0;
+    if (!count) fail('SEARCHAD_HIERARCHY_KEYWORD_BATCH_REQUIRED', 'Keyword batch recipe produced no items.', {}, 500);
+    const createdAt = nowIso(this.clock);
+    const objects = [];
+    for (let index = 0; index < count; index += 1) {
+      const object = {
+        hierarchyObjectId: randomUUID(),
+        hierarchyRunId: run.hierarchyRunId,
+        customerId: run.customerId,
+        objectType: 'keyword',
+        parentObjectId: parent.hierarchyObjectId,
+        createOperationKey: SEARCHAD_HIERARCHY_OPERATIONS.keyword.create,
+        readOperationKey: SEARCHAD_HIERARCHY_OPERATIONS.keyword.read,
+        deleteOperationKey: SEARCHAD_HIERARCHY_OPERATIONS.keyword.delete,
+        remoteId: null,
+        state: 'planned',
+        createdAt,
+        updatedAt: createdAt,
+        deletedAt: null
+      };
+      objects.push(await this.repository.createObject(object));
+    }
+
+    const intentId = `hierarchy:${run.hierarchyRunId}:${objects[0].hierarchyObjectId}:batch_create`;
+    await this.riskService.reserve({
+      customerId: run.customerId,
+      intentId,
+      operationKey: SEARCHAD_HIERARCHY_OPERATIONS.keyword.create,
+      lifecycleKind: 'batch_create',
+      ownerKind: 'hierarchy_canary',
+      ownerRunId: run.hierarchyRunId
+    });
+    try {
+      await this.approvalService.claim(planId, executionToken);
+    } catch (error) {
+      try { await this.riskService.release({ intentId }); } catch {}
+      throw error;
+    }
+    await this.riskService.consume({ intentId });
+    for (const object of objects) {
+      await this.repository.updateObject(object.hierarchyObjectId, { state: 'dispatching', updatedAt: nowIso(this.clock) }, run.customerId);
+      await this.addEvent(run, object, {
+        phase: 'keyword_batch_create', status: 'dispatch_intent', operationKey: descriptor.operationKey, lifecycleKind: 'batch_create', details: { intentId }
+      });
+    }
+
+    let result;
+    try {
+      result = await this.remote.mutate(descriptor);
+    } catch (error) {
+      if (isAmbiguousSearchAdWriteError(error)) {
+        const updatedAt = nowIso(this.clock);
+        for (const object of objects) {
+          await this.repository.updateObject(object.hierarchyObjectId, { state: 'create_unknown', updatedAt }, run.customerId);
+        }
+        await this.repository.updateRun(run.hierarchyRunId, { status: 'unknown_outcome', lastError: safeError(error) }, run.customerId);
+        fail('SEARCHAD_HIERARCHY_UNKNOWN_OUTCOME', 'Hierarchy keyword batch create outcome is ambiguous. Do not resend.', { hierarchyRunId: run.hierarchyRunId }, 409);
+      }
+      throw error;
+    }
+
+    let remoteIds;
+    try {
+      remoteIds = this.childRecipe.extractKeywordIds(result);
+      if (remoteIds.length !== objects.length || new Set(remoteIds).size !== remoteIds.length) {
+        fail('SEARCHAD_LIFECYCLE_RETURNED_ID_AMBIGUOUS', 'Keyword create returned ID count does not match the dispatched batch.', { expected: objects.length, actual: remoteIds.length }, 409);
+      }
+    } catch (error) {
+      const updatedAt = nowIso(this.clock);
+      for (const object of objects) {
+        await this.repository.updateObject(object.hierarchyObjectId, { state: 'create_unknown', updatedAt }, run.customerId);
+      }
+      await this.repository.updateRun(run.hierarchyRunId, { status: 'unknown_outcome', lastError: safeError(error) }, run.customerId);
+      fail('SEARCHAD_HIERARCHY_UNKNOWN_OUTCOME', 'Hierarchy keyword batch returned IDs are ambiguous. Do not resend.', { hierarchyRunId: run.hierarchyRunId }, 409);
+    }
+
+    const owned = [];
+    for (let index = 0; index < objects.length; index += 1) {
+      const ownedAt = nowIso(this.clock);
+      const object = await this.repository.updateObject(objects[index].hierarchyObjectId, { remoteId: remoteIds[index], state: 'owned', updatedAt: ownedAt }, run.customerId);
+      await this.repository.holdOwnership({
+        ownershipId: randomUUID(),
+        customerId: run.customerId,
+        objectType: 'keyword',
+        remoteId: remoteIds[index],
+        ownerKind: 'hierarchy_canary',
+        ownerRunId: run.hierarchyRunId,
+        hierarchyObjectId: object.hierarchyObjectId,
+        parentHierarchyObjectId: parent.hierarchyObjectId,
+        createdOperationKey: SEARCHAD_HIERARCHY_OPERATIONS.keyword.create,
+        state: 'owned',
+        createdAt: ownedAt,
+        updatedAt: ownedAt
+      });
+      owned.push(object);
+    }
+    return { run, objects: owned };
+  }
+
+  deleteDescriptor(run, object) {
+    const args = { customerId: run.customerId, hierarchyRunId: run.hierarchyRunId, object };
+    if (object.objectType === 'campaign') return this.campaignRecipe.deleteCampaign(args);
+    if (object.objectType === 'adgroup') return this.childRecipe.deleteAdgroup(args);
+    if (object.objectType === 'keyword') return this.childRecipe.deleteKeyword(args);
+    if (object.objectType === 'creative') return this.childRecipe.deleteCreative(args);
+    fail('SEARCHAD_HIERARCHY_OBJECT_TYPE_INVALID', 'Unsupported hierarchy object type for cleanup.', { objectType: object.objectType }, 409);
+  }
+
+  readDescriptor(run, object) {
+    const args = { customerId: run.customerId, hierarchyRunId: run.hierarchyRunId, object };
+    if (object.objectType === 'campaign') return this.campaignRecipe.readCampaign(args);
+    if (object.objectType === 'adgroup') return this.childRecipe.readAdgroup(args);
+    if (object.objectType === 'keyword') return this.childRecipe.readKeyword(args);
+    if (object.objectType === 'creative') return this.childRecipe.readCreative(args);
+    fail('SEARCHAD_HIERARCHY_OBJECT_TYPE_INVALID', 'Unsupported hierarchy object type for cleanup.', { objectType: object.objectType }, 409);
+  }
+
+  async updateOwnershipForObject(run, object, patch) {
+    const ownership = await this.repository.listOwnershipByRun({
+      ownerKind: 'hierarchy_canary',
+      ownerRunId: run.hierarchyRunId,
+      customerId: run.customerId
+    });
+    const match = ownership.find(record => record.hierarchyObjectId === object.hierarchyObjectId);
+    if (!match) fail('SEARCHAD_HIERARCHY_OWNERSHIP_REQUIRED', 'Cleanup requires a persisted Canary ownership hold.', { hierarchyObjectId: object.hierarchyObjectId }, 409);
+    return this.repository.updateOwnership(match.ownershipId, patch, run.customerId);
+  }
+
+  async cleanupNext(input = {}, context = {}) {
+    const { hierarchyRunId, planId, executionToken } = requiredCleanupInput(input);
+    const run = await this.repository.getRun(hierarchyRunId);
+    if (!run) fail('SEARCHAD_HIERARCHY_NOT_FOUND', 'Hierarchy Canary run was not found.', { hierarchyRunId }, 404);
+    this.assertAdminForCustomer(run.customerId, context);
+    const objects = await this.repository.listObjects(run.hierarchyRunId, run.customerId);
+
+    if (objects.some(object => object.state === 'delete_unknown')) {
+      fail('SEARCHAD_HIERARCHY_DELETE_UNKNOWN', 'A prior hierarchy delete has an ambiguous outcome. Reconcile read-only before any further cleanup.', { hierarchyRunId }, 409);
+    }
+    const owned = objects
+      .filter(object => object.state === 'owned')
+      .sort((left, right) => (CLEANUP_PRIORITY[right.objectType] || 0) - (CLEANUP_PRIORITY[left.objectType] || 0));
+    if (!owned.length) {
+      if (objects.length && objects.every(object => object.state === 'deleted')) {
+        const completedAt = nowIso(this.clock);
+        const passed = await this.repository.updateRun(run.hierarchyRunId, { status: 'passed', completedAt, lastError: null }, run.customerId);
+        return { run: passed, object: null };
+      }
+      fail('SEARCHAD_HIERARCHY_CLEANUP_BLOCKED', 'Hierarchy cleanup is blocked by an unresolved non-owned object.', { hierarchyRunId }, 409);
+    }
+
+    const object = owned[0];
+    const liveChildren = await this.repository.listLiveChildren(object.hierarchyObjectId, run.customerId);
+    if (liveChildren.length) {
+      fail('SEARCHAD_HIERARCHY_CLEANUP_BLOCKED', 'Hierarchy parent cannot be deleted while a live child remains.', {
+        hierarchyObjectId: object.hierarchyObjectId,
+        liveChildCount: liveChildren.length
+      }, 409);
+    }
+
+    const descriptor = this.deleteDescriptor(run, object);
+    const readDescriptor = this.readDescriptor(run, object);
+    await this.activationGuard.assertLifecycleMutationAllowed({
+      customerId: run.customerId,
+      operationKey: object.deleteOperationKey,
+      lifecycleKind: 'delete'
+    });
+    const intentId = `hierarchy:${run.hierarchyRunId}:${object.hierarchyObjectId}:delete`;
+    await this.riskService.reserve({
+      customerId: run.customerId,
+      intentId,
+      operationKey: object.deleteOperationKey,
+      lifecycleKind: 'delete',
+      ownerKind: 'hierarchy_canary',
+      ownerRunId: run.hierarchyRunId
+    });
+    try {
+      await this.approvalService.claim(planId, executionToken);
+    } catch (error) {
+      try { await this.riskService.release({ intentId }); } catch {}
+      throw error;
+    }
+    await this.riskService.consume({ intentId });
+    await this.repository.updateObject(object.hierarchyObjectId, { state: 'delete_pending', updatedAt: nowIso(this.clock) }, run.customerId);
+    await this.addEvent(run, object, {
+      phase: `${object.objectType}_delete`,
+      status: 'dispatch_intent',
+      operationKey: descriptor.operationKey,
+      lifecycleKind: 'delete',
+      details: { intentId }
+    });
+
+    let result;
+    try {
+      result = await this.remote.mutate(descriptor);
+    } catch (error) {
+      if (isAmbiguousSearchAdWriteError(error)) {
+        const updatedAt = nowIso(this.clock);
+        await this.repository.updateObject(object.hierarchyObjectId, { state: 'delete_unknown', updatedAt }, run.customerId);
+        await this.updateOwnershipForObject(run, object, { state: 'delete_unknown', updatedAt });
+        await this.repository.updateRun(run.hierarchyRunId, { status: 'unknown_outcome', lastError: safeError(error) }, run.customerId);
+        await this.addEvent(run, object, {
+          phase: `${object.objectType}_delete`, status: 'unknown_outcome', operationKey: descriptor.operationKey, lifecycleKind: 'delete', error
+        });
+        fail('SEARCHAD_HIERARCHY_UNKNOWN_OUTCOME', 'Hierarchy delete outcome is ambiguous. Do not resend the mutation.', { hierarchyObjectId: object.hierarchyObjectId }, 409);
+      }
+      await this.repository.updateObject(object.hierarchyObjectId, { state: 'manual_review', updatedAt: nowIso(this.clock) }, run.customerId);
+      throw error;
+    }
+
+    let deleted = false;
+    try {
+      await this.remote.read(readDescriptor);
+    } catch (error) {
+      const status = Number(error?.status || error?.statusCode || 0);
+      if (status === 404) deleted = true;
+      else throw error;
+    }
+    if (!deleted) {
+      await this.repository.updateObject(object.hierarchyObjectId, { state: 'manual_review', updatedAt: nowIso(this.clock) }, run.customerId);
+      await this.repository.updateRun(run.hierarchyRunId, { status: 'manual_review' }, run.customerId);
+      fail('SEARCHAD_HIERARCHY_DELETE_VERIFY_FAILED', 'Hierarchy delete could not be verified by returned ID.', { hierarchyObjectId: object.hierarchyObjectId }, 409);
+    }
+
+    const deletedAt = nowIso(this.clock);
+    const deletedObject = await this.repository.updateObject(object.hierarchyObjectId, { state: 'deleted', updatedAt: deletedAt, deletedAt }, run.customerId);
+    await this.updateOwnershipForObject(run, object, { state: 'deleted', updatedAt: deletedAt });
+    await this.addEvent(run, deletedObject, {
+      phase: `${object.objectType}_delete_verify`,
+      status: 'deleted_verified',
+      operationKey: readDescriptor.operationKey,
+      lifecycleKind: 'delete',
+      requestId: result?.requestId || result?.upstream?.requestId || null,
+      details: { returnedIdOnly: true }
+    });
+
+    const remaining = (await this.repository.listObjects(run.hierarchyRunId, run.customerId)).filter(entry => entry.state !== 'deleted');
+    if (!remaining.length) {
+      const completedAt = nowIso(this.clock);
+      const passed = await this.repository.updateRun(run.hierarchyRunId, { status: 'passed', completedAt, lastError: null }, run.customerId);
+      return { run: passed, object: deletedObject };
+    }
+    const cleanupRun = await this.repository.updateRun(run.hierarchyRunId, { status: 'cleanup_pending', lastError: null }, run.customerId);
+    return { run: cleanupRun, object: deletedObject };
+  }
+
   async reconcile(hierarchyRunId, context = {}) {
     const run = await this.repository.getRun(hierarchyRunId);
     if (!run) fail('SEARCHAD_HIERARCHY_NOT_FOUND', 'Hierarchy Canary run was not found.', { hierarchyRunId }, 404);
@@ -313,8 +751,6 @@ export class HierarchyCanaryService {
     const unresolved = objects.filter(object => ['dispatching', 'create_unknown', 'delete_unknown', 'manual_review'].includes(String(object.state)));
     if (!unresolved.length) return run;
 
-    // Dispatching after a restart has no trustworthy completion proof. It is
-    // deliberately converted to manual review instead of replaying the mutation.
     const noReturnedId = unresolved.filter(object => !String(object.remoteId || '').trim());
     if (noReturnedId.length) {
       const updatedAt = nowIso(this.clock);
@@ -333,17 +769,10 @@ export class HierarchyCanaryService {
       }, run.customerId);
     }
 
-    // Returned-ID reconciliation is read-only. No name lookup and no mutation is
-    // available from this method.
     for (const object of unresolved) {
-      if (object.objectType !== 'campaign') continue;
       let snapshot = null;
       try {
-        snapshot = await this.remote.read(this.campaignRecipe.readCampaign({
-          customerId: run.customerId,
-          hierarchyRunId: run.hierarchyRunId,
-          object
-        }));
+        snapshot = await this.remote.read(this.readDescriptor(run, { ...object, state: 'owned' }));
       } catch (error) {
         const status = Number(error?.status || error?.statusCode || 0);
         if (status !== 404) throw error;
@@ -362,7 +791,9 @@ export class HierarchyCanaryService {
 export const _internal = {
   START_KEYS,
   UNRESOLVED_RUN_STATUSES,
+  CLEANUP_PRIORITY,
   normalizePrincipal,
   normalizeBaseUrl,
+  remoteValue,
   safeError
 };
