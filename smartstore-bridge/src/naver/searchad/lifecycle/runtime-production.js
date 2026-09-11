@@ -84,7 +84,7 @@ function riskPolicy() {
   });
 }
 
-function disabledMutation() {
+async function disabledMutation() {
   fail('SEARCHAD_HIERARCHY_CANARY_DISABLED', 'SearchAd hierarchy lifecycle mutation gate is disabled.', {}, 403);
 }
 
