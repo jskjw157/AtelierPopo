@@ -1,0 +1,58 @@
+name: HAAR Approved Post Preflight
+on:
+  push:
+    branches: [ops/haar-approved-instagram-20260912]
+    paths: [.github/workflows/haar-approved-post-preflight.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Verify the approved image bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          curl -fsSL --proto '=https' --connect-timeout 10 --max-time 45 \
+            'https://d2ol7oe51mr4n9.cloudfront.net/user_3CLPaYn4Z8AiMxYysSzg2dLUoM0/0f52d125-84e0-4a08-a448-a746c28a620e.jpg' -o /tmp/haar-approved.jpg
+          printf '%s  %s\n' 'b812263f7beee9a0ca2b9f9c8c6472964201ba2af7cd1d7f6a9753137d2dc76f' /tmp/haar-approved.jpg | sha256sum -c -
+          rm /tmp/haar-approved.jpg
+      - name: Read live connection and possible duplicate posts
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "$SSH_HOST" && -n "$SSH_USER" && -n "$SSH_PRIVATE_KEY" ]]
+          KEY="$(mktemp)"
+          trap 'rm -f "$KEY"' EXIT
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$KEY"
+          ssh -i "$KEY" -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          SUDO=""
+          if [[ "$(id -u)" != 0 ]]; then SUDO='sudo -n'; fi
+          curl -fsS --max-time 15 http://127.0.0.1:3100/api/health
+          echo
+          $SUDO docker exec -i -w /app app-app-1 node --input-type=module <<'NODE'
+          import { query, pool } from './server/db.js';
+          import { config } from './server/config.js';
+          const caption = '차분한 룩에, 선명한 디테일.\n\n부드럽게 이어지는 곡선과 은빛 반짝임.\n오늘의 분위기를 완성하는 작은 포인트.\n\nHAAR\n#HAAR #하르 #귀걸이 #데일리주얼리 #주얼리스타일링';
+          try {
+            const accounts = await query(`SELECT platform, account_id, account_name, page_id, instagram_account_id, status, scopes, token_expires_at, last_checked_at FROM social_connections WHERE platform = 'instagram'`);
+            const owners = await query(`SELECT id, role, status FROM users WHERE email = $1`, [config.adminEmail]);
+            const duplicates = await query(`SELECT id, campaign_id, publish_state, external_post_id, permalink, attempt_count, last_error FROM post_variants WHERE platform='instagram' AND caption=$1`, [caption]);
+            const media = await query(`SELECT id, original_name, width, height, bytes, created_at FROM media_assets WHERE original_name=$1`, ['IMG_1826(1).jpeg']);
+            console.log(JSON.stringify({ appBaseUrl: config.appBaseUrl, accounts: accounts.rows, owner: owners.rows, matchingPosts: duplicates.rows, matchingMedia: media.rows }));
+          } catch (error) {
+            console.error(JSON.stringify({code: error.code || 'PREFLIGHT_FAILED'}));
+            process.exitCode=1;
+          } finally { await pool.end(); }
+          NODE
+          REMOTE
