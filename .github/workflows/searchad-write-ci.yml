@@ -52,6 +52,7 @@ jobs:
           # Historical core hashes are distinct from newly integrated HTTP code.
           # No dependency, old migration or unrelated production change is allowed.
           git diff --exit-code "$baseline" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js' \
             package.json package-lock.json \
             smartstore-bridge/package.json smartstore-bridge/package-lock.json \
             smartstore-bridge/src \
@@ -128,6 +129,8 @@ jobs:
           recipe_base=5a5ae1c713bfc8343be774635a8d63532030db55
           git fetch --no-tags --depth=1 origin "$recipe_base"
           git diff --exit-code "$recipe_base" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-dispatch.integration.test.js' \
             package.json package-lock.json \
             smartstore-bridge/package.json smartstore-bridge/package-lock.json \
             smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
@@ -182,6 +185,8 @@ jobs:
           reconcile_base=9ce414244ec1d978372e04d961ea4b8082ce6b73
           git fetch --no-tags --depth=1 origin "$reconcile_base"
           git diff --exit-code "$reconcile_base" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-dispatch.integration.test.js' \
             package.json package-lock.json \
             smartstore-bridge/package.json smartstore-bridge/package-lock.json \
             smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
@@ -205,11 +210,24 @@ jobs:
           transport_base=6445e52122b974f59dab341cd404c0ed666b0d88
           git fetch --no-tags --depth=1 origin "$transport_base"
           git diff --exit-code "$transport_base" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-dispatch.integration.test.js' \
             package.json package-lock.json \
             smartstore-bridge/package.json smartstore-bridge/package-lock.json \
             smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
             ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-gateway.integration.test.js'
           test "$(git hash-object smartstore-bridge/test/postgres-searchad-hierarchy-gateway.integration.test.js)" = '958c49b846ebd815990dcb18d1f1187b4079f434'
+          # B2b campaign dispatch preparation: only two new files are permitted.
+          dispatch_base=1aace72e45635c35ced4263a835347fa6a204662
+          git fetch --no-tags --depth=1 origin "$dispatch_base"
+          git diff --exit-code "$dispatch_base" HEAD -- \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-dispatch.integration.test.js'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js)" = '3add8f099699e5a941deded3c77ff3ebf888f977'
+          test "$(git hash-object smartstore-bridge/test/postgres-searchad-campaign-dispatch.integration.test.js)" = '76e193591bdd5ffc6d7f6cf89523a7751bb6edef'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -294,6 +312,14 @@ jobs:
           node --test test/searchad-hierarchy-reconcile.test.js test/postgres-searchad-hierarchy-reconcile.integration.test.js
           node --check test/postgres-searchad-hierarchy-gateway.integration.test.js
           node --test test/postgres-searchad-hierarchy-gateway.integration.test.js
+      - name: Repeated atomic campaign dispatch PostgreSQL contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --check src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js
+          node --check test/postgres-searchad-campaign-dispatch.integration.test.js
+          node --test test/postgres-searchad-campaign-dispatch.integration.test.js
       - name: Full regression test suite
         working-directory: smartstore-bridge
         run: npm test
