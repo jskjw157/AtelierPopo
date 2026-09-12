@@ -11,9 +11,20 @@ test('write HTTP awaits delayed repository reads and approval without serializin
   const id = planned.body.plan_id;
   const runtime = h.app.searchAdWriteRuntime;
   const getPlan = runtime.repository.getPlan.bind(runtime.repository);
-  const listPlans = runtime.planService.list.bind(runtime.planService);
-  runtime.repository.getPlan = async (...args) => { await tick(); return getPlan(...args); };
-  runtime.planService.list = async (...args) => { await tick(); return listPlans(...args); };
+  // Delay only contracts consumed by HTTP. The real services keep their original
+  // SQLite repository, whose internal getPlan/updatePlan contract is synchronous.
+  // This fixture verifies HTTP awaits; it does not pretend SQLite is PostgreSQL.
+  runtime.repository = {
+    async getPlan(...args) { await tick(); return getPlan(...args); }
+  };
+  for (const [service, method] of [
+    [runtime.planService, 'get'],
+    [runtime.planService, 'list'],
+    [runtime.approvalService, 'approve']
+  ]) {
+    const original = service[method].bind(service);
+    service[method] = async (...args) => { await tick(); return original(...args); };
+  }
   const detail = await h.call('GET', `/api/v1/searchad/changes/${id}`);
   assert.equal(detail.status, 200, JSON.stringify(detail));
   assert.equal(detail.body.plan_id, id);
