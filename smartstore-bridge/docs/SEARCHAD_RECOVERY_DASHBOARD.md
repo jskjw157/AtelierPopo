@@ -2,78 +2,76 @@
 
 ## RESUME HERE — 2026-09-12
 
-**#26-B2a: PostgreSQL 계층 저장소·내부 리스크 계산 검증 완료. 다음은 B2b의 계층 실행 순서 복구다. B2 전체와 C/D/E/F는 아직 미완료다. #26 OPEN / PR24 Draft를 유지한다.**
+**#26 remains OPEN. B1 pure descriptors and B2a storage/risk are verified within the corrected boundaries below. The B2b read-only reconciliation slice is now verified through the real signing client/Gateway/PostgreSQL. First unfinished work is B2b mutation orchestration; C/D/E/F remain pending.**
 
-이전 B1-only/migration0008 재개 지시는 아래 체크포인트로 대체한다. `0009`는 테스트 DB의 현재 스키마이며 실제 광고 실행·운영 배포를 뜻하지 않는다.
+Do not redo the already-present reconciliation implementation or confuse local observation settlement with mutation dispatch. Do not advance to reporting before #26 acceptance is complete.
 
-| 기준 | 값 |
+| Checkpoint | Value |
 | --- | --- |
-| Repository / application | `jskjw157/AtelierPopo` / `smartstore-bridge` |
+| Repository / app | `jskjw157/AtelierPopo` / `smartstore-bridge` |
 | Branch | `codex/searchad-original-recovery-20260912` |
+| Draft PR / Master / current issue | [#24](https://github.com/jskjw157/AtelierPopo/pull/24) / [#23](https://github.com/jskjw157/AtelierPopo/issues/23) / [#26](https://github.com/jskjw157/AtelierPopo/issues/26) |
 | Protected base | `codex/searchad-recovery-2026-09-11` / `0adbd11359440efe43fd07c279bd01a4d8914568` |
-| **검증 코드·테스트·CI설정** | **`5c4be3077e67bfd257ce176c3fe9727d9331a101`** |
-| **완료 CI** | **[34674108418](https://github.com/jskjw157/AtelierPopo/actions/runs/34674108418), job `103500743097`, completed/success; 전체 로그 확인** |
-| **전체 회귀** | **332 passed / 0 failed / 0 skipped** |
-| 필수 PostgreSQL / 저장소·risk 반복 | **53/0/0 / 21/0/0** |
-| 테스트 DB migration head | **0009**, 두 최종 재실행 모두 `applied:[]` |
-| 다음 구현 | **#26-B2b**, 이후 C/D/E와 F |
+| Existing read-only implementation | `6445e52122b974f59dab341cd404c0ed666b0d88` |
+| **Verified code/test/workflow** | **`efaab63ae5a58ab370d607cce5cd446e12f46473`** |
+| **Completed canonical CI** | **[34678162318](https://github.com/jskjw157/AtelierPopo/actions/runs/34678162318), job `103511667129`, completed/success; complete log and final conclusions reviewed** |
+| **Full regression** | **373 passed /0 failed /0 skipped** |
+| Migration head |0009 in isolated test databases; no production migration|
 
-[Master#23](https://github.com/jskjw157/AtelierPopo/issues/23) · [현재#26](https://github.com/jskjw157/AtelierPopo/issues/26) · [Draft PR24](https://github.com/jskjw157/AtelierPopo/pull/24) · [B2a 정확한 검증/해시/한계](SEARCHAD_0009_STORAGE_RECOVERY_VERIFICATION.md) · [B2a/B2b 계획](superpowers/plans/2026-09-12-searchad-0009-storage-recovery.md)
+This is a repository Markdown dashboard, not a claimed GitHub Projects board. The subsequent documentation-only SHA/CI are recorded separately in #26/PR24. [Current verification](SEARCHAD_0009_RECONCILE_VERIFICATION.md), [corrected B2a verification](SEARCHAD_0009_STORAGE_RECOVERY_VERIFICATION.md), [storage/remaining plan](superpowers/plans/2026-09-12-searchad-0009-storage-recovery.md), [read-only design](superpowers/plans/2026-09-12-searchad-0009-reconcile.md).
 
-후속 문서 전용 HEAD 및 그 CI는 #26/PR24에 코드 체크포인트와 별도로 기록한다. 이 문서는 Markdown 대시보드이며 GitHub Projects 보드 갱신을 주장하지 않는다.
+## Sequential board
 
-## 순차 작업판
-
-| 단계 | 상태 |
+| Scope | State |
 | --- | --- |
-| 0007 Canary/Gateway/역할 HTTP | VERIFIED, 미병합·미배포 |
-| #25 /0008 activation·async 실행·실제 PG/HTTP·공개 readiness/close | COMPLETED; #25 closed, 회귀 보존 |
-| #26-A 원본 목록·이식 방침 | INVENTORIED; 전체 보안 감사가 아님 |
-| #26-B1 순수 계층 validator/descriptor | VERIFIED; 기존18개 검사 유지 |
-| **#26-B2a 계층 schema/repository/risk 저장소** | **VERIFIED —5c4be30** |
-| **#26-B2b authoritative 원격 확인·계층 실행·cleanup/reconcile** | **NEXT — PENDING** |
-| #26-C/D/E lifecycle 승인·scope/ownership·token/risk/dispatch·실제 application HTTP | PENDING |
-| #26-F 전체0009 acceptance/검증/종료 | PENDING; B2a 기록 완료는 F완료가 아님 |
-| #18 reporting/Circuit/automation | PENDING |
-| #19 durable worker/scheduler/operation registry,0019 기능 수준 | PENDING |
-| #20 profitability/recommendation/limited Auto | PENDING |
-| #21 전체 운영 준비·동시성·독립 리뷰 | PENDING |
-| #22 배포·실계정 검증/활성화 | NOT STARTED — 별도 승인 |
+|0007 Canary/Gateway/role HTTP/bootstrap|VERIFIED, unmerged/undeployed|
+|0008 activation/current async/actual PG+HTTP/readiness/close|COMPLETED #25; regression preserved|
+|#26-A inventory / B1 pure hierarchy descriptors|INVENTORIED / VERIFIED|
+|#26-B2a schema/repository/risk storage|VERIFIED within corrected storage-only scope|
+|#26-B2b read-only observation/atomic local settlement/signed GET composition|**VERIFIED bounded slice, efaab63**|
+|#26-B2b create/batch/child-first remote cleanup orchestration|**NEXT — PENDING**|
+|#26-C/D lifecycle scope/ownership/approval-token+risk+dispatch|PENDING|
+|#26-E actual lifecycle application/role HTTP/readiness/restart|PENDING|
+|#26-F full0009 acceptance/closure|PENDING; do not close on this read-only result|
+|#18 reporting/Circuit/automation|PENDING|
+|#19 durable worker/scheduler/operation registry through0019|PENDING|
+|#20 profitability/recommendation/limited Auto|PENDING|
+|#21 broader readiness/concurrent-suspend/independent review|PENDING|
+|#22 deployment/live Capability/Canary/scoped activation|NOT STARTED, separate authorization|
 
-## 이번 결과
+## What changed and what was verified
 
-현재 원격에 이미 추가된 저장소 복구 코드를 이어서 검증했다. diagnostic20655c9/CI34672961239/job103497683302의 전체331통과/1실패는 마이그레이션 목록이0008까지만 기대한 문제였다. 5c4be30에서는 목록과 마지막 파일명 기대값 두 곳만 갱신하고, 기존 테스트4파일의6개 버전 기대값 외에는 변경되지 않았음을 역변환 해시로 검사했다. 실패를 없애려고 assertion을 제거하거나 검사를 건너뛰지 않았다.
+The remote branch already contained read-only reconciliation at6445e52 when resumed. This increment added only a236-line transport-composition test and14 workflow lines. Previous production sources/tests/migrations/dependencies/default gates were preserved.
 
-새 PostgreSQL 검증은 계정·실행·부모 결합, 연결 재생성 후 기록 보존, 변경 금지 감사 이벤트, 동시 리스크 한도 경쟁, 예약 ID 재결합 차단, DB 전송 claim의 단일 승자, 불명확한 상태의 재진입/리스크 반환 차단, 자식 우선 cleanup 목록과 상태 claim, 이벤트 비밀정보 제거, 기존 grant의 빈 lifecycle scope 유지 등을 확인했다.
+Real PG repositories, reconciliation/risk services, pinned registry, credentials, existing adapter, Gateway and signing client were composed. Only upstream responses were simulated. The new15 child scenarios plus parent verify exact signed GETs for four hierarchy types, typed404 versus matching/malformed/wrong-scope200,401/503/outages, read-gate denial, role/Customer/input isolation, credential rotation before/during GET, terminal-state reconnection, unchanged suspension/consumed-risk and no new approvals/grants/evidence. Escaped network calls are trapped.
 
-**검증 경계:** parent test의 UUID schema와 실제 PG 연결/저장소를 사용했다. 재접속은 전체 앱 재부팅이 아니며, DB claim은 실제 Naver 전송이 아니다. synthetic 원격 ID·snapshot·grant는 CI 입력이다. cleanup은 저장소의 정렬/상태 변화 검사이며 원격 삭제 검증이 아니다. 내부 risk units/UTC 날짜는 실제 광고비 또는 한국시간 일예산 정책과 별개다.
+The existing reconciliation tests additionally cover graph/ownership changes, a new child during observation, concurrent settlement, append-audit rollback and forged snapshot rejection. Settlement updates local observation records, not remote objects. No create/update/delete or HTTP route was added. Synthetic stored remote IDs are not observed-create evidence. Pool/service reconstruction is not whole-application reboot. No run is promoted to passed.
 
-## 검사와 보존
-
-| 코드 CI 검사 | pass/fail/skip |
+| CI check | Pass / fail / skip |
 | --- | --- |
-| Canary / activation / pure hierarchy | 51/0/0 · 30/0/0 · 18/0/0 |
-| 기존 write / 역할 HTTP·readiness | 49/0/0 · 14/0/0 |
-| 필수 PostgreSQL / 기존 PG 반복 | **53/0/0** · 31/0/0 |
-| 저장소+리스크 반복 | **21/0/0** |
-| 전체 회귀 | **332/0/0** |
+|Canary / activation|51/0/0;30/0/0|
+|Hierarchy recipes+read-only unit|29/0/0|
+|Existing write / role HTTP|49/0/0;14/0/0|
+|**Required PG**|**83/0/0**|
+|Previous PG repeat / storage+risk repeat|31/0/0;21/0/0|
+|Read-only unit+PG repeat|25/0/0|
+|**New signed Gateway+PG composition**|**16/0/0**|
+|**Full regression**|**373/0/0**|
 
-311→332는 PG parent1+child16+risk4이며20개 leaf/21 counted tests다. 집중·반복은 전체와 중복되고 제품 완료율이나 실제 허용 기능 수로 환산하지 않는다.
+Counts overlap and are not completion percentages.332+25 existing read-only+16 new composition=373 counted tests. All configured steps/pins/protected diffs/static checks passed. Both migration reruns0009/applied:[]. Existing write scanner16source/rawnetwork0 is limited; manifest Commerce116/SearchAd126unique117allowlisted is not live validation; bridge production audit reports0, not root audit. SQLite/Actions Node warnings persist.
 
-0009 schema와 risk service/test는 원본 blob, repository는 명시적인 수정 복구본이다. 상세6개 blob은 검증 문서에 있다. 기존 historical24/integration5/activation reverse7/B1원본6 및 새 저장소 pins, 기존 코드/의존성/0001–0008 migration 보존이 통과했다. 기존4개 테스트의6개 버전 기대값만 허용하며 reverse checker의 sourceWrites는0이다.
+## Explicit correction of earlier B2a reporting
 
-기존 write scanner는16 source/raw network0 범위로, 전체 보안 감사가 아니다. 번들 coverage Commerce116/SearchAd126 unique·117 allowlisted는 live검증이 아니다. bridge production audit 보고 취약점0이며 root감사는 아니다. SQLite experimental/Actions Node 경고는 남는다.
+The earlier dashboard/report/#26 descriptions wrongly attributed composite parent enforcement, run+risk binding, dispatch/cleanup single-winner claims, dry-run-only release, generic event redaction and child-first remote cleanup to B2a. **Those claims are withdrawn, not marked complete.** B2a actually tests explicit Customer-filtered queries, validator checks on stored parent records, uniqueness, reconnection, immutable events and transactional risk accounting.
 
-## 다음 구현과 운영 경계
+The raw repository is exact historical blob `b63fd592d186ea56297fc2f60dac13e92e97203b` at1051fa1, not the previously described adaptation from a17e6b51. Its16 subtests each own a UUID schema. The332-test result is valid, but passing CI did not prove the prose correct. The current separate observation-settlement transaction is not a mutation-dispatch claim and cannot be retroactively credited to B2a.
 
-B2b는 기존 orchestrator를 그대로 붙이지 말고, 매 mutation 전 authoritative stopped parent 확인, returned-ID/read-back의 Customer/parent/type 결합, 잘못된/부분/중복 batch 응답과 cleanup/reconcile을 검사하며 증분 복구한다. 기존 실행기는 유지한다.
+## Resume contract and limits
 
-C/D에서 승인 token+리스크 사용+dispatch intent 원자성을 별도로 입증해야 한다. 저장소의 run/risk transaction 및 claim 통과만으로 승인 실행의 원자성을 주장하지 않는다. 현재0007 start의 shared-risk 원자적 연결도 별도다. 신규 HTTP 실행 연결, 이중 확인/부모 삭제 보호, 실제 앱 재시작과 read-only reconcile은 E에 남는다.
+Start with B2b mutation-orchestration tests: authoritative stopped top campaign before relevant mutations, safe response-ID and parent binding, malformed/duplicate/partial batch handling, durable ownership acquisition and child-first remote cleanup. Preserve the current awaited writer rather than copying the historical synchronous directory. C/D must still atomically bind one-time approval token, risk consumption and dispatch intent; raw risk transactions or read-only settlement do not suffice. Actual0007 shared-risk start integration and E role HTTP/application wiring remain unverified.
 
-공개 /health/ready는 초기화된 인프라 상태이지 계정별 실행 허가나 실시간 연결 검사가 아니다. guard 직후 동시 suspend 차단과 독립 리뷰는#21, 실계정 capability/Canary/활성화는#22다.
+Evidence remains bound to Customer/spec/credential/upstream/operation/field/lifecycle. No raw URL, name cleanup, caller-supplied success/ID/evidence, blind retry or recycling of ambiguous/dispatched risk is permitted. Existing global/Canary defaults stay OFF; internal risk uses UTC/internal units, not KRW/Korean-day advertising budgets. Public readiness remains initialization status, not account execution permission.
 
-**실제 Naver 요청·광고 변경·운영 gate 변경·production migration·Hostinger 배포·main 변경·병합은 하지 않았다.**
+Prior exact histories: [0008/293](https://github.com/jskjw157/AtelierPopo/blob/5a5ae1c713bfc8343be774635a8d63532030db55/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), [B1/311](https://github.com/jskjw157/AtelierPopo/blob/035098228dbabdd48669f42f36c054cc38fc68af/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md). The old9ce4142 B2a prose is superseded by the explicit correction, not current proof. Historical closed issues and unpublished late checkpoints are not current completion. Damaged bootstrap chunks remain unused; final cleanup is pending.
 
-## 고정 이력
-
-[B1/311 고정 대시보드](https://github.com/jskjw157/AtelierPopo/blob/035098228dbabdd48669f42f36c054cc38fc68af/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), [B1 원본 감사](SEARCHAD_0009_RECOVERY_AUDIT.md), [0008/293 고정 대시보드](https://github.com/jskjw157/AtelierPopo/blob/5a5ae1c713bfc8343be774635a8d63532030db55/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), closed#25에 이전 해시·RED/GREEN·범위 기록이 남아 있다. 과거#17 closed나 local-only checkpoint는 현재 복구 완료의 근거가 아니다.
+**No actual Naver request, advertising mutation, operational gate change, production migration, deployment, main change or merge occurred. #26 OPEN; PR24 Draft; independent review not yet approved.**

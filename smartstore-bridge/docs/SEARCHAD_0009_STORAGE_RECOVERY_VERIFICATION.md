@@ -1,108 +1,82 @@
-# SearchAd 0009 — B2a PostgreSQL storage verification
+# SearchAd 0009 — B2a PostgreSQL storage verification (corrected)
 
-## Verified checkpoint — 2026-09-12
+## Reporting correction — 2026-09-12
 
-**B2a storage/risk accounting is verified. B2 hierarchy orchestration as a whole, C/D/E approved lifecycle execution and F final acceptance remain pending. Issue #26 stays OPEN and PR #24 stays Draft.**
+**The earlier version of this report overstated B2a behavior and misstated provenance/test isolation. The332-test CI result remains valid; the unsupported behavioral claims do not.** This correction follows a direct comparison of historical/current source and the actual storage test. It is not a new storage implementation or additional test coverage.
+
+Historical `1051fa1a64ab78b5f6b3adf5cb794a342ade39ae` and restored `src/naver/searchad/lifecycle/postgres-repository.js` both have Git blob **`b63fd592d186ea56297fc2f60dac13e92e97203b`**. The earlier claim that this was adapted from `a17e6b51...` was incorrect. Each of16 child scenarios creates its own fresh UUID schema; the parent owns the administrative pool/fetch trap, not one shared test schema.
+
+B2a does NOT establish raw Customer/run/parent composite validation, atomic run+risk binding, one-winner mutation dispatch/cleanup claims, release restricted to pre-dispatch dry runs, generic event redaction or child-first remote cleanup. Those descriptions are withdrawn. The later dedicated reconciliation repository has separately tested observation-settlement transactions; that is not a B2a or mutation-dispatch guarantee. Current status is in [the dashboard](SEARCHAD_RECOVERY_DASHBOARD.md) and [read-only verification](SEARCHAD_0009_RECONCILE_VERIFICATION.md).
+
+## Historical verified B2a checkpoint
 
 | Item | Value |
 | --- | --- |
-| Repository / app | `jskjw157/AtelierPopo` / `smartstore-bridge` |
-| Working branch | `codex/searchad-original-recovery-20260912` |
-| Protected base | `codex/searchad-recovery-2026-09-11` / `0adbd11359440efe43fd07c279bd01a4d8914568` |
-| B1 documentation checkpoint | `035098228dbabdd48669f42f36c054cc38fc68af` |
-| Verified code/test/workflow SHA | **`5c4be3077e67bfd257ce176c3fe9727d9331a101`** |
-| Completed CI | **[34674108418](https://github.com/jskjw157/AtelierPopo/actions/runs/34674108418), job `103500743097`, completed/success** |
-| Full regression | **332 passed / 0 failed / 0 skipped** |
-| Test database migration head | **0009**; not a production migration |
+| Branch / issue / PR | `codex/searchad-original-recovery-20260912` / #26 OPEN / #24 Draft |
+| B1 predecessor | `035098228dbabdd48669f42f36c054cc38fc68af` |
+| B2a code/test/workflow | `5c4be3077e67bfd257ce176c3fe9727d9331a101` |
+| Canonical CI | [34674108418](https://github.com/jskjw157/AtelierPopo/actions/runs/34674108418), job `103500743097`, completed/success |
+| Full regression |332 passed /0 failed /0 skipped|
+| Test migration head |0009; not production|
+| Historical documentation successor | `9ce414244ec1d978372e04d961ea4b8082ce6b73`, CI34674443739/job103501665569 completed/success |
 
-The complete code-CI job log was read, followed by a completed/success job-status check. A later documentation-only commit and its CI are separate checkpoints recorded in #26/PR24. Documentation publication is not itself a test result.
+The code-CI log and final status were reviewed at the checkpoint. A successful documentation CI did not verify the accuracy of prose; that is why this explicit correction is necessary.
 
-## What was already on the branch and what was corrected
+## Exact source provenance
 
-Resuming from the recorded B1 handoff found additional remote storage work: `d65824cf3e091929d06ba7e66bce5c24b1d66b1c`, a provenance correction, and diagnostic HEAD `20655c9f73ce94e11e5a6921d8fe44350838031c`. The source/schema were not re-added as duplicate work. The failing current regression was diagnosed and corrected.
+Paths relative to `smartstore-bridge/`.
 
-At diagnostic HEAD20655c9, [CI34672961239](https://github.com/jskjw157/AtelierPopo/actions/runs/34672961239), job `103497683302`, reported **331 pass / 1 fail / 0 skip**. The sole failing test was the complete migration inventory: it still expected0001–0008 after0009 was added. Focused and PostgreSQL stages passed. This observed regression RED is not a claim that all storage tests were observed failing before their implementation.
-
-Commit5c4be30 changes exactly three files relative to20655c9:
-
-- `test/postgres-migrator.test.js`: extend the exact ordered inventory to0009 and change the exact last filename. Transaction-wrapper and checksum assertions remain unchanged.
-- `scripts/searchad-lifecycle-storage-provenance.mjs`: retain the previous three-file reverse checks and add inventory reversal. It proves four existing test files differ only in six explicit migration-version expectations.
-- `.github/workflows/searchad-write-ci.yml`: add one exact inventory-test preservation exception, update the provenance-script pin and explanatory comment. Existing steps remain; the EOF newline is normalized.
-
-Local syntax/YAML/step-preservation and exact inventory reversal, including three tamper-negative checks, were checked before publishing this correction. Local checks were not substituted for the fresh complete GitHub PostgreSQL/application CI.
-
-## Restored source and exact provenance
-
-Historical source: `1051fa1a64ab78b5f6b3adf5cb794a342ade39ae`. Paths below are relative to `smartstore-bridge/`.
-
-| File | Current Git blob | Provenance |
+| File | Git blob | Provenance |
 | --- | --- | --- |
 | `migrations/postgres/0009_searchad_hierarchy_lifecycle.sql` | `ec8f25be8654febf25e5d30b5f9bb4ee45858ac7` | Exact historical schema |
-| `src/naver/searchad/lifecycle/postgres-repository.js` | `b63fd592d186ea56297fc2f60dac13e92e97203b` | Adapted storage implementation, NOT an exact historical blob |
+| `src/naver/searchad/lifecycle/postgres-repository.js` | `b63fd592d186ea56297fc2f60dac13e92e97203b` | Exact historical repository |
 | `src/naver/searchad/lifecycle/risk-service.js` | `75f375f59752674ffd28f11c39582c3a73d73e98` | Exact historical service |
 | `test/searchad-lifecycle-risk.test.js` | `75673597c6801fdfb33ea2c6de09330516144702` | Exact historical tests |
-| `test/postgres-searchad-lifecycle-storage.integration.test.js` | `9a092eee2a5530491142a64f56aae14c2f3dd70e` | New recovery integration tests |
-| `scripts/searchad-lifecycle-storage-provenance.mjs` | `ac840c24cba6d2b2babcac862a19285a6f71e7fb` | New recovery preservation checker, updated in5c4be30 |
+| `test/postgres-searchad-lifecycle-storage.integration.test.js` | `9a092eee2a5530491142a64f56aae14c2f3dd70e` | New recovery tests |
+| `scripts/searchad-lifecycle-storage-provenance.mjs` | `ac840c24cba6d2b2babcac862a19285a6f71e7fb` | Recovery preservation checker |
 
-The original repository blob is `a17e6b51c3d300b44c41a868e4f8c68905fda4901`. The adapted repository adds or tightens scoped parent/run ownership validation, reservation identity checks, transactional run/risk binding and compare-and-set transitions. Its current behavior is tested as an adaptation; historical-byte identity is not claimed.
+## Actual storage coverage
 
-The existing0007/0008 historical24 pins, five application-integration pins, seven activation reverse-edit checks and B1 six historical pins still pass. Existing application sources, async writer, approval/locks, activation services/guards, bootstrap, server/readiness/close, dependencies, default gates and migrations0001–0008 remain unchanged by the B2a slice. Four pre-existing test files have only the six explicitly reversed version expectations changed. The diagnostic workflow remains a diagnostic artifact, not the canonical acceptance CI.
+Real PostgreSQL, existing migrations, repository and risk service are used. Each child creates and removes only its own schema, closes its own pools and may reconnect. Global fetch is trapped. Synthetic remote IDs, records and grants are fixtures, not observed upstream create responses. Reconnection is not application reboot.
 
-## Actual PostgreSQL test boundary
-
-`postgres-searchad-lifecycle-storage.integration.test.js` uses a disposable UUID PostgreSQL schema for the parent test, real migrations, the real lifecycle repository and risk service, and16 child scenarios. It reconstructs repository objects and uses new PostgreSQL connections/pools. **This is not an actual HTTP application reboot or a remote Naver mutation/reconcile test.** Fixtures use separate customer/run identities where required, but this is not16 independent schema deployments.
-
-Global fetch is trapped; no upstream API is used. Synthetic IDs, snapshots, records and grants are test inputs, not authoritative remote returned-ID or live capability evidence. Teardown removes only the schema created by the test and closes its owned resources.
-
-| Storage scenario | Verified behavior / limit |
+| Tested behavior | Boundary |
 | --- | --- |
-| Schema and rerun | Required tables/columns exist; full migration reaches0009, second application is empty |
-| Connection reconstruction | Persisted hierarchy runs/objects are readable from a reconstructed repository/new connection |
-| Customer/run/parent binding | Cross-Customer, missing run, wrong parent type and cross-run parent ownership are rejected |
-| Active-run exclusivity | Another active run for the same Customer is blocked, including persisted unknown outcome |
-| Audit and query isolation | Immutable hierarchy event UPDATE/DELETE is rejected; scoped listing/lookup and empty allowlist isolation hold |
-| Server-owned risk | Caller units/capacity/date overrides are rejected; service derives units and UTC date |
-| Shared accounting | Legacy Canary and hierarchy fixture records charge the same Customer/day capacity; this is not live spend accounting or atomic legacy-start wiring |
-| Reservation identity | A reused reservation cannot silently change Customer/date/operation/units/capacity/plan/run binding |
-| Concurrent capacity | Two real PG connections competing for a bounded capacity cannot both oversubscribe it |
-| Pending legacy/ambiguous state | Persisted pending work blocks new capacity use |
-| Reservation-to-run binding | Mismatched reservation context and run replay are rejected |
-| Dispatch claim | Competing database compare-and-set claims have one winner; persisted unknown outcome blocks another claim |
-| Release boundary | Only eligible pre-dispatch dry-run risk can be released; dispatched/unknown/completed charges are not recycled in the tested path |
-| Cleanup ordering/state | Child-first object selection and one-winner cleanup claim persist; this does NOT execute or verify an actual remote delete |
-| Redaction | Stored event payloads exclude tested credential/token fields |
-| Prior grant compatibility | Empty lifecycle scope remains empty; existing update-only grant fixtures are not promoted by0009 |
+| Populated0008 ->0009 ->repeat | Prior checksums and empty lifecycle scopes retained; immutable evidence/grants stay protected |
+| Unresolved-run uniqueness | Same-Customer unresolved run conflicts; another Customer remains independent |
+| Explicit Customer-filtered queries/patches | Foreign reads return empty/null and patches do not alter the original; optional unscoped internal methods are not authorization |
+| Validator applied to stored parent/ownership records | Wrong Customer/run/type/state rejected by the validator; not a composite-FK/storage enforcement claim |
+| Ownership/object uniqueness | Duplicate Customer/type/remote identifier cannot overwrite the first record |
+| Pool/repository reconstruction | Synthetic IDs, unknown states, holds and live-child queries persist; no remote cleanup is performed |
+| Append-only hierarchy events | UPDATE/DELETE rejected; arbitrary event payload redaction is not tested |
+| Server-owned risk input | Caller units/capacity/date and unconfigured operations rejected before database writes |
+| Concurrent identical intent | Independent pools reserve once; same immutable intent identity retained |
+| Concurrent shared capacity | Fixture owner kinds share Customer/UTC-day capacity without oversubscription; real Canary start remains unintegrated |
+| Intent/capacity rebinding | Customer/date/operation/lifecycle/units/owner kind/run identity and established capacity conflicts are rejected |
+| Consume/release transitions | Consume and release are idempotent for their permitted states; consumed risk is not released, released intent is not revived |
+| SQL failure rollback | Capacity update and reservation insertion roll back together |
+| Consume-versus-release race | One consistent terminal state, no negative accounting |
+| UTC rollover | New day's balance does not recycle/rebind earlier intent |
 
-The hierarchy graph remains campaign -> adgroup, with keyword and creative as separate adgroup children. The internal risk clock uses `toISOString().slice(0,10)` (UTC day), not a verified Korea-time advertising budget policy. Risk units are not KRW and are not official spend evidence.
+The16 child scenarios include separate transition/race cases. There is no raw-repository dispatch or cleanup-claim method in this recovered source. Merely storing `unknown_outcome` does not prove every mutation caller is prevented from redispatching. Risk units are internal capacity, not KRW, and UTC day is not a verified Korea-time advertising budget policy.
 
-## Fresh code-CI results
+## Observed regression repair and preservation
 
-| Check | Pass / fail / skip |
+After storage sources had been added remotely, diagnostic20655c9/CI34672961239/job103497683302 reported331pass/1fail/0skip. The sole failure was an ordered migration inventory still expecting0001–0008. Commit5c4be30 changed two exact inventory/last-filename expectations, extended the reverse-hash checker and updated the narrow workflow exception/script pin. Production sources did not change in that correction. This is observed regression RED/GREEN, not evidence every storage behavior was first tested RED.
+
+Four pre-existing test files differ only in six explicit migration-version expectations. The read-only checker reverses those edits to original full-file Git hashes. Wrapper/checksum/schema/token/immutability assertions remain. Existing application/async writer/approval/locks/activation/readiness/shutdown, dependencies/default gates and migrations0001–0008 were preserved.
+
+| Historical B2a check | Pass / fail / skip |
 | --- | --- |
-| Canary/Gateway/Canary role HTTP | 51 / 0 / 0 |
-| Activation core/Customer | 30 / 0 / 0 |
-| Hierarchy validators/recipes | 18 / 0 / 0 |
-| Existing write focused | 49 / 0 / 0 |
-| Existing role HTTP/readiness/runtime lifecycle | 14 / 0 / 0 |
-| Required PostgreSQL | **53 / 0 / 0** |
-| Repeated prior Canary/activation/application PostgreSQL | 31 / 0 / 0 |
-| Repeated storage plus risk service | **21 / 0 / 0** |
-| Full regression | **332 / 0 / 0** |
+| Canary / activation / hierarchy |51/0/0;30/0/0;18/0/0|
+| Existing write / role HTTP |49/0/0;14/0/0|
+| Required PG / previous repeated PG |53/0/0;31/0/0|
+| Repeated storage+risk |21/0/0|
+| Full regression |332/0/0|
 
-311 ->332 adds a PostgreSQL parent plus16 children and four risk tests:21 counted tests,20 leaf scenarios. The storage test itself counts17; required PG grows36 ->53. Focused/repeated suites overlap the full suite and must not be added together or converted into a product-completion percentage.
+311->332 is one PG parent+16 children+four risk tests,21 counted/20 leaf. Counts overlap and do not measure product completion. All configured stages/pins/protected diffs passed; both final migration reruns0009/applied:[]. Existing write scan16source/rawnetwork0 is not whole-system security coverage; bundled Commerce116/SearchAd126unique117allowlisted is not live validation; dependency audit0 is scoped to bridge production dependencies. SQLite/Actions Node warnings remain.
 
-All configured code-CI steps, source pins/preservation, syntax/static checks and the read-only reverse checker passed. The latter reports `existingTestsChecked:4`, `allowedVersionChanges:6`, `sourceWrites:0`. Both final migration reruns report `currentVersion:0009, applied:[]`.
+## Remaining requirements
 
-Existing write safety reports16 source files and0 raw network calls. This is not a whole lifecycle/HTTP security audit. Bundled coverage remains Commerce116 and SearchAd126 unique/117 allowlisted with no internal/deprecated runtime leaks; this is not live API validation. Bridge production dependency audit reports0 vulnerabilities; root dependencies were not audited. SQLite experimental and Actions Node-version warnings remain.
+B2b mutation orchestration and C/D/E/F are not completed by storage. Approval token+risk+dispatch atomicity, authoritative pre-mutation stopped parent checks, source-bound returned IDs/batches, child-first remote cleanup, lifecycle activation/ownership guards and actual application/role HTTP/restart require their own tests. Read-only reconciliation now has a separately recorded bounded checkpoint; consult the current dashboard rather than historical next-step prose.
 
-## Next required work — B2b / C / D / E
-
-Do not import the historical hierarchy orchestrator wholesale merely because storage passes. Its earlier source review identified approval-token consumption before risk reservation/dispatch intent, and missing authoritative stopped-parent revalidation before each child mutation. Storage tests do not resolve those execution issues.
-
-Next, implement/review a bounded orchestration slice with explicit tests for server-owned returned IDs, exact read-back Customer/parent/type, malformed or duplicate/partial batch responses, authoritative stopped top campaign and child-first cleanup. Preserve current async execution and fail closed when a required component is absent. No new runtime route should be enabled just to exercise a storage fixture.
-
-C/D must prove the one-time approval token, risk consumption and dispatch intent form the required atomic execution boundary with real PostgreSQL. A run/risk transaction or a single database dispatch claim alone is not that guarantee. Existing0007 Canary start must also not be declared atomically integrated with shared risk based only on fixture rows.
-
-E must separately prove actual application/role HTTP composition, lifecycle scope/ownership holds, destructive double confirmation/parent-with-children protection, restart and read-only unknown-outcome reconcile without blind retry. F closes#26 only after full acceptance and synchronized fresh evidence. Concurrent suspension after the guard check, independent review and broader operational readiness remain#21; deployment and live capability/Canary/scoped activation remain separately authorized#22.
-
-**No actual Naver request, advertising mutation, operational gate change, production migration, deployment, main change or PR merge was performed.**
+No live Naver request, advertising mutation, operational gate change, production migration, deployment, main change or merge was performed at this checkpoint.
