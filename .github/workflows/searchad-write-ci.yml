@@ -106,13 +106,13 @@ jobs:
           while read -r expected source; do
             actual=$(git hash-object "$source")
             test "$actual" = "$expected" || { echo "Integration blob mismatch: $source"; exit 1; }
-            echo "Pinned 25-D integration blob: $source $actual"
+            echo "Pinned 25-D/E integration blob: $source $actual"
           done <<'INTEGRATION_BLOBS'
           22392a6b69b9ed782b05be9d31405dc86e10e49c smartstore-bridge/src/http/searchad-write-access.js
           7df625756c97f74bc60aa3ab1fcbde0c2e2b328c smartstore-bridge/src/http/routes-searchad-write-v3.js
           9e50822145ae90f0b24ab557a570db9be03d5b6c smartstore-bridge/src/http/routes-searchad.js
           e2353c67f41489d2583750afdeee7c67d8df1719 smartstore-bridge/src/bootstrap-v05.js
-          aee8e75d395d00eb17f6eac0b77a4d60f51d12f1 smartstore-bridge/src/http/server-v05.js
+          1b565834531a7df7abd803ec29fb3ec7a4845674 smartstore-bridge/src/http/server-v05.js
           INTEGRATION_BLOBS
           node smartstore-bridge/scripts/searchad-activation-wiring-provenance.mjs
       - uses: actions/setup-node@v4
@@ -153,25 +153,25 @@ jobs:
       - name: Focused SearchAd write tests
         working-directory: smartstore-bridge
         run: node --test test/searchad-write-*.test.js
-      - name: Role HTTP activation and runtime lifecycle contracts
+      - name: Role HTTP activation readiness and runtime lifecycle contracts
         if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
         working-directory: smartstore-bridge
         run: |
           node --check src/http/searchad-write-access.js
           node --check src/http/routes-searchad-activation.js
           node --check src/http/openapi-searchad-activation.js
-          node --test test/searchad-http-activation-recovery.test.js test/searchad-http-runtime-lifecycle.test.js
+          node --test test/searchad-http-activation-recovery.test.js test/searchad-http-runtime-lifecycle.test.js test/searchad-http-readiness.test.js
       - name: PostgreSQL integration tests (required)
         working-directory: smartstore-bridge
         run: |
           test -n "$TEST_DATABASE_URL"
           node --test test/postgres-*.integration.test.js
-      - name: Repeated Canary activation and application PostgreSQL contracts
+      - name: Repeated Canary activation and full application PostgreSQL contracts
         if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
         working-directory: smartstore-bridge
         run: |
           test -n "$TEST_DATABASE_URL"
-          node --test test/postgres-searchad-active-canary.integration.test.js test/postgres-searchad-canary-wiring.integration.test.js test/postgres-searchad-activation*.integration.test.js test/postgres-searchad-application-bootstrap.integration.test.js
+          node --test test/postgres-searchad-active-canary.integration.test.js test/postgres-searchad-canary-wiring.integration.test.js test/postgres-searchad-activation*.integration.test.js test/postgres-searchad-application-bootstrap.integration.test.js test/postgres-searchad-application-composition.integration.test.js
       - name: Full regression test suite
         working-directory: smartstore-bridge
         run: npm test

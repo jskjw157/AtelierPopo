@@ -16,6 +16,7 @@ import {
   configuredApiKeys,
   ensureSameIdempotentOperation,
   normalizePathname,
+  route,
   sendJson
 } from './runtime.js';
 import { loadSearchAdHttpAccessControl } from './searchad-access-control.js';
@@ -77,6 +78,21 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
 
   const routeContext = { app, env, httpConfig, operationQueue, version, startedAt, createAsyncOperation, redactionRoots };
   const routes = [
+    // Override only v0.5 readiness; legacy servers keep their existing contract.
+    route('GET', /^\/health\/ready$/, async ({ req, res }) => {
+      const { ready, searchAdActivation } = api.readiness();
+      sendJson(req, res, ready ? 200 : 503, {
+        ok: ready,
+        status: ready ? 'ready' : 'not_ready',
+        service: 'haar-smartstore-commerce-drive-bridge',
+        version,
+        searchAdActivation: {
+          required: searchAdActivation.required,
+          initialized: searchAdActivation.initialized,
+          ready: searchAdActivation.ready
+        }
+      });
+    }, { auth: false }),
     ...createSystemRoutesV04(routeContext),
     ...createProductRoutesV03(routeContext),
     ...createLedgerRoutesV03(routeContext),
@@ -226,15 +242,23 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     return closePromise;
   }
 
-  return {
+  const api = {
     server,
     httpConfig,
     searchAdAccessControl,
     operationQueue,
     listen,
     close,
-    readiness: () => ({
-      ...readinessV04(app, httpConfig, operationQueue),
+    readiness: () => {
+      const base = readinessV04(app, httpConfig, operationQueue);
+      const activationStatus = app.searchAdActivationRuntime?.status?.() || null;
+      const activationRequired = Boolean(app.searchAdConfig?.configured);
+      const activationReady = activationStatus?.ready === true;
+      // Infrastructure readiness is not permission to mutate any Customer.
+      // This projection performs no upstream probe or lazy write initialization.
+      return {
+      ...base,
+      ready: base.readyForRead === true && (!activationRequired || activationReady),
       searchAd: {
         configured: Boolean(app.searchAdConfig?.configured),
         ready: Boolean(app.searchAdGateway),
@@ -264,10 +288,11 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
         }
       },
       searchAdActivation: {
+        required: activationRequired,
         initialized: Boolean(app.searchAdActivationRuntime),
-        ready: app.searchAdActivationRuntime?.status?.().ready === true,
+        ready: activationReady,
         startupError: app.searchAdActivationStartupError || null,
-        status: app.searchAdActivationRuntime?.status?.() || {
+        status: activationStatus || {
           ready: false, storage: { runtime: 'postgres', schemaReady: false },
           targetOperationCount: 0, targetFieldCount: 0
         }
@@ -280,6 +305,8 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
         sources: app.catalogSourceRegistry?.status?.() || null,
         channels: app.salesChannelRegistry?.status?.() || null
       }
-    })
+      };
+    }
   };
+  return api;
 }
