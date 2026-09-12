@@ -26,6 +26,19 @@ function stateFromError(error) {
   return 'unknown';
 }
 
+function assertNoCustomerOverride(inputs = {}) {
+  if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) return;
+  for (const [operationKey, value] of Object.entries(inputs)) {
+    if (value && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'customerId')) {
+      const error = new Error('Passive capability probe Customer identity is server-owned.');
+      error.code = 'SEARCHAD_PASSIVE_CUSTOMER_OVERRIDE_FORBIDDEN';
+      error.status = 400;
+      error.details = { operationKey };
+      throw error;
+    }
+  }
+}
+
 export class SearchAdCapabilityService {
   constructor({ gateway, config, clock = () => new Date() }) {
     this.gateway = gateway;
@@ -42,6 +55,7 @@ export class SearchAdCapabilityService {
   }
 
   async runPassive({ customerId, operations, inputs = {}, limit } = {}) {
+    assertNoCustomerOverride(inputs);
     const requested = Array.isArray(operations) && operations.length
       ? operations.map(String)
       : this.defaultPassiveOperations(limit);
@@ -58,8 +72,8 @@ export class SearchAdCapabilityService {
           continue;
         }
         const result = await this.gateway.execute(operationKey, {
-          customerId,
-          ...(inputs[operationKey] || {})
+          ...(inputs[operationKey] || {}),
+          customerId: String(customerId || '')
         });
         results.push({
           operationKey,
@@ -91,4 +105,4 @@ export class SearchAdCapabilityService {
   }
 }
 
-export const _internal = { hasRequiredPathParams, scoreProbe, stateFromResult, stateFromError };
+export const _internal = { hasRequiredPathParams, scoreProbe, stateFromResult, stateFromError, assertNoCustomerOverride };
