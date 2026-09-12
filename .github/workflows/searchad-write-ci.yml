@@ -144,6 +144,8 @@ jobs:
             ':(exclude)smartstore-bridge/test/postgres-searchad-activation.integration.test.js' \
             ':(exclude)smartstore-bridge/test/postgres-searchad-write.integration.test.js' \
             ':(exclude)smartstore-bridge/test/postgres-migrator.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-reconcile.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-reconcile.integration.test.js' \
             ':(exclude)smartstore-bridge/test/searchad-hierarchy-recovery.test.js'
           while read -r expected source; do
             actual=$(git hash-object "$source")
