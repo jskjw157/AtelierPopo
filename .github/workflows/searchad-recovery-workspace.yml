@@ -1,0 +1,58 @@
+name: Export isolated SearchAd recovery workspace
+on:
+  push:
+    branches: [codex/searchad-original-recovery-20260912]
+    paths: ['.github/workflows/searchad-recovery-workspace.yml']
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Package tracked source and locked pure-JS dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/source-sha.txt"
+          git ls-tree -r HEAD smartstore-bridge .github/workflows > "$RUNNER_TEMP/source-blobs.txt"
+          git archive --format=tar HEAD smartstore-bridge .github/workflows > "$RUNNER_TEMP/source.tar"
+          cd smartstore-bridge
+          npm ci --ignore-scripts --no-audit --no-fund
+          tar -czf "$RUNNER_TEMP/dependencies.tar.gz" node_modules
+      - name: Package disposable PostgreSQL 16 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          PGROOT=/usr/lib/postgresql/16
+          test -x "$PGROOT/bin/postgres"
+          OUT="$RUNNER_TEMP/pg-test-runtime"
+          mkdir -p "$OUT/usr/lib/postgresql" "$OUT/usr/share/postgresql" "$OUT/deps"
+          cp -a "$PGROOT" "$OUT/usr/lib/postgresql/16"
+          cp -a /usr/share/postgresql/16 "$OUT/usr/share/postgresql/16"
+          for bin in "$PGROOT"/bin/* "$PGROOT"/lib/*.so; do
+            ldd "$bin" 2>/dev/null || true
+          done | awk '/=> \/.* \(/ {print $3}' | sort -u > "$OUT/libraries.txt"
+          while IFS= read -r lib; do cp -L "$lib" "$OUT/deps/"; done < "$OUT/libraries.txt"
+          "$PGROOT/bin/postgres" --version > "$OUT/version.txt"
+          tar -C "$OUT" -czf "$RUNNER_TEMP/pg-test-runtime.tar.gz" .
+          cd "$RUNNER_TEMP"
+          sha256sum source.tar dependencies.tar.gz pg-test-runtime.tar.gz > artifact-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: searchad-disposable-recovery-workspace
+          path: |
+            ${{ runner.temp }}/source.tar
+            ${{ runner.temp }}/source-sha.txt
+            ${{ runner.temp }}/source-blobs.txt
+            ${{ runner.temp }}/dependencies.tar.gz
+            ${{ runner.temp }}/pg-test-runtime.tar.gz
+            ${{ runner.temp }}/artifact-sha256.txt
+          retention-days: 1
+          if-no-files-found: error
