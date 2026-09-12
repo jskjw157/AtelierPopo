@@ -133,6 +133,7 @@ jobs:
             ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/recipe-hierarchy.js' \
             ':(exclude)smartstore-bridge/test/searchad-hierarchy-validator.test.js' \
             ':(exclude)smartstore-bridge/test/searchad-hierarchy-recipes.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-lifecycle-storage.integration.test.js' \
             ':(exclude)smartstore-bridge/test/searchad-hierarchy-recovery.test.js'
           while read -r expected source; do
             actual=$(git hash-object "$source")
@@ -146,6 +147,7 @@ jobs:
           1a5248d57ce8838bdafbaefd2b635d93836c67ed smartstore-bridge/test/searchad-hierarchy-validator.test.js
           b0e956601c330ef61bb797155fe7aeb5cd56a798 smartstore-bridge/test/searchad-hierarchy-recipes.test.js
           HIERARCHY_RECIPE_BLOBS
+          git grep -n -E "currentVersion.*000[789]" -- smartstore-bridge/test || true
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
