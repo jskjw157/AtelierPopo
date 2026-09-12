@@ -195,7 +195,7 @@ test('generic HAAR API key and SearchAd role keys are not interchangeable', asyn
     const genericOnCanary = await request(fixture, GENERIC_KEY, 'GET', '/api/v1/searchad/canary/runs');
     assert.equal(genericOnCanary.status, 401);
 
-    const readerOnGeneric = await request(fixture, READER_KEY, 'GET', '/api/v1/searchad/status');
+    const readerOnGeneric = await request(fixture, READER_KEY, 'GET', '/api/v1/status');
     assert.equal(readerOnGeneric.status, 401);
   } finally {
     await fixture.api.close();
