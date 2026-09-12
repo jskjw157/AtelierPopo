@@ -1,0 +1,26 @@
+{
+  "operationId": "e31eef45-f457-5980-bb97-445d477c9aaf",
+  "platform": "instagram",
+  "account": "haar_archive",
+  "status": "published",
+  "verifiedByMetaReadback": true,
+  "externalPostId": "17960008077192527",
+  "permalink": "https://www.instagram.com/p/DdLH60ZjcIj/",
+  "publishedAt": "2026-09-12T04:26:03+0000",
+  "campaignId": "eb443e89-e71e-5a11-a22e-b59f275243ec",
+  "variantId": "09964e77-b7b2-5782-8fd7-e9617db85940",
+  "mediaAssetId": "f284a2b9-e3ff-498c-8216-eae793b0d962",
+  "sourceImage": "IMG_1826(1).jpeg",
+  "sourceImageSha256": "b812263f7beee9a0ca2b9f9c8c6472964201ba2af7cd1d7f6a9753137d2dc76f",
+  "caption": "차분한 룩에, 선명한 디테일.\n\n부드럽게 이어지는 곡선과 은빛 반짝임.\n오늘의 분위기를 완성하는 작은 포인트.\n\nHAAR\n#HAAR #하르 #귀걸이 #데일리주얼리 #주얼리스타일링",
+  "attemptCount": 1,
+  "otherPlatformsPublished": false,
+  "execution": "One-time authenticated SSH operation invoking the existing HAAR Social Studio media and publishing services. No administrator password was read or changed.",
+  "verification": "The execution log reports published, verified=true, the Meta media ID and permalink, and a matching caption and IMAGE media type from a follow-up Graph API GET. The app persisted published state and a single publish attempt.",
+  "evidence": {
+    "workflowRunId": 34672975484,
+    "workflowJobId": 103497721548,
+    "workflowCommit": "95d2daed050c674bc036ea63c13ae8d6f5a62d16",
+    "logResultTimestamp": "2026-09-12T04:26:06.0595007Z"
+  }
+}
