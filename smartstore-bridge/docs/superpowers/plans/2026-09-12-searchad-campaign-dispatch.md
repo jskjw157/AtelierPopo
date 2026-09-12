@@ -26,7 +26,7 @@
 - [x] Implement isolated coordinator, fail-closed input/config/current-state checks and transaction.
 - [x] Prove successful atomic writes, two-pool same-plan race, wrong scope/state/descriptor/token/grant, shared-capacity exhaustion, expiry after lock wait, failures after token/risk/state/audit writes, unknown-state reconstruction and commit-ack loss.
 - [x] Run focused/repeated PG, full regression, syntax, preservation checks; no skipped PG accepted as success.
-- [ ] Publish narrow source/test/workflow diffs, verify completed canonical CI, update dashboard/issue/PR with exact scope and SHA.
+- [x] Publish narrow source/test/workflow diffs and verify canonical CI34680617480/job103518472081 completed/success at ecb817f6037253d909f8731de2c27792bcb0df25: full414/0/0, requiredPG124/0/0, repeatedcampaign41/0/0. Documentation-successor and tracker checkpoints are recorded separately in #26/PR24.
 
 Transaction reference: https://node-postgres.com/features/transactions (same client), https://www.postgresql.org/docs/16/explicit-locking.html (transaction-held row locks). These justify implementation mechanics, not live Naver compatibility.
 
