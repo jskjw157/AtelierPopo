@@ -2,9 +2,9 @@
 
 ## RESUME HERE — 2026-09-12
 
-**현재 이슈: [#25](https://github.com/jskjw157/AtelierPopo/issues/25). 상태: EXECUTION_VERIFIED / HTTP_BOOTSTRAP_PENDING. A/B/C 검증 완료, D/E/F 미완료. 이슈는 OPEN이다.**
+**현재 이슈 [#25](https://github.com/jskjw157/AtelierPopo/issues/25): HTTP_BOOTSTRAP_VERIFIED / COMPOSITION_PENDING. A/B/C/D의 아래 명시된 범위 검증 완료, E/F 미완료. 이슈는 OPEN이다.**
 
-**다음 작업은 #25-D: 역할·Customer별 HTTP, application bootstrap, readiness, close 연결이다. 이어서 E의 실제 PostgreSQL + 역할 HTTP + 활성화 서비스 + 현재 async executor 통합 검증을 수행한다. 아직 0009로 넘어가지 않는다.**
+**다음은 #25-E: 실제 application bootstrap → 역할 HTTP → PostgreSQL activation guard → 현재 async write/승인 토큰 → 모의 upstream 변경을 한 요청 경로로 조합해 검증한다. 공개 readiness 응답의 활성화 상태 반영도 이 단계에서 확인·연결한다. 아직 0009로 넘어가지 않는다.**
 
 | 기준 | 값 |
 | --- | --- |
@@ -13,12 +13,12 @@
 | Draft PR | [#24](https://github.com/jskjw157/AtelierPopo/pull/24), 미병합·미배포 |
 | Working branch | `codex/searchad-original-recovery-20260912` |
 | Protected base | `0adbd11359440efe43fd07c279bd01a4d8914568` on `codex/searchad-recovery-2026-09-11` |
-| 검증 코드/테스트 커밋 | **`317f7d4e129d1f1593cbec184b8968f2e3290df9`** |
-| 완료된 GREEN CI | [34664500356](https://github.com/jskjw157/AtelierPopo/actions/runs/34664500356), job `103473573856` |
-| 전체 회귀 | **262 passed, 0 failed, 0 skipped** |
-| Migration head | `0008`, 이전 스키마 변경 없음 |
+| 검증 코드/테스트 SHA | **`e7c1b6e42235a0de3e7311f5323176033f54af9b`** |
+| 완료된 GREEN CI | [34667873612](https://github.com/jskjw157/AtelierPopo/actions/runs/34667873612), job `103483363436`, completed/success; 전체 로그 확인 |
+| 전체 회귀 | **275 passed, 0 failed, 0 skipped** |
+| Migration head | `0008`, 기존 스키마 변경 없음 |
 
-이 문서는 GitHub 이슈·PR과 연결한 저장소 Markdown 대시보드다. GitHub Projects 보드를 갱신했다는 뜻은 아니다. 위 SHA는 코드/테스트 검증 기준이며, 이 문서는 후속 문서 변경이다. 문서 포함 후속 HEAD의 CI 결과는 #23과 #24에서 구분해 기록한다.
+이것은 저장소 Markdown 대시보드다. GitHub Projects 보드를 변경했다는 뜻이 아니다. 위 SHA는 코드/테스트 검증 기준이고 이 문서는 후속 문서 변경이다. 문서 포함 후속 HEAD의 CI는 PR #24에서 별도로 추적한다.
 
 ## 순차 작업판
 
@@ -26,97 +26,102 @@
 | --- | --- | --- | --- |
 | 1 | 0007 Canary core / dedicated Gateway / 역할 HTTP / bootstrap | VERIFIED | #24, 과거 #12–#15 |
 | 2A | 0008 activation core / schema / PostgreSQL 서비스 조합 | VERIFIED — `c3397b6` | #25-A/B, 원본 #16 |
-| 2B | 0008 현재 async execute / rollback에 활성화 검사 연결 | **VERIFIED — `317f7d4`** | #25-C |
-| 2C | 0008 역할·Customer HTTP / bootstrap / readiness / close | **NEXT — PENDING** | #25-D |
-| 2D | PG + 역할 HTTP + 실제 activation + async executor 통합, 최종 기록 | PENDING | #25-E/F |
-| 3 | 0009 hierarchy / lifecycle | PENDING — #25 완료 이후 | 원본 #17 |
+| 2B | 현재 async execute/rollback의 토큰 소비 전 activation 검사 | VERIFIED — `317f7d4` | #25-C |
+| 2C | 역할·Customer HTTP / 실제 bootstrap / 내부 readiness / close | **VERIFIED — `e7c1b6e`, 아래 경계 참조** | #25-D |
+| 2D | 역할 HTTP + 실제 PG activation + 현재 async mutation 통합 / 공개 readiness / 최종 기록 | **NEXT — PENDING** | #25-E/F |
+| 3 | 0009 hierarchy / lifecycle | PENDING — #25 완료 후 | 원본 #17 |
 | 4 | 0010 reporting 및 후기 Circuit / automation | PENDING | #18 |
-| 5 | Durable worker / scheduler / operation validation, 0019 수준 | PENDING | #19 |
+| 5 | Durable worker / scheduler / operation validation, 0019 기능 수준 | PENDING | #19 |
 | 6 | Profitability / recommendation / limited Auto | PENDING | #20 |
 | 7 | 전체 통합 회귀 / 안전성 / 운영 준비 검증 | PENDING | #21 |
 | 8 | PR 통합 / 배포 / 실계정 검증·활성화 | NOT STARTED — 별도 승인 필요 | #22 |
 
-과거 closed 이슈는 이전 브랜치의 완료 기록이며 현재 복구 브랜치의 자동 완료 근거가 아니다. 목표는 0010에서 끝나지 않고 0019 기능 수준과 #20–#22까지다. 테스트 수·마이그레이션 수로 전체 완료율을 추정하지 않는다.
+과거 closed 이슈는 이전 브랜치의 기록이다. 현재 복구 완료나 전체 완료율의 근거가 아니다. 목표는 0010에서 끝나지 않고 0019 기능 수준과 #20–#22까지다.
 
-## 이번 C 단계의 실제 변경
+## 이번 #25-D의 실제 변경
 
-`src/naver/searchad/write/execution-service.js`에 서버가 주입하는 activation guard를 연결했다. 기존 비동기 drift 확인이 끝난 뒤, **`approvalService.claim` 직전에 검사를 await**한다. 검사기가 없으면 `SEARCHAD_ACTIVATION_GUARD_NOT_READY`, 반환값이 명시적인 `allowed: true`가 아니면 `SEARCHAD_ACTIVATION_REJECTED`로 차단한다. 실제 guard의 만료·계정 중단·범위·자격증명 오류도 그대로 거부한다.
+### 역할·Customer HTTP
 
-롤백은 drift 확인 후, 원래 forward 요청이 아니라 **저장된 변경 전 값으로 구성된 rollback descriptor**에 대해 같은 검사를 수행한다. 거부 시 원격 mutation과 상태 변경을 하지 않는다. 읽기 전용 reconcile은 이 mutation 검사를 적용하지 않아 계정 중단 및 write gate OFF 상태에서도 기존 복구 경로를 사용할 수 있다.
+Reader는 조회, Operator는 계획 작성, Executor는 승인·실행·reconcile·rollback, Admin은 활성화·계정 중단/재개를 담당한다. 원본 activation routes와 역할별 OpenAPI를 복구하고 실제 서버에 등록했다. 공통 HAAR API 키와 SearchAd 역할 키는 서로 대체할 수 없다.
 
-검사기에 전달하는 Customer는 저장된 plan의 값이며 descriptor는 분리된 복사본이다. 실행 토큰은 전달하지 않는다. 검사기가 복사본을 변경해도 승인된 실제 mutation 내용이 바뀌지 않는 계약을 검증했다.
+계획 조회·승인·실행 전에 저장된 Customer 소유권을 `await`로 확인한다. 다른 계정의 계획과 없는 계획은 같은 404를 반환한다. 목록은 허용 Customer별 조회 후 합치며 외부 Customer 필터는 거부한다. 계획 작성자와 승인자는 본문에 적힌 이름이 아니라 인증된 principal에서 파생한다. 일반 operation 실행 주소의 mutation도 Executor, 계정 범위, 승인된 계획, 기존 HTTP write gate를 거쳐 같은 async executor를 사용한다.
 
-`write/runtime-production.js`와 `http/searchad-write-runtime.js`가 이 서버 소유 guard를 전달한다. **HTTP의 lazy factory 전달부만 연결됐으며 application activation 초기화, 역할별 라우트, readiness/close가 완료된 것은 아니다.** app에 guard가 없으면 변경 실행은 차단된다. 이것을 D 완료로 표시하지 않는다.
+현재 repaired async execution/approval/repository/lock/drift/reconcile/no-blind-retry 구현은 교체하지 않았다. 과거 동기식 HTTP 코드를 그대로 덮어쓰지 않고 조회·목록·승인 결과를 기다리도록 연결했다.
 
-기존 production/safe executor의 async 잠금·finally 해제·one-time token·drift·unknown outcome·재시도 금지·rollback 재조회 실패 처리와 저장소는 보존했다. 이전 동기식 write 디렉터리를 덮어쓰지 않았다. 패키지/락파일, config flags, 마이그레이션 0001–0008, 원본 activation core 및 0007 연결부는 이번 증분에서 변경하지 않았다.
+### Application / readiness / shutdown
 
-## 보존 검증 — 변경 범위를 실제 해시로 제한
+`bootstrapV05`가 실제로 생성한 `searchAdCapabilityService`를 activation bootstrap에 전달한다. DATABASE_URL 또는 0008 schema가 없으면 활성화 런타임을 준비된 것으로 노출하지 않고 관련 HTTP는 503을 반환한다. 자동 마이그레이션은 하지 않는다.
 
-CI는 종전 **24개 원본 production/schema blob 해시**를 그대로 검사한다. 기준 브랜치 보존 검사에 추가된 production 예외는 아래 세 파일뿐이며, `scripts/searchad-activation-wiring-provenance.mjs`가 문서화된 추가 부분을 메모리에서 제거하면 이전의 정확한 Git blob으로 돌아오는지 확인한다. 이 스크립트는 파일을 쓰거나 패치하지 않는다.
+**검증된 readiness 범위는 내부 `api.readiness()`의 activation 상태와 activation HTTP의 fail-closed 응답이다. 공개 `/health/ready`는 기존 `readinessV04` 경로를 유지한다. 공개 health 응답에 activation 상태가 반영됐다고 주장하지 않으며 E에서 확인·연결한다.**
 
-| 경로 — smartstore-bridge/ 기준 | 현재 blob | 복원되는 이전 blob |
-| --- | --- | --- |
-| `src/naver/searchad/write/execution-service.js` | `3028636ccdf715f58ebc1bbd7e4d9a48b8e228d6` | `ac0afabeacdd3e4c579c10076a1e26b9bd25fe9f` |
-| `src/naver/searchad/write/runtime-production.js` | `5f8b5b9e1d7daccff54c2b5240843a8f4be84bde` | `c1953e87bab893dbd9c0aa22efc666a1b0a6beab` |
-| `src/http/searchad-write-runtime.js` | `6beba4926c262002a678498e3ebc697e66f275b88` | `43d6df4da02cdc11e7e0b0a254df997fe6c61857` |
+종료는 진행 중인 HTTP 요청과 큐 작업을 기다린 뒤 write/Canary/activation 런타임과 ledger를 닫는다. 동시·반복 close는 같은 Promise를 공유한다. 큐 drain이 끝나지 않으면 `HTTP_SHUTDOWN_PENDING`으로 실패하고 DB 자원을 보존해 재시도할 수 있다. 실제 activation 소유 PG pool 종료와 별도 PG 연결의 생존을 검증했다.
 
-기존 테스트 fixture 세 파일도 같은 방식으로 검사한다. `test/searchad-write-execution.test.js`, `test/postgres-searchad-write-runtime.integration.test.js`, `test/helpers/searchad-write-http-fixture.js`에는 명시적으로 표시한 테스트용 authorization만 주입했고 기존 검증 assertion은 변경하지 않았다. 실제 guard의 허용 범위를 fixture에 맞춰 넓히지 않았다. HTTP fixture 설명도 network와 authorization이 모두 test double임을 명시했다.
+## Fresh CI 결과 — e7c1b6e
 
-**원본 해시 일치 자체는 전체 보안성이나 실계정 사용 가능성의 증명이 아니다.** 변경 범위 보존과 실제 동작 테스트를 별도로 수행했다.
-
-## 검증 결과 — 317f7d4 / CI 34664500356
-
-| 검사 | 관측 결과 |
+| 검사 | pass / fail / skip |
 | --- | --- |
-| Canary / Gateway / 역할 HTTP 집중 | 51/0/0 |
-| Activation core / Customer 경계 집중 | 30/0/0 |
-| Write 집중 — 신규 경계 계약 포함 | **49/0/0** |
-| 필수 PostgreSQL | **19/0/0** |
-| Canary + activation PostgreSQL 반복 | **14/0/0** |
-| 전체 회귀 | **262/0/0** |
-| 원본·기준 보존 | 24개 원본 해시 + 3개 production/3개 기존 fixture의 증분 복원 해시 모두 통과 |
-| 문법·정적 검사 | 통과 |
-| 기존 write safety | 통과, write 16파일 검사 범위의 raw network calls 0 |
-| 번들 manifest coverage | Commerce 116, SearchAd 126 unique / 117 allowlisted, 내부·폐기 operation runtime 누출 0 |
-| Migration 재실행 | 두 번 모두 `0008`, `applied: []` |
-| bridge production dependency audit | 보고된 취약점 0 |
+| Canary/Gateway/Canary 역할 HTTP | 51 / 0 / 0 |
+| Activation core/Customer | 30 / 0 / 0 |
+| Write 집중 | 49 / 0 / 0 |
+| 신규 역할 HTTP / runtime lifecycle | **9 / 0 / 0** |
+| 필수 PostgreSQL 통합 | **23 / 0 / 0** |
+| Canary + activation + application PG 반복 | **18 / 0 / 0** |
+| 전체 회귀 | **275 / 0 / 0** |
 
-표의 수치는 pass/fail/skip이다. 집중·반복 검사는 전체와 중복되어 합산하지 않는다. 이전 244개에서 18개가 증가했다: 신규 PG 파일의 부모 테스트 1개와 하위 9개, 별도 boundary 테스트 8개다. 부모 집계도 포함되므로 18개의 독립 하위 시나리오라고 표현하지 않는다. manifest coverage는 실계정 검증이 아니며 dependency audit는 bridge 범위다. 기존 write scanner를 activation 전체 검사로 확대 해석하지 않는다.
+원본·연결부 해시/보호 기준, 문법·정적 검사, 기존 write safety, 번들 manifest coverage, migration 재실행, bridge production dependency audit가 모두 성공했다. Migration 재실행 두 번 모두 `currentVersion: 0008`, `applied: []`; 의존성 감사에서 보고된 취약점은 0이다.
 
-## 새 테스트가 실제로 검증하는 범위
+집중·반복 검사는 전체와 중복되므로 합산하지 않는다. 이전 262에서 13 증가: HTTP 6개 + lifecycle 3개 + PG 부모 1개와 하위 3개다. 따라서 13개의 독립 leaf 시나리오라는 뜻은 아니다. Write scanner는 기존 16개 write source 파일 범위, raw network call 0이며 HTTP/activation 전체 보안 감사로 확대하지 않는다. 의존성 감사 범위는 bridge이며 root가 아니다. Commerce 116, SearchAd 126 unique/117 allowlisted/내부·폐기 operation runtime 누출 0은 번들 분류 검증이며 live API 검증이 아니다.
 
-`test/postgres-searchad-activation-write.integration.test.js`는 매 실행마다 UUID 전용 PostgreSQL schema를 만들고 실제 migrations, pinned registry, 자격증명 해석, 서명 클라이언트, Gateway, activation services/guard/account control, PostgreSQL async write runtime, plan/approval/lock 저장소를 함께 사용한다. **네이버 upstream GET/PUT 응답 및 검증용 evidence만 fixture다.** 운영의 gate나 실계정에 접근하지 않는다. 종료 시 해당 테스트가 만든 schema만 정리한다.
+## 실제 테스트 경계 — E를 완료로 오인하지 말 것
 
-검사기 없음, grant 없음, Passive-only grant, 만료, 계정 중단, 자격증명 변경, 필드 범위 불일치에서 승인 토큰 미사용·approved 상태 유지·mutation 0·lock 해제를 확인했다. 중단 해제 후 같은 미사용 토큰으로 한 번만 실행하며, 이후 중단된 계정의 롤백을 차단하고 재개 후 롤백을 허용한다. unknown outcome은 반복 쓰기 없이, 계정 중단/write OFF 상태에서 읽기 전용 reconcile로 확인한다.
+`searchad-http-activation-recovery.test.js`의 6개 테스트는 실제 HTTP와 현재 SQLite write 서비스를 사용하지만 activation control 서비스·허용 guard·upstream 응답은 명시적인 fixture다. 역할·계정 격리, actor, 민감정보 제외, OpenAPI, 정상 경로의 1회 mutation을 검사한다. 실제 PG activation을 통해 일반 변경까지 수행한 테스트가 아니다.
 
-`test/searchad-write-activation-boundary.test.js`는 실제 SQLite plan/approval 및 production executor에 명시적 guard/remote test double을 사용한다. 비동기 검사 대기 중 token claim/mutation 정지, 거부 시 토큰 보존, 비허용 반환값 5종 차단, 롤백의 독립적인 재검사, 저장된 Customer와 descriptor 복사본 사용을 확인한다.
+`searchad-http-runtime-lifecycle.test.js`의 3개 테스트는 HTTP가 지연된 소유권 조회/목록/상세/승인을 기다리는지, drain timeout 때 자원을 보존하는지, 진행 중 HTTP 실행이 끝나기 전 activation을 닫지 않는지 검사한다. 지연은 HTTP-facing 계약에만 넣고 SQLite 내부의 동기 계약을 유지한다. 이를 PostgreSQL 테스트라고 부르지 않는다.
 
-기존 generic HTTP 테스트의 authorization은 fixture다. **역할 HTTP → 실제 PG activation → 현재 async executor 전체 요청 검증을 수행한 것으로 주장하지 않는다.** 그것은 D/E의 남은 작업이다. 검증 직후 별도의 동시 suspend가 발생하는 경쟁 상황의 원자적 차단도 이번 테스트 범위의 보장이 아니며 운영 준비 검증에서 별도로 다뤄야 한다.
+`postgres-searchad-application-bootstrap.integration.test.js`는 UUID별 실제 PG schema와 실제 bootstrapV05/자격증명 해석/서명 client/Gateway/capability/activation/control HTTP를 사용한다. 모든 upstream fetch는 금지하고 localhost HTTP만 별도 native fetch로 호출한다. 완성 schema에서 준비 상태·Reader 조회·Admin DB 중단·owned pool 종료, DB 설정 부재, 불완전 schema의 차단과 자동 migration 부재를 검증한다. 이 테스트는 **upstream 요청 0이며 일반 광고 mutation을 수행하지 않는다.**
 
-## 관측된 RED → GREEN
+기존 C의 실제 PG activation → async executor 테스트도 계속 통과한다. 그 테스트의 upstream 응답과 검증 evidence는 fixture다. C와 D를 각각 통과했다는 사실만으로 전체 역할 HTTP → PG activation → 일반 mutation 통합 E를 통과한 것으로 처리하지 않는다. 모든 합성 evidence는 CI 전용이며 운영에 사용할 수 없다.
 
-| 커밋 | CI / job | 관측 결과 |
+## 변경 보존과 provenance
+
+0007 원본 `29fa2214ba8cd62edb0ba92d23c1b3d1a1303ef6`, 0008 원본 `9cf5cf2913a4b8b182e2bef3e4c2676278a58918`을 기준으로 한다. 후기 `f201118...`에는 0009/0010까지 있어 통째로 적용하지 않는다.
+
+CI의 **24 historical blob**은 이전 24개 중 수정된 bootstrap/server 2개를 제외하고 정확히 복구한 activation HTTP/OpenAPI 2개를 더한 것이다. 새 연결부 해시를 원본 해시라고 부르지 않는다. 패키지/락파일, config gates, migrations 0001–0008, 기존 repaired async write, activation core는 D에서 변경하지 않았다.
+
+### D 연결부 — 원본 복구와 구분한 5개 고정 해시
+
+Paths relative to `smartstore-bridge/`:
+
+| Path | D integration blob SHA |
+| --- | --- |
+| `src/http/searchad-write-access.js` | `22392a6b69b9ed782b05be9d31405dc86e10e49c` |
+| `src/http/routes-searchad-write-v3.js` | `7df625756c97f74bc60aa3ab1fcbde0c2e2b328c` |
+| `src/http/routes-searchad.js` | `9e50822145ae90f0b24ab557a570db9be03d5b6c` |
+| `src/bootstrap-v05.js` | `e2353c67f41489d2583750afdeee7c67d8df1719` |
+| `src/http/server-v05.js` | `aee8e75d395d00eb17f6eac0b77a4d60f51d12f1` |
+
+정확한 원본 activation HTTP blob: `routes-searchad-activation.js` = `64a98587ad8fedd78bf91d03ca702eeee02e356c`; `openapi-searchad-activation.js` = `3897f4dddf5de8539b7bd42897b1911eee5a4c7d`.
+
+`searchad-activation-wiring-provenance.mjs`는 문서화된 추가를 메모리에서 제거해 이전 정확한 blob으로 돌아가는지 확인한다. 이번 결과는 7파일: C production 연결부 3개 + 기존 test fixture 4개이며 sourceWrites 0이다. 기존 Canary key-separation 테스트는 정책 변경에 맞춰 역방향 거부 대상만 실제 공통 `/api/v1/status`로 옮겼고 양쪽 401 assertion을 유지했다. 이 별도 테스트 수정은 위 7개 reverse-edit 검사에 포함됐다고 주장하지 않는다.
+
+## 관측한 RED → GREEN
+
+| Commit | CI run / job | 관측 결과 |
 | --- | --- | --- |
-| `090948edec4ce910f2ffc10ed44c817ccca6451b` | `34663851291` / `103471686413` | 실제 PG에서 차단돼야 하는 하위 조건 8개가 거부되지 않음. 그룹 집계 19개 중 10 통과/9 실패 — 실패 부모 1개 포함 |
-| `0736a3741e30d8b7b8537834406d1a22a1a7de1e` | `34664155009` / `103472566021` | 기존 write 41 통과, 신규 비동기·롤백·반환값·descriptor 경계 8 실패 |
-| `317f7d4e129d1f1593cbec184b8968f2e3290df9` | `34664500356` / `103473573856` | 모든 설정된 CI 단계 성공, 전체 **262/0/0** |
+| `917f551f9373e41c19dc5fc0920c265dad0b6bf4` | `34666330285` / `103478835201` | 기존 262 통과, 새 HTTP/bootstrap 6 실패 |
+| `f563c3875ace167b90736c6c72cc27565573685f` | `34667230171` / `103481497917` | 기존 PG 19 통과, 실제 application activation 부재로 부모 포함 4 실패 |
+| `cd67c12fb1ed56978c06a2fb34f4b2ccb283d7fa` | `34667580798` / `103482532624` | Canary 50 통과/1 실패: 이전 테스트가 역할화된 SearchAd status를 공통 API로 취급 |
+| `2e37d6f8afee55127cbe0cd3871b5120d4342e78` | `34667690518` / `103482851755` | 새 HTTP/lifecycle 8 통과/1 실패: 지연 fixture가 SQLite 내부 동기 계약을 깨뜨림 |
+| **`e7c1b6e42235a0de3e7311f5323176033f54af9b`** | **`34667873612` / `103483363436`** | fixture를 HTTP 경계로 수정; 모든 설정된 검사 성공, 전체 **275/0/0** |
 
-## 이전 검증 기록 — 현재 완료 범위와 구분
+두 테스트 수정 모두 production 검증을 끄거나 기존 assertion을 제거한 수정이 아니다. 첫 수정은 인증 정책 변경에 따른 대상 변경이고, 두 번째는 부정확한 테스트 double 수정이다.
 
-0008 원본은 #16 최종 `9cf5cf2913a4b8b182e2bef3e4c2676278a58918`이다. 후기 `f201118...`에는 0009/0010이 섞여 있어 일괄 적용하지 않는다.
+이전 기록: [C / 262-test dashboard](https://github.com/jskjw157/AtelierPopo/blob/cee1af6062658cb16b2931f1e64eac90b5053a93/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), [A/B / 244-test dashboard](https://github.com/jskjw157/AtelierPopo/blob/eed344c4b1e0af172d547446227f3029d1b7e513/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), [0007 historical handoff](SEARCHAD_RECOVERY_STATUS_20260912.md). 現在の再開位置ではなく履歴参照用である。
 
-- [0008 core-only 244/0/0 기록 및 원본 9개 blob 목록](https://github.com/jskjw157/AtelierPopo/blob/eed344c4b1e0af172d547446227f3029d1b7e513/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md): 코드 `c3397b6`, CI `34662636388`; 문서 HEAD `eed344c`, CI `34662941491`. 당시 C 미완료 표시는 이번 기록으로 대체된다.
-- [0007 전체 연결 212/0/0 기록](SEARCHAD_RECOVERY_STATUS_20260912.md): 과거 checkpoint로 보존.
-- #23의 local-only 0019 checkpoint는 원격 소스의 현재 존재/검증을 보장하지 않는다.
+## Next — #25-E, then F
 
-## 다음 작업 — D → E → F
+E에서는 한 application/역할 HTTP 경로에 실제 PG activation/현재 async write runtime을 조합한다. 허용 guard fixture를 사용하지 않고, grant 부재·Passive-only·만료·중단·범위 불일치가 token claim과 mutation 전에 차단되는지 검사한다. 정상 실행은 동일 승인 토큰으로 1회만 적용하고, rollback/reconcile/계정 격리/재구성도 실제 경로에서 검증한다. 공개 `/health/ready`의 activation 상태 표면도 연결·검증 대상으로 남긴다.
 
-원본 #16의 HTTP/bootstrap 계약과 현재 application을 대조한다. 역할·Customer별 activation/control 라우트 및 OpenAPI를 연결하고, startup 오류 시 차단, readiness, 자원 소유권·close를 검증한다. 기존 async 실행 guard를 우회하거나 테스트 fixture authorization을 production 초기화에 사용하지 않는다.
+검사 직후 동시 suspend와 mutation 간 원자적 차단은 C/D가 보장한 사항이 아니다. 운영 준비의 별도 경쟁 조건 검증 항목으로 유지한다. E와 최종 CI·기록 동기화 F가 완료된 뒤에만 #25를 닫고 0009로 진행한다.
 
-실제 PostgreSQL + 역할 HTTP + activation services + 현재 executor를 함께 통과하는 테스트에서 허용과 거부, token 보존, Customer 격리, 재시작 및 종료를 확인한다. 전체 회귀 CI의 실제 SHA를 #25/#23/이 대시보드/#24에 동기화하고, D/E/F가 끝난 뒤에만 #25를 닫고 0009로 이동한다.
-
-## 운영 원칙
-
-현재 미완료 단계 하나씩 issue 계약 → 관측 RED → 최소 구현 → GREEN → 정확한 CI SHA 기록 → issue/dashboard/PR 동기화 순서로 진행한다. A/B/C만 통과한 현재는 전체 0008 완료가 아니다.
-
-실제 네이버 호출·광고 변경·운영 gate 변경·production migration·Hostinger 배포·main 변경·병합은 이번 작업에서 수행하지 않았다. 합성 evidence는 운영 승인에 사용할 수 없다.
+이번 복구 작업에서 실제 Naver 요청·광고 변경·운영 gate 변경·production migration·Hostinger 배포·main 변경·PR 병합은 수행하지 않았다. 구현 복구, CI fixture 검증, 실계정 활성화는 서로 다른 상태다.
