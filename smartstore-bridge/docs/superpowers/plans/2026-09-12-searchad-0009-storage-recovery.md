@@ -22,6 +22,10 @@ Therefore split B2: **B2a internal PostgreSQL storage and risk accounting** in t
 - Actual PostgreSQL tests use fresh UUID schemas, real pools and reconnection, existing migrator and real services. Synthetic IDs/evidence are storage fixtures, never live evidence. No HTTP request is needed.
 - Cover populated0008 ->0009 -> repeat, prior checksums/default-empty lifecycle scopes and immutable evidence/grants/events; unresolved-run uniqueness, explicitly scoped queries/patches, ownership uniqueness, stored unknown states and parent-child queries after reconnect.
 - Cover duplicate intent and shared per-Customer risk capacity through independent pools, reserve/consume/release races, rollback on SQL constraint failure, no consumed-risk recycling and UTC rollover. This is risk-accounting atomicity, NOT approval+dispatch atomicity.
-- Preserve migrations0001-0008 and all existing production code. Only exact head-version assertions in the two old full-migration PG tests may advance0008->0009; prove by reverse replacement/hash, not by disabling assertions. Keep the explicit0008-only upgrade test.
+- Preserve migrations0001-0008 and all existing production code. RED diagnostic inventory identified THREE old full-migration PG tests (activation, active-canary, write) with FOUR head assertions: first in all three plus second in write. Only those exact expectations advance0008->0009; prove by reverse replacement/full-file hash, never disabling assertions. The new explicit0008-only upgrade assertion stays0008.
 - Preserve every existing CI step and hash pin. Add only narrow source/test/migration exceptions and exact new pins. Run required PG, repeated storage tests and the complete suite; inspect actual logs.
-- Record exact code SHA, CI/job/results and source/fixture boundaries; synchronize dashboard/Master26/PR24. Keep26 OPEN and24 Draft.
+- Record exact code SHA, CI/job/results and source/fixture boundaries; synchronize dashboard/Master23/issue26/PR24. Keep26 OPEN and24 Draft.
+
+## Observed RED
+
+95e0fe9d411c5887a33f0963a3f197d06257ea53 / CI34672155276 / job103495415177 completed/failure. Required PostgreSQL:36 passed,1 failed,0 skipped; sole failure is the explicit missing0009-schema assertion. Existing Canary51, activation30, hierarchy18, write49 and role/readiness14 pass. Full regression and downstream safety/audit were skipped after required-PG failure and are not claimed as passing. GREEN verification remains pending for the source-restoration candidate.

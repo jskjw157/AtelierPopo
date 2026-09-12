@@ -17,7 +17,7 @@ test('PostgreSQL SearchAd activation control is immutable, idempotent and restar
   const activationId = randomUUID();
   try {
     const first = await runPostgresMigrations({ pool, migrationsDir });
-    assert.equal(first.currentVersion, '0008');
+    assert.equal(first.currentVersion, '0009');
     const second = await runPostgresMigrations({ pool, migrationsDir });
     assert.deepEqual(second.applied, []);
 

@@ -61,6 +61,8 @@ jobs:
             ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/hierarchy-validator.js' \
             ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/recipe-campaign.js' \
             ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/recipe-hierarchy.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/risk-service.js' \
             ':(exclude)smartstore-bridge/src/naver/searchad/capability.js' \
             ':(exclude)smartstore-bridge/src/naver/searchad/gateway.js' \
             ':(exclude)smartstore-bridge/src/bootstrap-v05.js' \
@@ -119,8 +121,8 @@ jobs:
           1b565834531a7df7abd803ec29fb3ec7a4845674 smartstore-bridge/src/http/server-v05.js
           INTEGRATION_BLOBS
           node smartstore-bridge/scripts/searchad-activation-wiring-provenance.mjs
-          # B1 restores only four pure sources; retain every existing source,
-          # migration and assertion from the completed 0008 checkpoint.
+          # B1 pure modules plus B2a storage only. Prior production and migrations
+          # stay unchanged; three version-only test edits (four assertions) are reverse-verified.
           recipe_base=5a5ae1c713bfc8343be774635a8d63532030db55
           git fetch --no-tags --depth=1 origin "$recipe_base"
           git diff --exit-code "$recipe_base" HEAD -- \
@@ -131,9 +133,16 @@ jobs:
             ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/hierarchy-validator.js' \
             ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/recipe-campaign.js' \
             ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/recipe-hierarchy.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/risk-service.js' \
             ':(exclude)smartstore-bridge/test/searchad-hierarchy-validator.test.js' \
             ':(exclude)smartstore-bridge/test/searchad-hierarchy-recipes.test.js' \
             ':(exclude)smartstore-bridge/test/postgres-searchad-lifecycle-storage.integration.test.js' \
+            ':(exclude)smartstore-bridge/migrations/postgres/0009_searchad_hierarchy_lifecycle.sql' \
+            ':(exclude)smartstore-bridge/test/searchad-lifecycle-risk.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-activation.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-write.integration.test.js' \
             ':(exclude)smartstore-bridge/test/searchad-hierarchy-recovery.test.js'
           while read -r expected source; do
             actual=$(git hash-object "$source")
@@ -147,11 +156,24 @@ jobs:
           1a5248d57ce8838bdafbaefd2b635d93836c67ed smartstore-bridge/test/searchad-hierarchy-validator.test.js
           b0e956601c330ef61bb797155fe7aeb5cd56a798 smartstore-bridge/test/searchad-hierarchy-recipes.test.js
           HIERARCHY_RECIPE_BLOBS
+          while read -r expected source; do
+            actual=$(git hash-object "$source")
+            test "$actual" = "$expected" || { echo "Storage recovery blob mismatch: $source"; exit 1; }
+            echo "Verified 26-B2a storage blob: $source $actual"
+          done <<'STORAGE_BLOBS'
+          ec8f25be8654febf25e5d30b5f9bb4ee45858ac7 smartstore-bridge/migrations/postgres/0009_searchad_hierarchy_lifecycle.sql
+          b63fd592d186ea56297fc2f60dac13e92e97203b smartstore-bridge/src/naver/searchad/lifecycle/postgres-repository.js
+          75f375f59752674ffd28f11c39582c3a73d73e98 smartstore-bridge/src/naver/searchad/lifecycle/risk-service.js
+          75673597c6801fdfb33ea2c6de09330516144702 smartstore-bridge/test/searchad-lifecycle-risk.test.js
+          9ae5a16fd02f715bde11bb39e69ac5cfb34863c9 smartstore-bridge/scripts/searchad-lifecycle-storage-provenance.mjs
+          9a092eee2a5530491142a64f56aae14c2f3dd70e smartstore-bridge/test/postgres-searchad-lifecycle-storage.integration.test.js
+          STORAGE_BLOBS
+          node smartstore-bridge/scripts/searchad-lifecycle-storage-provenance.mjs
           git grep -n -E "currentVersion.*000[789]" -- smartstore-bridge/test || true
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: smartstore-bridge/package-lock.json
       - name: Install dependencies
         working-directory: smartstore-bridge
@@ -214,6 +236,14 @@ jobs:
         run: |
           test -n "$TEST_DATABASE_URL"
           node --test test/postgres-searchad-active-canary.integration.test.js test/postgres-searchad-canary-wiring.integration.test.js test/postgres-searchad-activation*.integration.test.js test/postgres-searchad-application-bootstrap.integration.test.js test/postgres-searchad-application-composition.integration.test.js
+      - name: Repeated isolated lifecycle storage and risk accounting contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --check src/naver/searchad/lifecycle/postgres-repository.js
+          node --check src/naver/searchad/lifecycle/risk-service.js
+          node --test test/searchad-lifecycle-risk.test.js test/postgres-searchad-lifecycle-storage.integration.test.js
       - name: Full regression test suite
         working-directory: smartstore-bridge
         run: npm test
