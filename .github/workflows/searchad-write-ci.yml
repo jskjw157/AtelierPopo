@@ -122,7 +122,7 @@ jobs:
           INTEGRATION_BLOBS
           node smartstore-bridge/scripts/searchad-activation-wiring-provenance.mjs
           # B1 pure modules plus B2a storage only. Prior production and migrations
-          # stay unchanged; three version-only test edits (four assertions) are reverse-verified.
+          # stay unchanged; four version-only test edits (six expectations) are reverse-verified.
           recipe_base=5a5ae1c713bfc8343be774635a8d63532030db55
           git fetch --no-tags --depth=1 origin "$recipe_base"
           git diff --exit-code "$recipe_base" HEAD -- \
@@ -143,6 +143,7 @@ jobs:
             ':(exclude)smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js' \
             ':(exclude)smartstore-bridge/test/postgres-searchad-activation.integration.test.js' \
             ':(exclude)smartstore-bridge/test/postgres-searchad-write.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-migrator.test.js' \
             ':(exclude)smartstore-bridge/test/searchad-hierarchy-recovery.test.js'
           while read -r expected source; do
             actual=$(git hash-object "$source")
@@ -165,7 +166,7 @@ jobs:
           b63fd592d186ea56297fc2f60dac13e92e97203b smartstore-bridge/src/naver/searchad/lifecycle/postgres-repository.js
           75f375f59752674ffd28f11c39582c3a73d73e98 smartstore-bridge/src/naver/searchad/lifecycle/risk-service.js
           75673597c6801fdfb33ea2c6de09330516144702 smartstore-bridge/test/searchad-lifecycle-risk.test.js
-          9ae5a16fd02f715bde11bb39e69ac5cfb34863c9 smartstore-bridge/scripts/searchad-lifecycle-storage-provenance.mjs
+          ac840c24cba6d2b2babcac862a19285a6f71e7fb smartstore-bridge/scripts/searchad-lifecycle-storage-provenance.mjs
           9a092eee2a5530491142a64f56aae14c2f3dd70e smartstore-bridge/test/postgres-searchad-lifecycle-storage.integration.test.js
           STORAGE_BLOBS
           node smartstore-bridge/scripts/searchad-lifecycle-storage-provenance.mjs

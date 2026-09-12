@@ -27,4 +27,19 @@ for (const [file, { hash, results }] of Object.entries(baselines)) {
   assert.equal(blobHash(reversed), hash, `Only the recorded head expectations may change: ${file}`);
   console.log(`Verified unchanged existing assertions except 0008->0009 head: ${file}`);
 }
-console.log(JSON.stringify({ ok: true, existingTestsChecked: Object.keys(baselines).length, allowedVersionChanges, sourceWrites: 0 }));
+// The full migration inventory must include 0009, while its existing ordering,
+// wrapper-removal and checksum assertions remain byte-for-byte unchanged.
+const inventoryFile = 'test/postgres-migrator.test.js';
+let inventory = fs.readFileSync(path.join(root, inventoryFile), 'utf8');
+const inventoryChanges = [
+  ["['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009']", "['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008']"],
+  ["'0009_searchad_hierarchy_lifecycle.sql'", "'0008_searchad_activation_control.sql'"]
+];
+for (const [current, previous] of inventoryChanges) {
+  assert.equal(inventory.split(current).length - 1, 1, `Exactly one new inventory expectation is required: ${current}`);
+  inventory = inventory.replace(current, previous);
+  allowedVersionChanges += 1;
+}
+assert.equal(blobHash(inventory), '2658f5bb05535a952a4c6f9203c6215436886ae5', 'Only the two recorded inventory expectations may change');
+console.log(`Verified unchanged inventory assertions except 0009 head: ${inventoryFile}`);
+console.log(JSON.stringify({ ok: true, existingTestsChecked: Object.keys(baselines).length + 1, allowedVersionChanges, sourceWrites: 0 }));
