@@ -1,0 +1,89 @@
+name: HAAR Instagram Caption Fix Once
+
+on:
+  push:
+    branches:
+      - ops/haar-approved-instagram-20260912
+    paths:
+      - '.github/workflows/haar-instagram-caption-fix-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update-caption:
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Update the already-published approved post caption only
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "$SSH_HOST" && -n "$SSH_USER" && -n "$SSH_PRIVATE_KEY" ]]
+          KEY="$(mktemp)"
+          trap 'rm -f "$KEY"' EXIT
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$KEY"
+          chmod 600 "$KEY"
+
+          ssh -i "$KEY" -p "${SSH_PORT:-22}" \
+            -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          SUDO=""
+          if [[ "$(id -u)" != 0 ]]; then SUDO='sudo -n'; fi
+          exec 9>/tmp/haar-instagram-caption-fix.lock
+          flock -n 9 || { echo 'Caption update is already running.'; exit 1; }
+
+          $SUDO docker exec -i -w /app app-app-1 node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { query, audit, pool } from './server/db.js';
+          import { decryptSecret, safeErrorMessage } from './server/security.js';
+          import { graphGet, graphPost } from './server/meta/client.js';
+
+          const variantId = '09964e77-b7b2-5782-8fd7-e9617db85940';
+          const expectedExternalPostId = '17960008077192527';
+          const expectedUsername = 'haar_archive';
+          const oldCaption = '차분한 룩에, 선명한 디테일.\n\n부드럽게 이어지는 곡선과 은빛 반짝임.\n오늘의 분위기를 완성하는 작은 포인트.\n\nHAAR\n#HAAR #하르 #귀걸이 #데일리주얼리 #주얼리스타일링';
+          const productUrl = 'https://haar.co.kr/product/orbit-silver-earring/43/category/72/display/1/';
+          const newCaption = `${oldCaption}\n\nOrbit Silver Earring\n120,000원\n구매 링크 ↓\n${productUrl}`;
+
+          try {
+            const variant = (await query('SELECT id,publish_state,external_post_id,caption,attempt_count FROM post_variants WHERE id=$1',[variantId])).rows[0];
+            assert.ok(variant, 'Published variant not found');
+            assert.equal(variant.publish_state, 'published');
+            assert.equal(variant.external_post_id, expectedExternalPostId);
+            assert.equal(variant.attempt_count, 1);
+
+            const connection = (await query("SELECT * FROM social_connections WHERE platform='instagram' AND status='connected'")).rows[0];
+            assert.ok(connection, 'Instagram connection missing');
+            assert.equal(connection.account_name, expectedUsername);
+            const accessToken = decryptSecret(connection.access_token_encrypted);
+
+            const before = await graphGet(`/${expectedExternalPostId}`, accessToken, {fields:'id,caption,permalink,media_type'});
+            assert.equal(before.id, expectedExternalPostId);
+            if (before.caption === newCaption) {
+              console.log('HAAR_CAPTION_FIX_RESULT ' + JSON.stringify({status:'already_updated',verified:true,permalink:before.permalink,caption:before.caption}));
+              process.exitCode = 0;
+            } else {
+              assert.equal(before.caption, oldCaption, 'Existing Instagram caption differs from the approved original; refusing to overwrite');
+              const update = await graphPost(`/${expectedExternalPostId}`, accessToken, {caption:newCaption});
+              const after = await graphGet(`/${expectedExternalPostId}`, accessToken, {fields:'id,caption,permalink,media_type'});
+              assert.equal(after.caption, newCaption, 'Caption readback did not match requested product-link caption');
+              await query('UPDATE post_variants SET caption=$2, updated_at=NOW() WHERE id=$1',[variantId,newCaption]);
+              await audit(null,'post.caption_updated','post_variant',variantId,{source:'user_approved_chat',productUrl,externalPostId:expectedExternalPostId});
+              console.log('HAAR_CAPTION_FIX_RESULT ' + JSON.stringify({status:'updated',verified:true,metaResponse:update,permalink:after.permalink,caption:after.caption}));
+            }
+          } catch (error) {
+            console.error('HAAR_CAPTION_FIX_RESULT ' + JSON.stringify({status:'failed',code:error.code||'CAPTION_UPDATE_FAILED',metaCode:error.metaCode||null,metaSubcode:error.metaSubcode||null,message:safeErrorMessage(error)}));
+            process.exitCode=1;
+          } finally {
+            await pool.end();
+          }
+          NODE
+          REMOTE
