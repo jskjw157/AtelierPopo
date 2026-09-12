@@ -2,79 +2,78 @@
 
 ## RESUME HERE — 2026-09-12
 
-**현재 #26은 OPEN: 원본 변경 범위와 이식 방침을 정리했고, B1 계층 검사·요청 생성 모듈 복구를 검증했다. 다음은 #26-B2의 PostgreSQL 계층 저장·오케스트레이션 검토/복구다. 0009 전체 실행 기능은 아직 미완료이며 migration은0008이다.**
+**#26-B2a: PostgreSQL 계층 저장소·내부 리스크 계산 검증 완료. 다음은 B2b의 계층 실행 순서 복구다. B2 전체와 C/D/E/F는 아직 미완료다. #26 OPEN / PR24 Draft를 유지한다.**
 
-- [Master #23](https://github.com/jskjw157/AtelierPopo/issues/23), [현재 #26](https://github.com/jskjw157/AtelierPopo/issues/26), [Draft PR #24](https://github.com/jskjw157/AtelierPopo/pull/24).
-- [0009 원본 대조·B1 검증 기록](SEARCHAD_0009_RECOVERY_AUDIT.md), [현재 복구 계획](superpowers/plans/2026-09-12-searchad-0009-recovery.md).
-- [완료한0008 고정 기록](https://github.com/jskjw157/AtelierPopo/blob/5a5ae1c713bfc8343be774635a8d63532030db55/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), 종료 이슈#25. 과거#17의 닫힘은 현재0009 복구 완료가 아니다.
+이전 B1-only/migration0008 재개 지시는 아래 체크포인트로 대체한다. `0009`는 테스트 DB의 현재 스키마이며 실제 광고 실행·운영 배포를 뜻하지 않는다.
 
 | 기준 | 값 |
 | --- | --- |
 | Repository / application | `jskjw157/AtelierPopo` / `smartstore-bridge` |
-| Working branch | `codex/searchad-original-recovery-20260912` |
+| Branch | `codex/searchad-original-recovery-20260912` |
 | Protected base | `codex/searchad-recovery-2026-09-11` / `0adbd11359440efe43fd07c279bd01a4d8914568` |
-| 이번 증분 시작 | `5a5ae1c713bfc8343be774635a8d63532030db55` |
-| **검증 코드·테스트·CI설정 SHA** | **`0fe2bd013e99c29a7469b5471368847d5084d012`** |
-| **완료된 GREEN CI** | **[34670962167](https://github.com/jskjw157/AtelierPopo/actions/runs/34670962167), job `103492109034`, completed/success; 전체 로그 확인** |
-| **전체 회귀** | **311 passed, 0 failed, 0 skipped** |
-| Migration head | **0008**,0009 스키마 미이식 |
-| 현재 단계 | **#26-B1 VERIFIED / B2–F PENDING; #26 OPEN** |
+| **검증 코드·테스트·CI설정** | **`5c4be3077e67bfd257ce176c3fe9727d9331a101`** |
+| **완료 CI** | **[34674108418](https://github.com/jskjw157/AtelierPopo/actions/runs/34674108418), job `103500743097`, completed/success; 전체 로그 확인** |
+| **전체 회귀** | **332 passed / 0 failed / 0 skipped** |
+| 필수 PostgreSQL / 저장소·risk 반복 | **53/0/0 / 21/0/0** |
+| 테스트 DB migration head | **0009**, 두 최종 재실행 모두 `applied:[]` |
+| 다음 구현 | **#26-B2b**, 이후 C/D/E와 F |
 
-이 문서는 저장소 Markdown 대시보드다. GitHub Projects 보드 갱신은 주장하지 않는다. 후속 문서 전용 HEAD와 그 CI 완료 여부는 #26/PR24에 코드 검증 SHA와 구분해 기록한다.
+[Master#23](https://github.com/jskjw157/AtelierPopo/issues/23) · [현재#26](https://github.com/jskjw157/AtelierPopo/issues/26) · [Draft PR24](https://github.com/jskjw157/AtelierPopo/pull/24) · [B2a 정확한 검증/해시/한계](SEARCHAD_0009_STORAGE_RECOVERY_VERIFICATION.md) · [B2a/B2b 계획](superpowers/plans/2026-09-12-searchad-0009-storage-recovery.md)
 
-## 현재 순차 작업판
+후속 문서 전용 HEAD 및 그 CI는 #26/PR24에 코드 체크포인트와 별도로 기록한다. 이 문서는 Markdown 대시보드이며 GitHub Projects 보드 갱신을 주장하지 않는다.
 
-| 단계 | 상태 / 실제 범위 |
+## 순차 작업판
+
+| 단계 | 상태 |
 | --- | --- |
-| 0007 Canary / Gateway / 역할 HTTP | VERIFIED; 미병합·미배포 |
-| #25 /0008 활성화·현재 async 실행·실제 PG/역할 HTTP·공개 readiness | COMPLETED; 이전 코드9a0b0c8/전체293, 기록은 고정 링크/#25 |
-| #26-A 원본 변경 목록·복구 구분 | INVENTORIED; 전체 모듈 보안 감사나 독립 리뷰 완료가 아님 |
-| #26-B1 계층 validator / operation / descriptor recipe | **VERIFIED — 0fe2bd0**, 순수 모듈4개+원본테스트2개 |
-| #26-B2 계층 PostgreSQL schema/repository/orchestration | **NEXT — PENDING** |
-| #26-C/D/E 승인 실행·scope/ownership·token/risk/dispatch·실제 application HTTP | PENDING |
-| #26-F 전체0009 최종 CI·기록 동기화·이슈 종료 | PENDING; B1 기록 갱신은 F완료가 아님 |
-| #18 reporting / Circuit / automation | PENDING |
-| #19 durable worker / scheduler / operation registry,0019 기능 수준 | PENDING |
-| #20 profitability / recommendation / limited Auto | PENDING |
-| #21 전체 통합·운영 준비·독립 리뷰·동시성 | PENDING |
-| #22 배포·실계정 검증/활성화 | NOT STARTED — 별도 승인 필요 |
+| 0007 Canary/Gateway/역할 HTTP | VERIFIED, 미병합·미배포 |
+| #25 /0008 activation·async 실행·실제 PG/HTTP·공개 readiness/close | COMPLETED; #25 closed, 회귀 보존 |
+| #26-A 원본 목록·이식 방침 | INVENTORIED; 전체 보안 감사가 아님 |
+| #26-B1 순수 계층 validator/descriptor | VERIFIED; 기존18개 검사 유지 |
+| **#26-B2a 계층 schema/repository/risk 저장소** | **VERIFIED —5c4be30** |
+| **#26-B2b authoritative 원격 확인·계층 실행·cleanup/reconcile** | **NEXT — PENDING** |
+| #26-C/D/E lifecycle 승인·scope/ownership·token/risk/dispatch·실제 application HTTP | PENDING |
+| #26-F 전체0009 acceptance/검증/종료 | PENDING; B2a 기록 완료는 F완료가 아님 |
+| #18 reporting/Circuit/automation | PENDING |
+| #19 durable worker/scheduler/operation registry,0019 기능 수준 | PENDING |
+| #20 profitability/recommendation/limited Auto | PENDING |
+| #21 전체 운영 준비·동시성·독립 리뷰 | PENDING |
+| #22 배포·실계정 검증/활성화 | NOT STARTED — 별도 승인 |
 
-## 이번에 복구한 것과 하지 않은 것
+## 이번 결과
 
-원본 `1051fa1a64ab78b5f6b3adf5cb794a342ade39ae`의 `operations.js`, `hierarchy-validator.js`, `recipe-campaign.js`, `recipe-hierarchy.js`와 원본 테스트2개를 정확한 Git blob으로 복구했다. 경로와6개 전체 해시는 별도 대조 기록에 있다.
+현재 원격에 이미 추가된 저장소 복구 코드를 이어서 검증했다. diagnostic20655c9/CI34672961239/job103497683302의 전체331통과/1실패는 마이그레이션 목록이0008까지만 기대한 문제였다. 5c4be30에서는 목록과 마지막 파일명 기대값 두 곳만 갱신하고, 기존 테스트4파일의6개 버전 기대값 외에는 변경되지 않았음을 역변환 해시로 검사했다. 실패를 없애려고 assertion을 제거하거나 검사를 건너뛰지 않았다.
 
-현재 번들의12개 API operation key 정합성, 계정/실행/부모/타입 검사, 중첩 existing-ID 주입 거부, stopped WEB_SITE 설정, keyword batch 경계와 TEXT_45 타입, 저장된 returned-ID 기반 조회/삭제 요청 생성을 검사했다. 구조는 **campaign→adgroup, 그 아래 keyword와 creative가 각각 자식**이다.
+새 PostgreSQL 검증은 계정·실행·부모 결합, 연결 재생성 후 기록 보존, 변경 금지 감사 이벤트, 동시 리스크 한도 경쟁, 예약 ID 재결합 차단, DB 전송 claim의 단일 승자, 불명확한 상태의 재진입/리스크 반환 차단, 자식 우선 cleanup 목록과 상태 claim, 이벤트 비밀정보 제거, 기존 grant의 빈 lifecycle scope 유지 등을 확인했다.
 
-**이 모듈들은 요청 descriptor만 생성한다. 신규 lifecycle 서비스·DB0009·실행·HTTP에는 연결하지 않았다.** 테스트의 parent/object/ownership 값은 fixture이며 실제 소유권 증거나 실계정 PASS가 아니다. 새 테스트6개는 fetch호출을 금지하고0건을 확인한다. 기존PG36/반복31의 통과는0008 회귀이지0009 PG기능 검증이 아니다.
+**검증 경계:** parent test의 UUID schema와 실제 PG 연결/저장소를 사용했다. 재접속은 전체 앱 재부팅이 아니며, DB claim은 실제 Naver 전송이 아니다. synthetic 원격 ID·snapshot·grant는 CI 입력이다. cleanup은 저장소의 정렬/상태 변화 검사이며 원격 삭제 검증이 아니다. 내부 risk units/UTC 날짜는 실제 광고비 또는 한국시간 일예산 정책과 별개다.
 
-과거 실행 코드는 synchronous plan/token 접근이 포함되어 있어 그대로 가져오지 않았다. 현재 async executor/approval/locks/activation/bootstrap/server/close 및 기존 테스트·의존성·설정·migration0001–0008은 변경하지 않았다.
+## 검사와 보존
 
-## 실제 RED → GREEN
-
-| Commit | CI / job | 결과 |
-| --- | --- | --- |
-| `a226d15a90d343c6214a7bb49db082d7651aca80` |34670682168 /103491332326|기존293통과, 새 missing-module assertion6실패, skip0|
-| **`0fe2bd013e99c29a7469b5471368847d5084d012`** |**34670962167 /103492109034**|**전체311/0/0, 설정된 모든 단계 성공**|
-
-| GREEN 검사 | pass / fail / skip |
+| 코드 CI 검사 | pass/fail/skip |
 | --- | --- |
-| 신규 계층 validator/recipe/recovery |**18/0/0**|
-| Canary/Gateway/역할 HTTP |51/0/0|
-| Activation core/Customer |30/0/0|
-| 기존 write 집중 |49/0/0|
-| 기존 역할 HTTP/readiness/runtime lifecycle |14/0/0|
-| 필수 PostgreSQL |36/0/0|
-| 반복 PostgreSQL |31/0/0|
-| **전체 회귀** |**311/0/0**|
+| Canary / activation / pure hierarchy | 51/0/0 · 30/0/0 · 18/0/0 |
+| 기존 write / 역할 HTTP·readiness | 49/0/0 · 14/0/0 |
+| 필수 PostgreSQL / 기존 PG 반복 | **53/0/0** · 31/0/0 |
+| 저장소+리스크 반복 | **21/0/0** |
+| 전체 회귀 | **332/0/0** |
 
-293→311은 원본테스트12+새테스트6이며 집중·반복은 전체와 중복되어 합산하지 않는다. 테스트 수/마이그레이션 수로 제품 전체 완료율을 계산하지 않는다.
+311→332는 PG parent1+child16+risk4이며20개 leaf/21 counted tests다. 집중·반복은 전체와 중복되고 제품 완료율이나 실제 허용 기능 수로 환산하지 않는다.
 
-기존 historical24/integration5/reverse-edit7, 새 historicalB1해시6,0008완료 checkpoint 대비 보존 검사, 정적 검사와 모든 기존 CI단계가 통과했다. workflow는40줄 추가만 있으며 검사 삭제는 없다. 기존 write scanner 범위16파일/rawnetwork0, bridge production audit 보고취약점0, 번들coverage Commerce116/SearchAd126unique·117allowlisted·internal누출0이다. 전체 보안 감사·root감사·live capability검증이 아니다. 두 migration 재실행은0008/applied:[]. SQLite experimental/Actions Node 경고는 남아 있다.
+0009 schema와 risk service/test는 원본 blob, repository는 명시적인 수정 복구본이다. 상세6개 blob은 검증 문서에 있다. 기존 historical24/integration5/activation reverse7/B1원본6 및 새 저장소 pins, 기존 코드/의존성/0001–0008 migration 보존이 통과했다. 기존4개 테스트의6개 버전 기대값만 허용하며 reverse checker의 sourceWrites는0이다.
+
+기존 write scanner는16 source/raw network0 범위로, 전체 보안 감사가 아니다. 번들 coverage Commerce116/SearchAd126 unique·117 allowlisted는 live검증이 아니다. bridge production audit 보고 취약점0이며 root감사는 아니다. SQLite experimental/Actions Node 경고는 남는다.
 
 ## 다음 구현과 운영 경계
 
-B2에서는0009 schema/repository와 hierarchy orchestration 의존성을 검토하고 UUID별 실제PG schema로 migration 반복·불변성·소유권·재시작·unknown outcome·child-first cleanup을 검증한다. 이어 현재 async 실행에 exact lifecycle activation, ownership hold, 승인token/risk/dispatch 원자성과 실제 역할HTTP를 통합한다. 기존 CI 보존 범위의 변경도 필요 항목만 명시적으로 한다.
+B2b는 기존 orchestrator를 그대로 붙이지 말고, 매 mutation 전 authoritative stopped parent 확인, returned-ID/read-back의 Customer/parent/type 결합, 잘못된/부분/중복 batch 응답과 cleanup/reconcile을 검사하며 증분 복구한다. 기존 실행기는 유지한다.
 
-동시 suspend가 guard검사 직후 들어오는 상황의 원자적 차단, 독립 리뷰, live DB/credential/capability는 이번 완료 범위가 아니다. 공개 readiness는 초기화된 인프라 상태이며 계정별 실행 허가가 아니다.
+C/D에서 승인 token+리스크 사용+dispatch intent 원자성을 별도로 입증해야 한다. 저장소의 run/risk transaction 및 claim 통과만으로 승인 실행의 원자성을 주장하지 않는다. 현재0007 start의 shared-risk 원자적 연결도 별도다. 신규 HTTP 실행 연결, 이중 확인/부모 삭제 보호, 실제 앱 재시작과 read-only reconcile은 E에 남는다.
 
-**실제 Naver 요청·광고 변경·운영 gate 변경·production migration·Hostinger 배포·main 변경·PR 병합은 하지 않았다. #26은 OPEN, PR24는 Draft다.**
+공개 /health/ready는 초기화된 인프라 상태이지 계정별 실행 허가나 실시간 연결 검사가 아니다. guard 직후 동시 suspend 차단과 독립 리뷰는#21, 실계정 capability/Canary/활성화는#22다.
+
+**실제 Naver 요청·광고 변경·운영 gate 변경·production migration·Hostinger 배포·main 변경·병합은 하지 않았다.**
+
+## 고정 이력
+
+[B1/311 고정 대시보드](https://github.com/jskjw157/AtelierPopo/blob/035098228dbabdd48669f42f36c054cc38fc68af/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), [B1 원본 감사](SEARCHAD_0009_RECOVERY_AUDIT.md), [0008/293 고정 대시보드](https://github.com/jskjw157/AtelierPopo/blob/5a5ae1c713bfc8343be774635a8d63532030db55/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), closed#25에 이전 해시·RED/GREEN·범위 기록이 남아 있다. 과거#17 closed나 local-only checkpoint는 현재 복구 완료의 근거가 아니다.
