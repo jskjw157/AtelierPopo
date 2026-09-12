@@ -25,7 +25,8 @@
 - [x] Implement one-shot handoff, returned-ID/hold capture and exact GET settlement; test real signed transport with only fetch responses simulated.
 - [x] Add adversarial tests for gates, no-token/replay, wrong-response identity, post-commit suspension/rotation, stale state, commit ambiguity, rollback and read outage. No skipped PG accepted as verification.
 - [x] Run fresh full/required/repeated PG, static/provenance checks; negative control for duplicate send or non-atomic capture; restore exact source after control.
-- [ ] Publish narrow code/test/workflow changes, remove temporary resume export, observe completed CI; sync current dashboard/#23/#26/PR24 without closing overall issue.
+- [x] Publish narrow code/test/workflow changes, remove temporary resume export and observe completed code CI.
+- [ ] Record the documentation successor and synchronize current dashboard/#23/#26/PR24 without closing the overall issue; completion is recorded in the trackers.
 
 ## Local observed checkpoint
 
@@ -34,4 +35,4 @@ First missing-module RED was0/1/0. Risk-date rebinding regression was42/2/0 incl
 exact risk date/consumption timestamp and approval-use timestamp binding fixed it.
 A disposable duplicate-POST mutant produced29/19/0; exact source was restored and all48 passed again.
 Fresh syntax/static/write-safety pass; both final migration reruns0009/applied:[].
-No historical clone or independent reviewer approval is claimed. Code publication/remote CI is pending.
+No historical clone or independent reviewer approval is claimed. Code649dafcb622799ed88acb257b6a08fe55d965403 is published. Canonical CI34723583543/job103633700622 completed/success; complete log and final steps checked: full462/0/0, requiredPG172/0/0, newPG48/0/0, prior dispatchPG41/0/0. All configured preservation/static/safety/coverage/audit steps passed and both final migrations report0009/applied:[]. Documentation-only successor and tracker publication remain separate checkpoints.

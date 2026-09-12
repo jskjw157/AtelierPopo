@@ -1,62 +1,81 @@
 # HAAR SearchAd — Recovery Dashboard
 
-## RESUME HERE — 2026-09-12
+## RESUME HERE — 2026-09-13
 
-**다음은 서버 소유 캠페인 계획 생성기와 단일 전송 연결이다. 캠페인 한 건의 승인 토큰·내부 리스크·전송 예정 기록을 묶는 LOCAL 트랜잭션은 구현·검증했다. 실제 생성/삭제 전송부 또는 B2b·C/D 전체 완료는 아니다. #26 OPEN / PR24 Draft다.**
+**캠페인 한 건의 서버 계획 → 기존 승인 → 원자적 전송 준비 → 서명 POST 한 번 → 반환 ID/소유권 저장 → GET 검증을 내부 경로에 연결했다. 다음은 B2b의 승인된 cleanup과 child/batch 확장이다. 전체 #26은 OPEN, PR24는 Draft다.**
 
-기존 읽기 전용 재조회와 새 `PostgresCampaignDispatchRepository`를 중복 구현하지 않는다. 기존 실행기는 새 coordinator를 아직 호출하지 않는다. 테스트 DB head0009는 운영 배포/활성화가 아니다.
+실제 PostgreSQL·승인·기존 coordinator·서명 Gateway를 사용했고, 네이버 응답과 권한 증거는 테스트 fixture다. 새 서비스는 기본 OFF이며 application HTTP/bootstrap에 연결하지 않았다. 실계정 활성화나 전체 계층 완료를 뜻하지 않는다.
 
 | 기준 | 값 |
 | --- | --- |
-| Repository / app |`jskjw157/AtelierPopo` / `smartstore-bridge`|
-| Branch |`codex/searchad-original-recovery-20260912`|
-| Protected PR base |`codex/searchad-recovery-2026-09-11` / `0adbd11359440efe43fd07c279bd01a4d8914568`|
-| **검증 코드/테스트/CI SHA** |**`ecb817f6037253d909f8731de2c27792bcb0df25`**|
-| **완료 코드 CI** |**[34680617480](https://github.com/jskjw157/AtelierPopo/actions/runs/34680617480), job103518472081, completed/success; 전체 로그·최종 단계 확인**|
-| **전체 / 필수 PG / 새 반복 PG** |**414/0/0 ·124/0/0 ·41/0/0**|
-| DB migration |0009, 신규/수정 migration 없음; 최종 재실행 두 번 applied:[]|
-| 다음 연결 |서버 소유 계획 → 단일 전송 handoff → 응답 ID/소유권 원자적 저장|
+| Repo / app | `jskjw157/AtelierPopo` / `smartstore-bridge` |
+| Branch | `codex/searchad-original-recovery-20260912` |
+| Protected PR base | `0adbd11359440efe43fd07c279bd01a4d8914568` |
+| 검증 코드·테스트·CI | `649dafcb622799ed88acb257b6a08fe55d965403` |
+| Canonical CI | **[34723583543](https://github.com/jskjw157/AtelierPopo/actions/runs/34723583543), job103633700622, completed/success; complete job log and final step conclusions checked** |
+| 전체 / 필수 PG / 새 반복 PG | **462/0/0 · 172/0/0 · 48/0/0** |
+| Migration | 0009, 기존 schema 변경 없음; 테스트 DB에만 적용 |
 
-[Master#23](https://github.com/jskjw157/AtelierPopo/issues/23) · [현재#26](https://github.com/jskjw157/AtelierPopo/issues/26) · [Draft PR#24](https://github.com/jskjw157/AtelierPopo/pull/24) · [이번 검증/해시/경계](SEARCHAD_0009_CAMPAIGN_DISPATCH_VERIFICATION.md) · [캠페인 transaction 계획](superpowers/plans/2026-09-12-searchad-campaign-dispatch.md)
+[Master#23](https://github.com/jskjw157/AtelierPopo/issues/23) · [현재#26](https://github.com/jskjw157/AtelierPopo/issues/26) · [Draft PR24](https://github.com/jskjw157/AtelierPopo/pull/24) · [현재 검증/해시/제약](SEARCHAD_0009_CAMPAIGN_CREATE_VERIFICATION.md) · [이번 계획](superpowers/plans/2026-09-13-searchad-campaign-create-handoff.md)
 
-후속 문서 전용 SHA와 CI는 issue26/PR24에 코드 검증과 별도로 기록한다. 이 파일은 Markdown 대시보드이며 GitHub Projects 보드 갱신을 주장하지 않는다.
+이 문서는 Markdown 작업판이다. GitHub Projects 보드 갱신을 주장하지 않는다. 문서 전용 후속 SHA와 CI는 #26/PR24에 별도 기록한다.
 
 ## 순차 작업판
 
 | 단계 | 상태 |
 | --- | --- |
 |0007 Canary/Gateway/역할 HTTP|VERIFIED, 미병합·미배포|
-|#25 /0008 activation/current async/실제 PG+HTTP/readiness/close|COMPLETED, 회귀 보존|
-|#26-A /B1 원본 목록·순수 계층 descriptor|INVENTORIED / VERIFIED|
-|#26-B2a 원본 schema/repository/risk 저장|VERIFIED, 아래 정정된 storage-only 범위|
-|#26-B2b 읽기 전용 재조회·서명 Gateway/PG|VERIFIED bounded slice, 기존 코드 보존|
-|**#26-B2b/C/D 캠페인 한 건 LOCAL dispatch transaction**|**VERIFIED — ecb817f, 실제 전송 없음**|
-|서버 소유 계획 생성·단일 전송·returned-ID/ownership 저장|**NEXT — PENDING**|
-|B2b child/batch progression·상위 중지 검증·child-first cleanup|PENDING|
-|C/D 전체 lifecycle scope/ownership/원자성 및 기존 실행기·0007 start 채택|PARTIAL; 일반화/실제 경로 연결 미완료|
-|E 실제 lifecycle application/역할 HTTP/whole-app restart|PENDING|
-|F 전체0009 acceptance/종료|PENDING; 부분 체크포인트를 F로 계산하지 않음|
+|#25 /0008 activation·기존 async·실제 PG/HTTP·readiness/close|COMPLETED, 회귀 보존|
+|#26-A/B1 목록·순수 계층 descriptor|INVENTORIED / VERIFIED|
+|#26-B2a schema/repository/risk|VERIFIED, 정정된 storage-only 범위|
+|B2b 읽기 전용 재조회·로컬 관찰 확정|VERIFIED, 기존 코드 보존|
+|B2b/C/D 캠페인 LOCAL token+risk+intent|VERIFIED 기존 ecb817f를 재사용|
+|**캠페인 서버 계획·단일 전송·반환 ID/소유권·GET 검증**|**VERIFIED bounded internal path, 649dafc**|
+|**승인된 cleanup·child/batch progression·상위 중지·child-first 삭제**|**NEXT — PENDING**|
+|C/D 일반 lifecycle scope/원자성·기존 실행기/0007 start 채택|PARTIAL, 전체 미완료|
+|E 실제 lifecycle app/역할 HTTP/whole-app restart|PENDING|
+|F 전체0009 acceptance/종료|PENDING|
 |#18 reporting/Circuit/automation|PENDING|
-|#19 durable worker/scheduler/registry,0019 기능 수준|PENDING|
+|#19 worker/scheduler/registry,0019 기능 수준|PENDING|
 |#20 profitability/recommendation/limited Auto|PENDING|
-|#21 운영 준비/동시 suspend/독립 리뷰|PENDING|
-|#22 배포/실계정 Capability·Canary·scoped activation|NOT STARTED, 별도 승인|
+|#21 최종 suspend-to-send 경계·운영 준비·독립 리뷰|PENDING|
+|#22 배포/실계정 검증/활성화|NOT STARTED, 별도 승인|
 
-## 이번 구현이 실제 보장하는 것
+## 이번 변경과 검증
 
-하나의 PostgreSQL 연결/트랜잭션에서 기존 승인 토큰 소비, 내부 리스크 소비, object dispatching, plan/run unknown_outcome, write attempt와 immutable hierarchy dispatch intent를 함께 저장한다. 중간 실패는 모두 rollback하며, COMMIT 응답이 끊기면 성공 receipt를 반환하지 않고 연결을 폐기한다. 동일 계획을 두 연결에서 청구하면 하나만 commit한다. 기존 reserved/consumed risk와 경쟁해도 같은 일자 내부 한도를 초과하지 않는다.
+기존 원격에는 ecb817f의 LOCAL 캠페인 dispatch transaction과414개 검사까지 있었고 이를 중복 구현하지 않았다. 이번에는 서비스/결과 저장소2개와 PG 테스트1개·계획1개를 추가했다. CI는 이전 모든 줄·단계·pin을 유지하면서37줄만 추가했다. 이전 production source/test/schema/dependency/default gate 변경0이며 임시 resume-source export 파일은 제거했다.
 
-입력은 로컬 Customer/run/object/plan ID와 token뿐이며 authenticated Admin/Customer를 요구한다. 서버 recipe로 재구성한 stopped WEB_SITE payload와 승인 계획이 정확히 같아야 한다. 현재 pinned registry의 public tier-B create operation, active evidence와 grant의 Customer/spec/credential/upstream/operation/create lifecycle/field scope와 유효기간을 검증한다. 생성 scope는 campaign.campaignTp/name/userLock/dailyBudget이다. 기존 update-only 권한을 승격하지 않는다. 실제 row-lock 대기 후 만료와 UTC 날짜를 재확인한다.
+계획은 서버가 생성하고 기존 승인 서비스가 token을 발급한다. 새 실행 경로는 기존 approval+risk+intent transaction을 호출한 뒤, 별도 handoff에서 현재 계정·권한·승인·risk 날짜/소비시각을 재확인한다. COMMIT 확인이 불명확하면 전송하지 않는다. 정상 응답 ID와 소유권 보류 기록을 함께 저장한 뒤 GET하며, 정확한 GET만 owned/applied로 진행한다. run은 cleanup_pending이지 passed가 아니다.
 
-**성공은 dispatchCommitted:true, remoteDispatched:false다.** production planner/executor/HTTP/bootstrap은 아직 연결하지 않았고, 실제 네이버 create/delete 또는 외부 exactly-once를 보장하지 않는다. 새 test는 per-child UUID schema, 실제 approval/risk repository 및 합성 evidence/grant/plan을 사용한다. 실제0007 start가 아니라 risk service fixture가 한도 경쟁에 참여한다. DB 재접속은 whole-app restart가 아니다. 생성 scope를 발급하는 실제 evidence 경로도 남아 있다.
+47개 child+parent=48개 새 검사는 실제 PG와 서명 계층을 조합한다. 동시/반복 실행, 생성·조회 오류, 잘못된 ID/계정/중지 상태, 세 저장 지점 rollback, 키 교체·gate OFF·만료·COMMIT 응답 손실과 생성 후 소유권 변경 등을 확인한다. 저장 ID는 이제 모의 POST 응답에서 유래하지만 실계정 생성 증거는 아니다. DB 재접속은 앱 재부팅이 아니다.
 
-## 검사와 보존
+실패 우선 관측: missing-module0/1/0, risk 날짜 재결합42/2/0(부모 실패 포함). 날짜/시각 결합을 수정했다. 생성 POST를 두 번 보내는 비교 코드는29/19/0으로 실패했고 원본 복원 후48/0/0과 전체462/0/0을 확인했다. 비교 코드는 게시하지 않았으며 모든 행동의 개별 RED를 주장하지 않는다.
 
-로컬 baseline373/0/0 후 missing-coordinator RED0/1/0을 관측하고 구현했다. 연결 실패 오류 처리도 실패를 먼저 관측했다. 토큰만 먼저 COMMIT하도록 일부러 바꾼 로컬 비교 코드에서는 네 개 rollback 검사가 모두 실패했다(전체33pass/8fail, parent 포함). 정확한 원본을 복원한 뒤 최종 GREEN을 확인했고 비교 코드는 게시하지 않았다. 모든40개 행동의 개별 RED를 주장하지 않는다.
+| Canonical code CI check | Pass / fail / skip |
+| --- | --- |
+| Canary/Gateway/role HTTP |51 /0 /0|
+| Activation core |30 /0 /0|
+| Hierarchy recipes + read-only unit |29 /0 /0|
+| Existing write / HTTP-readiness |49 /0 /0 ·14 /0 /0|
+| **Required PostgreSQL** |**172 /0 /0**|
+| Existing Canary/activation/application PG repeat |31 /0 /0|
+| Storage/risk repeat |21 /0 /0|
+| Read-only unit+PG / signed Gateway PG |25 /0 /0 ·16 /0 /0|
+| Existing atomic campaign dispatch PG repeat |41 /0 /0|
+| **New campaign creation PG repeat** |**48 /0 /0**|
+| **Full regression** |**462 /0 /0**|
 
-로컬 및 GitHub 전체414/0/0, 필수PG124/0/0, 새 campaign PG41/0/0. 기존 Canary51, activation30, hierarchy29, write49, HTTP14, priorPG31, storage/risk21, read-only25, signedGatewayPG16도 모두 fail0/skip0. **373+41=414이며 집중·반복은 중복되므로 합산하거나 완료율로 환산하지 않는다.**
+All configured code-CI steps and prior/new source pins and protected diffs passed. Both final migration reruns reported `currentVersion:0009, applied:[]`. Bundled Commerce coverage116; SearchAd126 unique/117 allowlisted with no internal/deprecated runtime leaks. The bridge production dependency audit reported0 vulnerabilities. These are recorded tool results, not live-account capability or whole-system security approval.
 
-기존 source/test/migration/package는 보존하고 coordinator와 test만 추가했다. CI의 기존 단계·pin·보호 diff를 유지하면서 정확한 새 파일만 예외로 추가하고 더 엄격한 baseline 보호와 반복 PG를 추가했다. 이번 임시 workspace-export workflow는 제거했다. 이전 diagnostic/bootstrap 정리는 별도 남는다. 기존 write scanner16sources와 bridge dependency audit0은 전체 보안/독립 리뷰가 아니다. 번들 Commerce116/SearchAd126unique117allowlisted는 live 검증이 아니다. SQLite/Actions Node 경고는 유지된다.
+414+48=462. 집중·반복 검사 수는 전체와 중복되며 완료율로 환산하지 않는다. 기존 write scanner16sources는 이 lifecycle 전체 보안 검사나 독립 리뷰가 아니다. 번들 API coverage는 live 검증이 아니며 bridge production audit는 root audit와 다르다. SQLite/Actions Node 경고는 남는다.
+
+## 핵심 한계 / 다음 구현
+
+현재 보장은 durable claim 뒤 한 번의 내부 전송 시도이며 외부 exactly-once나 반드시 한 번 전달됨을 뜻하지 않는다. 전송 전 차단/프로세스 중단/COMMIT 응답 손실로 실제 전송0회여도 risk가 소비된 미확정 기록은 그대로 남을 수 있다. 생성 응답 저장 중 DB가 실패하면 ID가 남지 않을 수도 있으며 재전송이나 이름 추정으로 복구하지 않는다.
+
+**최종 handoff COMMIT 직후 발생한 계정 suspend와 network send 사이의 원자적 차단은 미완료(#21)다.** 키/gate 재검사를 이 문제의 해결로 확대하지 않는다. 기존 모든 raw writer/기존 executor가 같은 잠금 규칙을 채택했다는 보장도 없다.
+
+다음 B2b는 승인된 campaign cleanup, campaign→adgroup와 그 아래 keyword/creative 각각의 생성, 매 관련 mutation 전 authoritative stopped ancestor, partial/duplicate batch와 child-first cleanup이다. 현재 서비스는 children이 있는 graph를 거부하는 캠페인 전용 경로다. live route 전 cleanup 안전성과 실제 생성 lifecycle evidence 발급 경로가 필요하다. C/D 일반화와 E/F는 계속 미완료다. 내부 risk는 UTC 용량 단위이며 광고비 원화나 한국 일예산이 아니다.
 
 ## 이전 B2a 보고 정정 — 계속 적용
 
@@ -64,14 +83,8 @@ raw 복합 Customer/run/parent 강제, run+risk 원자결합, dispatch/cleanup �
 
 [정정된 B2a 기록](SEARCHAD_0009_STORAGE_RECOVERY_VERIFICATION.md)은 그대로 유효하다. **이번 별도 캠페인 transaction을 과거 B2a나 기존 전체 실행기 보장으로 소급하지 않는다.**
 
-## 다음 작업의 안전 경계
+## 고정 이력과 운영 경계
 
-서버 소유 campaign 계획 생산과 승인된 한 번의 전송 handoff, create 응답의 정확한 ID/Customer/type/stopped 검사, object/ownership 원자 저장과 read-only unknown recovery부터 이어간다. 합성 evidence를 운영에 복사하지 않는다. 이후 campaign→adgroup 아래 keyword와 creative를 각각 생성하며 매 관련 mutation 전 상위 중지 상태를 원격 확인한다. partial/duplicate batch와 child-first remote cleanup을 검증하고 blind retry하지 않는다.
+[캠페인 LOCAL 준비/414](https://github.com/jskjw157/AtelierPopo/blob/a1dfe180a08d812f850e33e6146e4adbfe886093/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), [재조회/373 및 B2a 정정](https://github.com/jskjw157/AtelierPopo/blob/c0668561e7306cfa802d3ab9eb960ee3531b8548/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), [B1/311](https://github.com/jskjw157/AtelierPopo/blob/035098228dbabdd48669f42f36c054cc38fc68af/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), [0008/293](https://github.com/jskjw157/AtelierPopo/blob/5a5ae1c713bfc8343be774635a8d63532030db55/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md)와 closed#25에 이전 근거가 있다. 과거#17 closed/local-only 기록은 현재 완료가 아니다.
 
-현재 transaction의 사후 suspend/credential 변경, 기존 raw writer/실행기와 lock protocol 채택, 일반 lifecycle 원자성,0007 start shared-risk 통합은 아직 남았다. E의 실제 HTTP/앱 연결·재시작, F 최종 acceptance도 미완료다. 내부 risk units/UTC 날짜는 실제 광고비나 한국 일예산이 아니다. 공개 readiness는 초기화 상태이지 계정별 실행 권한/live probe가 아니다.
-
-**실제 Naver 요청·광고 변경·운영 gate 변경·production migration·Hostinger 배포·main 변경·병합은 하지 않았다.**
-
-## 고정 이력
-
-[읽기 전용/373 및 B2a 정정](https://github.com/jskjw157/AtelierPopo/blob/c0668561e7306cfa802d3ab9eb960ee3531b8548/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), [B1/311](https://github.com/jskjw157/AtelierPopo/blob/035098228dbabdd48669f42f36c054cc38fc68af/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md), [0008/293](https://github.com/jskjw157/AtelierPopo/blob/5a5ae1c713bfc8343be774635a8d63532030db55/smartstore-bridge/docs/SEARCHAD_RECOVERY_DASHBOARD.md)와 closed#25에 이전 근거가 있다. 과거 closed#17/local-only checkpoint는 현재#26 완료의 근거가 아니다.
+공개 readiness는 초기화 상태이지 계정별 실행 허가/live probe가 아니다. **실제 Naver 요청·광고 변경·운영 gate·운영 migration·Hostinger 배포·main 변경·병합은 하지 않았다.**
