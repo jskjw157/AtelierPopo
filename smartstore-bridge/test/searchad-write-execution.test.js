@@ -46,6 +46,8 @@ function harness({ allowWrites = true, allowRollback = true, mutateHook, readHoo
   const approvalService = new SearchAdApprovalService({ repository, config, clock });
   const planService = new SearchAdChangePlanService({ repository, remote, config, clock });
   const executionService = new ProductionSearchAdExecutionService({
+    // Authorization is a fixture here; real activation is covered by PostgreSQL composition.
+    activationGuard: { async assertMutationAllowed() { return { allowed: true }; } },
     repository, remote, approvalService, config, clock, lockTtlMs: 60_000
   });
   return {

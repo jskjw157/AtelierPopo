@@ -15,9 +15,11 @@ export const API_KEY = 'fixture-http-key-'.repeat(4);
 export const CUSTOMER_ID = '1001';
 const logger = { info() {}, warn() {}, error() {} };
 
-// Only the network boundary is fake. The pinned manifest, signer, client,
-// gateway, adapter, SQLite services and HTTP server are production classes.
-export async function startWriteFixture(t, { masterWrites = true, searchAdWrites = true } = {}) {
+// Network responses and activation authorization are explicit test doubles.
+// The pinned manifest, signer, client, gateway, SQLite services and HTTP server are real.
+export async function startWriteFixture(t, { masterWrites = true, searchAdWrites = true,
+  activationGuard = { async assertMutationAllowed() { return { allowed: true }; } }
+} = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'haar-write-integration-'));
   const catalogRoot = path.join(dir, 'catalog');
   fs.mkdirSync(catalogRoot);
@@ -77,6 +79,7 @@ export async function startWriteFixture(t, { masterWrites = true, searchAdWrites
     commerceGateway: { status() { return { ready: true }; } },
     searchAdConfig: config, searchAdRegistry: registry, searchAdCredentials: credentials,
     searchAdClient: client, searchAdGateway: gateway,
+    searchAdActivationRuntime: { guard: activationGuard },
     searchAdCapabilityService: new SearchAdCapabilityService({ gateway, config })
   };
   const env = {

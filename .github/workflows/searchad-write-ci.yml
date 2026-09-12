@@ -43,14 +43,14 @@ jobs:
       ATELIER_POSTGRES_SSL_MODE: disable
     steps:
       - uses: actions/checkout@v4
-      - name: Stage 0007 and 0008 core provenance plus baseline preservation
+      - name: Stage 0007 and 0008 core provenance plus additive async wiring
         if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
         run: |
           set -euo pipefail
           baseline=0adbd11359440efe43fd07c279bd01a4d8914568
           git fetch --no-tags --depth=1 origin "$baseline"
-          # Restored source exceptions are checked by exact historical blob hashes.
-          # There is still no exception for the repaired async write subsystem.
+          # Historical core files remain exact blobs. Only three additional source
+          # exceptions are permitted, each checked by reversible-edit provenance.
           git diff --exit-code "$baseline" HEAD -- \
             package.json package-lock.json \
             smartstore-bridge/package.json smartstore-bridge/package-lock.json \
@@ -64,6 +64,9 @@ jobs:
             ':(exclude)smartstore-bridge/src/http/searchad-access-control.js' \
             ':(exclude)smartstore-bridge/src/http/routes-searchad-canary.js' \
             ':(exclude)smartstore-bridge/src/http/openapi-searchad-canary.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/write/execution-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/write/runtime-production.js' \
+            ':(exclude)smartstore-bridge/src/http/searchad-write-runtime.js' \
             'smartstore-bridge/migrations/postgres/000[1-6]_*.sql'
           while read -r expected source; do
             actual=$(git hash-object "$source")
@@ -95,6 +98,7 @@ jobs:
           f612606526a55b12e09a62e16e2eeee4f433296e smartstore-bridge/migrations/postgres/0008_searchad_activation_control.sql
           647b2e75c60613a723cc51cfa3be9d404ad6269b smartstore-bridge/src/naver/searchad/capability.js
           ORIGINAL_BLOBS
+          node smartstore-bridge/scripts/searchad-activation-wiring-provenance.mjs
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

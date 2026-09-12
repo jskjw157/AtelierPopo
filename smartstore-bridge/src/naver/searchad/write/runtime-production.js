@@ -10,6 +10,7 @@ import { createPostgresPool, closePostgresPool } from '../../../infrastructure/p
 
 export function createProductionSearchAdWriteRuntime({
   gateway,
+  activationGuard = null,
   env = process.env,
   baseDir,
   database,
@@ -47,6 +48,7 @@ export function createProductionSearchAdWriteRuntime({
     remote,
     approvalService,
     config,
+    activationGuard,
     clock
   });
 

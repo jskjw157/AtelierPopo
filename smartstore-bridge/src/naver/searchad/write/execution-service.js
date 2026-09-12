@@ -27,12 +27,27 @@ function publicError(error) {
 }
 
 export class SearchAdExecutionService {
-  constructor({ repository, remote, approvalService, config, clock = () => Date.now() }) {
+  constructor({ repository, remote, approvalService, config, activationGuard = null, clock = () => Date.now() }) {
     this.repository = repository;
     this.remote = remote;
     this.approvalService = approvalService;
     this.config = config;
+    this.activationGuard = activationGuard;
     this.clock = clock;
+  }
+
+  async assertActivation(plan, descriptor) {
+    if (typeof this.activationGuard?.assertMutationAllowed !== 'function') {
+      throw new SearchAdWriteError('SEARCHAD_ACTIVATION_GUARD_NOT_READY', 'SearchAd 활성화 검증기가 준비되지 않아 변경을 차단했습니다.', { planId: plan.plan_id }, 503);
+    }
+    const result = await this.activationGuard.assertMutationAllowed({
+      customerId: plan.customer_id,
+      descriptor: structuredClone(descriptor),
+      planId: plan.plan_id
+    });
+    if (result?.allowed !== true) {
+      throw new SearchAdWriteError('SEARCHAD_ACTIVATION_REJECTED', 'SearchAd 활성화 검증기가 변경을 허용하지 않았습니다.', { planId: plan.plan_id }, 403);
+    }
   }
 
   async readCurrent(plan, context = {}) {
@@ -87,6 +102,7 @@ export class SearchAdExecutionService {
       throw error;
     }
 
+    await this.assertActivation(plan, plan.mutation_json);
     await this.approvalService.claim(planId, input.executionToken);
 
     const attemptId = randomUUID();
@@ -208,6 +224,7 @@ export class SearchAdExecutionService {
         planId, expectedAppliedHash: plan.applied_after_hash, currentHash
       }, 409);
     }
+    await this.assertActivation(plan, plan.rollback_json.mutation);
     const mutation = { ...plan.rollback_json.mutation, customerId: plan.customer_id };
     try {
       const response = await this.remote.mutate(mutation, {
