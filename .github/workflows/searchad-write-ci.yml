@@ -149,6 +149,7 @@ jobs:
             ':(exclude)smartstore-bridge/test/postgres-searchad-write.integration.test.js' \
             ':(exclude)smartstore-bridge/test/postgres-migrator.test.js' \
             ':(exclude)smartstore-bridge/test/searchad-hierarchy-reconcile.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-gateway.integration.test.js' \
             ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-reconcile.integration.test.js' \
             ':(exclude)smartstore-bridge/test/searchad-hierarchy-recovery.test.js'
           while read -r expected source; do
@@ -187,6 +188,7 @@ jobs:
             ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/hierarchy-reconcile-service.js' \
             ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-hierarchy-reconcile-repository.js' \
             ':(exclude)smartstore-bridge/test/searchad-hierarchy-reconcile.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-gateway.integration.test.js' \
             ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-reconcile.integration.test.js'
           while read -r expected source; do
             actual=$(git hash-object "$source")
@@ -198,6 +200,16 @@ jobs:
           994f3b589335cac92e16fbdff407932fad5c37a6 smartstore-bridge/test/searchad-hierarchy-reconcile.test.js
           d39f5ae7420157877ba2c16f4430927f901c9b38 smartstore-bridge/test/postgres-searchad-hierarchy-reconcile.integration.test.js
           RECONCILE_BLOBS
+          # Transport-composition increment is test-only: preserve every existing
+          # production/schema/test/dependency byte from its actual starting SHA.
+          transport_base=6445e52122b974f59dab341cd404c0ed666b0d88
+          git fetch --no-tags --depth=1 origin "$transport_base"
+          git diff --exit-code "$transport_base" HEAD -- \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-gateway.integration.test.js'
+          test "$(git hash-object smartstore-bridge/test/postgres-searchad-hierarchy-gateway.integration.test.js)" = '958c49b846ebd815990dcb18d1f1187b4079f434'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -280,6 +292,8 @@ jobs:
           node --check src/naver/searchad/lifecycle/hierarchy-reconcile-service.js
           node --check src/naver/searchad/lifecycle/postgres-hierarchy-reconcile-repository.js
           node --test test/searchad-hierarchy-reconcile.test.js test/postgres-searchad-hierarchy-reconcile.integration.test.js
+          node --check test/postgres-searchad-hierarchy-gateway.integration.test.js
+          node --test test/postgres-searchad-hierarchy-gateway.integration.test.js
       - name: Full regression test suite
         working-directory: smartstore-bridge
         run: npm test
