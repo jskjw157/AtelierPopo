@@ -1,0 +1,157 @@
+name: HAAR Approved Instagram One Post
+on:
+  push:
+    branches: [ops/haar-approved-instagram-20260912]
+    paths: [.github/workflows/haar-approved-instagram-once.yml]
+permissions:
+  contents: read
+concurrency:
+  group: haar-approved-instagram-e31eef45-f457-5980-bb97-445d477c9aaf
+  cancel-in-progress: false
+jobs:
+  publish-approved:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Execute the single approved post using existing application services
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "$SSH_HOST" && -n "$SSH_USER" && -n "$SSH_PRIVATE_KEY" ]]
+          KEY="$(mktemp)"
+          trap 'rm -f "$KEY"' EXIT
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$KEY"
+          # Never blindly retry this SSH command: the external publish may have succeeded.
+          ssh -i "$KEY" -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          SUDO=""
+          if [[ "$(id -u)" != 0 ]]; then SUDO='sudo -n'; fi
+          exec 9>/tmp/haar-approved-e31eef45.lock
+          flock -n 9 || { echo 'Approved operation is already running.'; exit 1; }
+          $SUDO docker exec -i -w /app app-app-1 node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import { createHash } from 'node:crypto';
+          import { config } from './server/config.js';
+          import { query, transaction, audit, pool } from './server/db.js';
+          import { saveUploadedAsset, createSignedMediaUrl, getMediaAsset } from './server/media.js';
+          import { publishVariant } from './server/publish/service.js';
+          import { decryptSecret, safeErrorMessage } from './server/security.js';
+          import { graphGet } from './server/meta/client.js';
+
+          const operationId = 'e31eef45-f457-5980-bb97-445d477c9aaf';
+          const campaignId = 'eb443e89-e71e-5a11-a22e-b59f275243ec';
+          const variantId = '09964e77-b7b2-5782-8fd7-e9617db85940';
+          const expectedOwnerId = 'f6cd1bb3-357e-4dc3-b47c-3a133d60f8df';
+          const expectedAccountId = '17841439383564805';
+          const expectedUsername = 'haar_archive';
+          const imageSha256 = 'b812263f7beee9a0ca2b9f9c8c6472964201ba2af7cd1d7f6a9753137d2dc76f';
+          const imageUrl = 'https://d2ol7oe51mr4n9.cloudfront.net/user_3CLPaYn4Z8AiMxYysSzg2dLUoM0/0f52d125-84e0-4a08-a448-a746c28a620e.jpg';
+          const caption = '차분한 룩에, 선명한 디테일.\n\n부드럽게 이어지는 곡선과 은빛 반짝임.\n오늘의 분위기를 완성하는 작은 포인트.\n\nHAAR\n#HAAR #하르 #귀걸이 #데일리주얼리 #주얼리스타일링';
+          const altText = '회색 재킷을 입고 은빛 곡선 귀걸이를 착용한 모델.';
+          const tempPath = path.join(config.uploadDir, '.tmp', `${operationId}.jpg`);
+          const report = (value) => console.log('HAAR_APPROVED_POST_RESULT ' + JSON.stringify({operationId, platform:'instagram', account:expectedUsername, ...value}));
+          let attemptedPublish = false;
+
+          try {
+            assert.equal(new URL(config.appBaseUrl).hostname, 'social.haarapp.tech', 'Unexpected application target');
+            const owner = (await query('SELECT id, role, status FROM users WHERE email=$1', [config.adminEmail])).rows[0];
+            assert.ok(owner && owner.id===expectedOwnerId && owner.role==='owner' && owner.status==='active', 'Owner is not active');
+            const connection = (await query("SELECT * FROM social_connections WHERE platform='instagram' AND status='connected'")).rows[0];
+            assert.ok(connection && connection.instagram_account_id===expectedAccountId && connection.account_name===expectedUsername, 'Instagram connection changed');
+            assert.ok(connection.scopes.includes('instagram_basic') && connection.scopes.includes('instagram_content_publish'), 'Required Instagram scopes are missing');
+            const accessToken = decryptSecret(connection.access_token_encrypted);
+            const liveAccount = await graphGet(`/${expectedAccountId}`, accessToken, {fields:'id,username'});
+            assert.equal(liveAccount.id, expectedAccountId);
+            assert.equal(liveAccount.username, expectedUsername);
+
+            const existing = (await query('SELECT * FROM post_variants WHERE id=$1', [variantId])).rows[0];
+            if (existing?.external_post_id) {
+              report({status:existing.publish_state, alreadyPublished:true, externalPostId:existing.external_post_id, permalink:existing.permalink});
+            } else {
+              assert.ok(Date.now() < Date.parse('2026-09-13T00:00:00Z'), 'This one-time approval window has expired');
+              assert.ok(!existing || (existing.attempt_count===0 && ['draft','reviewed'].includes(existing.publish_state)), 'A previous attempt exists; verify it before any retry');
+              const duplicateRows = await query("SELECT id FROM post_variants WHERE platform='instagram' AND caption=$1 AND id<>$2", [caption,variantId]);
+              assert.equal(duplicateRows.rowCount,0,'A matching app post already exists');
+              const recent = await graphGet(`/${expectedAccountId}/media`, accessToken, {fields:'id,caption,permalink,timestamp',limit:25});
+              const duplicate = (recent.data || []).find(item=>(item.caption||'').replace(/\r\n/g,'\n').trim()===caption);
+              if (duplicate) {
+                report({status:'matching_caption_already_on_instagram',externalPostId:duplicate.id,permalink:duplicate.permalink,newPostCreated:false});
+                throw Object.assign(new Error('Matching caption already exists on Instagram; no duplicate was published.'),{code:'DUPLICATE_EXTERNAL_POST'});
+              }
+
+              let asset;
+              if (existing) {
+                assert.equal(existing.caption,caption);
+                assert.equal(existing.platform,'instagram');
+                assert.equal(existing.format,'image');
+                assert.equal(existing.media_asset_ids.length,1);
+                asset = await getMediaAsset(existing.media_asset_ids[0]);
+              } else {
+                const response = await fetch(imageUrl,{signal:AbortSignal.timeout(45000)});
+                assert.ok(response.ok,'Could not retrieve the approved image');
+                const image = Buffer.from(await response.arrayBuffer());
+                assert.equal(image.length,424805,'Image size does not match approval');
+                assert.equal(createHash('sha256').update(image).digest('hex'),imageSha256,'Image checksum does not match approval');
+                await fs.mkdir(path.dirname(tempPath),{recursive:true});
+                await fs.writeFile(tempPath,image,{mode:0o600});
+                try {
+                  asset = await saveUploadedAsset({path:tempPath,originalname:'IMG_1826(1).jpeg',mimetype:'image/jpeg'},owner.id,altText);
+                } catch (error) {
+                  if (error.code!=='DUPLICATE_MEDIA' || !error.details?.existingAssetId) throw error;
+                  asset=await getMediaAsset(error.details.existingAssetId);
+                }
+                assert.equal(asset.media_type,'image');
+                assert.equal(asset.width,1122);
+                assert.equal(asset.height,1402);
+                await transaction(async client=>{
+                  await client.query(`INSERT INTO campaigns (id,client_request_id,title,master_caption,status,created_by) VALUES ($1,$2,$3,$4,'draft',$5)`,[campaignId,operationId,'차분한 룩에, 선명한 디테일.',caption,owner.id]);
+                  await client.query(`INSERT INTO post_variants (id,campaign_id,platform,format,caption,alt_text,media_asset_ids,publish_state,idempotency_key) VALUES ($1,$2,'instagram','image',$3,$4,$5::jsonb,'draft',$6)`,[variantId,campaignId,caption,altText,JSON.stringify([asset.id]),operationId+':instagram']);
+                });
+                await audit(owner.id,'campaign.created','campaign',campaignId,{source:'user_approved_chat',operationId,platforms:['instagram'],imageSha256});
+              }
+
+              const mediaResponse = await fetch(createSignedMediaUrl(asset,300),{signal:AbortSignal.timeout(20000)});
+              assert.ok(mediaResponse.ok && mediaResponse.headers.get('content-type')?.startsWith('image/'),'App media URL is not accessible');
+              await mediaResponse.arrayBuffer();
+              await audit(owner.id,'post.approved','post_variant',variantId,{source:'user_approved_chat',operationId,imageSha256,captionSha256:createHash('sha256').update(caption).digest('hex'),targetAccount:expectedUsername});
+              await transaction(async client=>{
+                const ready = await client.query("UPDATE post_variants SET publish_state='reviewed',updated_at=NOW() WHERE id=$1 AND attempt_count=0 AND publish_state IN ('draft','reviewed') RETURNING id",[variantId]);
+                assert.equal(ready.rowCount,1,'Post was already attempted');
+                await client.query("UPDATE campaigns SET status='reviewed',updated_at=NOW() WHERE id=$1",[campaignId]);
+              });
+              attemptedPublish=true;
+              const result=await publishVariant(variantId,owner.id);
+              assert.ok(result.ok && result.externalPostId,'The app did not return a published media ID');
+              let verified=false;
+              let details={};
+              try {
+                details=await graphGet(`/${result.externalPostId}`,accessToken,{fields:'id,caption,permalink,media_type,timestamp'});
+                verified=details.id===result.externalPostId && details.caption===caption && details.media_type==='IMAGE';
+              } catch { /* Never republish after receiving a publish ID. */ }
+              const stored=(await query('SELECT publish_state,external_post_id,permalink,attempt_count FROM post_variants WHERE id=$1',[variantId])).rows[0];
+              report({status:stored.publish_state,verified,externalPostId:result.externalPostId,permalink:details.permalink||stored.permalink||result.permalink||null,timestamp:details.timestamp||null,campaignId,variantId,mediaAssetId:asset.id,imageSha256,caption,attemptCount:stored.attempt_count});
+            }
+          } catch(error) {
+            // The user approved one post. Do not queue blind retries of an ambiguous attempt.
+            if(attemptedPublish) {
+              await query("UPDATE post_variants SET publish_state='failed',next_attempt_at=NULL,updated_at=NOW() WHERE id=$1 AND publish_state='queued' AND external_post_id IS NULL",[variantId]).catch(()=>{});
+              await query("UPDATE campaigns SET status='failed',updated_at=NOW() WHERE id=$1 AND EXISTS (SELECT 1 FROM post_variants WHERE id=$2 AND publish_state='failed')",[campaignId,variantId]).catch(()=>{});
+            }
+            report({status:'stopped',attemptedPublish,code:error.code||'APPROVED_POST_FAILED',metaCode:error.metaCode||null,metaSubcode:error.metaSubcode||null,message:safeErrorMessage(error)});
+            process.exitCode=1;
+          } finally {
+            await fs.rm(tempPath,{force:true}).catch(()=>{});
+            await pool.end();
+          }
+          NODE
+          REMOTE
