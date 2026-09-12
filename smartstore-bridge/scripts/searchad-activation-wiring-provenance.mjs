@@ -60,11 +60,23 @@ const cases = [
     path: 'test/helpers/searchad-write-http-fixture.js',
     original: 'a9623acd6d21af0bbe7a14bd922ec26bfc8ecce2',
     edits: [
+      ["const ROLE_API_KEY = 'fixture-executor-key-'.repeat(4);\n", ''],
+      ["    ATELIER_SEARCHAD_EXECUTOR_API_KEY: ROLE_API_KEY,\n    ATELIER_SEARCHAD_EXECUTOR_CUSTOMERS: CUSTOMER_ID,\n    ATELIER_SEARCHAD_EXECUTOR_PRINCIPAL_ID: 'fixture-executor',\n", ''],
+      ['Authorization: `Bearer ${ROLE_API_KEY}`', 'Authorization: `Bearer ${API_KEY}`'],
       ['// Network responses and activation authorization are explicit test doubles.\n// The pinned manifest, signer, client, gateway, SQLite services and HTTP server are real.\n',
        '// Only the network boundary is fake. The pinned manifest, signer, client,\n// gateway, adapter, SQLite services and HTTP server are production classes.\n'],
       ['export async function startWriteFixture(t, { masterWrites = true, searchAdWrites = true,\n  activationGuard = { async assertMutationAllowed() { return { allowed: true }; } }\n} = {}) {',
        'export async function startWriteFixture(t, { masterWrites = true, searchAdWrites = true } = {}) {'],
       ['    searchAdActivationRuntime: { guard: activationGuard },\n', '']
+    ]
+  },
+  {
+    path: 'test/searchad-http-api.test.js',
+    original: 'aa5f8b7d6666eff87e20bb6e372be4689027880c',
+    edits: [
+      ["const ROLE_API_KEY = 'reader-fixture-'.repeat(4);\n", ''],
+      ["    ATELIER_SEARCHAD_READER_API_KEY: ROLE_API_KEY,\n    ATELIER_SEARCHAD_READER_CUSTOMERS: '1001',\n    ATELIER_SEARCHAD_READER_PRINCIPAL_ID: 'fixture-reader',\n", ''],
+      ['Authorization: `Bearer ${ROLE_API_KEY}`', 'Authorization: `Bearer ${API_KEY}`']
     ]
   }
 ];
@@ -83,4 +95,4 @@ for (const entry of cases) {
   assert.equal(blobHash(restored), entry.original, `Unrecorded source or regression-test change: ${entry.path}`);
   console.log(`Verified additive wiring: ${entry.path} ${blobHash(actual)} -> ${entry.original}`);
 }
-console.log(JSON.stringify({ ok: true, auditedFiles: cases.length, productionFiles: 3, existingTestFixtures: 3, sourceWrites: 0 }));
+console.log(JSON.stringify({ ok: true, auditedFiles: cases.length, productionFiles: 3, existingTestFixtures: 4, sourceWrites: 0 }));

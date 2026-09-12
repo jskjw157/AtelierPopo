@@ -27,6 +27,7 @@ import { createCommerceRoutes } from './routes-commerce.js';
 import { createSearchAdRoutes } from './routes-searchad.js';
 import { createSearchAdWriteRoutesV3 } from './routes-searchad-write-v3.js';
 import { createSearchAdCanaryRoutes } from './routes-searchad-canary.js';
+import { createSearchAdActivationRoutes } from './routes-searchad-activation.js';
 import { createMultiSourceCatalogRoutes } from './routes-multi-source-catalog.js';
 import { HttpError } from './errors.js';
 
@@ -84,6 +85,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createSearchAdRoutes(routeContext),
     ...createSearchAdWriteRoutesV3(routeContext),
     ...createSearchAdCanaryRoutes(routeContext),
+    ...createSearchAdActivationRoutes(routeContext),
     ...createMultiSourceCatalogRoutes(routeContext)
   ];
 
@@ -194,13 +196,34 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     return server.address();
   }
 
-  async function close() {
-    operationQueue.accepting = false;
-    if (server.listening) await new Promise(resolve => server.close(() => resolve()));
-    await operationQueue.close({ timeoutMs: httpConfig.shutdownTimeoutMs });
-    await app.searchAdActiveCanaryRuntime?.close?.();
-    await app.searchAdWriteRuntime?.close?.();
-    app.ledger.close();
+  let closePromise = null;
+  function close() {
+    if (closePromise) return closePromise;
+    closePromise = (async () => {
+      operationQueue.accepting = false;
+      if (server.listening) await new Promise(resolve => server.close(() => resolve()));
+      const idle = await operationQueue.close({ timeoutMs: httpConfig.shutdownTimeoutMs });
+      if (idle !== true) {
+        throw Object.assign(new Error('Shutdown is pending: active operations still own runtime resources.'), {
+          code: 'HTTP_SHUTDOWN_PENDING'
+        });
+      }
+      const errors = [];
+      const resources = new Set([
+        app.searchAdWriteRuntime, app.searchAdActiveCanaryRuntime,
+        app.searchAdActivationRuntime, app.ledger
+      ]);
+      for (const resource of resources) {
+        try { await resource?.close?.(); } catch (error) { errors.push(error); }
+      }
+      if (errors.length) throw new AggregateError(errors, 'HTTP runtime shutdown failed.');
+      return true;
+    })().catch(error => {
+      // A drain timeout is retryable; no pool or ledger has been closed yet.
+      if (error?.code === 'HTTP_SHUTDOWN_PENDING') closePromise = null;
+      throw error;
+    });
+    return closePromise;
   }
 
   return {
@@ -238,6 +261,15 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
           ready: false,
           activationMode: 'prevalidation',
           storage: { runtime: 'postgres', schemaReady: false }
+        }
+      },
+      searchAdActivation: {
+        initialized: Boolean(app.searchAdActivationRuntime),
+        ready: app.searchAdActivationRuntime?.status?.().ready === true,
+        startupError: app.searchAdActivationStartupError || null,
+        status: app.searchAdActivationRuntime?.status?.() || {
+          ready: false, storage: { runtime: 'postgres', schemaReady: false },
+          targetOperationCount: 0, targetFieldCount: 0
         }
       },
       multiSourceCatalog: {

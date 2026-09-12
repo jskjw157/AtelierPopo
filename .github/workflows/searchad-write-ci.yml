@@ -43,14 +43,14 @@ jobs:
       ATELIER_POSTGRES_SSL_MODE: disable
     steps:
       - uses: actions/checkout@v4
-      - name: Stage 0007 and 0008 core provenance plus additive async wiring
+      - name: Historical core provenance and explicit async HTTP integration
         if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
         run: |
           set -euo pipefail
           baseline=0adbd11359440efe43fd07c279bd01a4d8914568
           git fetch --no-tags --depth=1 origin "$baseline"
-          # Historical core files remain exact blobs. Only three additional source
-          # exceptions are permitted, each checked by reversible-edit provenance.
+          # Historical core hashes are distinct from newly integrated HTTP code.
+          # No dependency, old migration or unrelated production change is allowed.
           git diff --exit-code "$baseline" HEAD -- \
             package.json package-lock.json \
             smartstore-bridge/package.json smartstore-bridge/package-lock.json \
@@ -67,6 +67,11 @@ jobs:
             ':(exclude)smartstore-bridge/src/naver/searchad/write/execution-service.js' \
             ':(exclude)smartstore-bridge/src/naver/searchad/write/runtime-production.js' \
             ':(exclude)smartstore-bridge/src/http/searchad-write-runtime.js' \
+            ':(exclude)smartstore-bridge/src/http/searchad-write-access.js' \
+            ':(exclude)smartstore-bridge/src/http/routes-searchad-write-v3.js' \
+            ':(exclude)smartstore-bridge/src/http/routes-searchad.js' \
+            ':(exclude)smartstore-bridge/src/http/routes-searchad-activation.js' \
+            ':(exclude)smartstore-bridge/src/http/openapi-searchad-activation.js' \
             'smartstore-bridge/migrations/postgres/000[1-6]_*.sql'
           while read -r expected source; do
             actual=$(git hash-object "$source")
@@ -83,8 +88,6 @@ jobs:
           6233bd56e73d84820bbebba8d561fab4013edfaa smartstore-bridge/src/naver/searchad/canary/runtime-production.js
           56a7856e067a5ec2e665da7ba06f0ac052f86177 smartstore-bridge/migrations/postgres/0007_searchad_active_canary.sql
           0ce28568d406119369b2156bd1d87c49a32e8e5d smartstore-bridge/src/naver/searchad/gateway.js
-          c3c6fb479c4d6fac279ecc8f30276092b44d9572 smartstore-bridge/src/bootstrap-v05.js
-          6fe63d8981c7d818f55b2a6a78bf3c9a0b9ea9f9 smartstore-bridge/src/http/server-v05.js
           7524eab3ebd31bb63bb34c4d58fc66b47cfff4e5 smartstore-bridge/src/http/searchad-access-control.js
           c89df83aa2d24ead36980b6e407df63ac188452e smartstore-bridge/src/http/routes-searchad-canary.js
           aaf96f35a39f3e16696a528dec217b4025f9fbb8 smartstore-bridge/src/http/openapi-searchad-canary.js
@@ -97,7 +100,20 @@ jobs:
           d35a6cd57b0a35d7c81a751425c5641dacacdbc0 smartstore-bridge/src/naver/searchad/activation/bootstrap.js
           f612606526a55b12e09a62e16e2eeee4f433296e smartstore-bridge/migrations/postgres/0008_searchad_activation_control.sql
           647b2e75c60613a723cc51cfa3be9d404ad6269b smartstore-bridge/src/naver/searchad/capability.js
+          64a98587ad8fedd78bf91d03ca702eeee02e356c smartstore-bridge/src/http/routes-searchad-activation.js
+          3897f4dddf5de8539b7bd42897b1911eee5a4c7d smartstore-bridge/src/http/openapi-searchad-activation.js
           ORIGINAL_BLOBS
+          while read -r expected source; do
+            actual=$(git hash-object "$source")
+            test "$actual" = "$expected" || { echo "Integration blob mismatch: $source"; exit 1; }
+            echo "Pinned 25-D integration blob: $source $actual"
+          done <<'INTEGRATION_BLOBS'
+          22392a6b69b9ed782b05be9d31405dc86e10e49c smartstore-bridge/src/http/searchad-write-access.js
+          7df625756c97f74bc60aa3ab1fcbde0c2e2b328c smartstore-bridge/src/http/routes-searchad-write-v3.js
+          9e50822145ae90f0b24ab557a570db9be03d5b6c smartstore-bridge/src/http/routes-searchad.js
+          e2353c67f41489d2583750afdeee7c67d8df1719 smartstore-bridge/src/bootstrap-v05.js
+          aee8e75d395d00eb17f6eac0b77a4d60f51d12f1 smartstore-bridge/src/http/server-v05.js
+          INTEGRATION_BLOBS
           node smartstore-bridge/scripts/searchad-activation-wiring-provenance.mjs
       - uses: actions/setup-node@v4
         with:
@@ -137,17 +153,25 @@ jobs:
       - name: Focused SearchAd write tests
         working-directory: smartstore-bridge
         run: node --test test/searchad-write-*.test.js
+      - name: Role HTTP activation and runtime lifecycle contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          node --check src/http/searchad-write-access.js
+          node --check src/http/routes-searchad-activation.js
+          node --check src/http/openapi-searchad-activation.js
+          node --test test/searchad-http-activation-recovery.test.js test/searchad-http-runtime-lifecycle.test.js
       - name: PostgreSQL integration tests (required)
         working-directory: smartstore-bridge
         run: |
           test -n "$TEST_DATABASE_URL"
           node --test test/postgres-*.integration.test.js
-      - name: Repeated Canary and activation PostgreSQL contracts
+      - name: Repeated Canary activation and application PostgreSQL contracts
         if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
         working-directory: smartstore-bridge
         run: |
           test -n "$TEST_DATABASE_URL"
-          node --test test/postgres-searchad-active-canary.integration.test.js test/postgres-searchad-canary-wiring.integration.test.js test/postgres-searchad-activation*.integration.test.js
+          node --test test/postgres-searchad-active-canary.integration.test.js test/postgres-searchad-canary-wiring.integration.test.js test/postgres-searchad-activation*.integration.test.js test/postgres-searchad-application-bootstrap.integration.test.js
       - name: Full regression test suite
         working-directory: smartstore-bridge
         run: npm test

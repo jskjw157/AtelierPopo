@@ -12,6 +12,7 @@ import { SearchAdCapabilityService } from '../src/naver/searchad/capability.js';
 import { createHttpApiV05 } from '../src/http/server-v05.js';
 
 const API_KEY = 's'.repeat(48);
+const ROLE_API_KEY = 'reader-fixture-'.repeat(4);
 const silentLogger = { info() {}, warn() {}, error() {} };
 
 function createFixture() {
@@ -68,6 +69,9 @@ function createFixture() {
   };
   const env = {
     ATELIER_API_KEY: API_KEY,
+    ATELIER_SEARCHAD_READER_API_KEY: ROLE_API_KEY,
+    ATELIER_SEARCHAD_READER_CUSTOMERS: '1001',
+    ATELIER_SEARCHAD_READER_PRINCIPAL_ID: 'fixture-reader',
     ATELIER_HTTP_ALLOW_WRITES: 'false',
     ATELIER_HTTP_ALLOW_BATCH_WRITES: 'false',
     ATELIER_TRUST_PROXY: 'false',
@@ -86,7 +90,7 @@ async function startFixture() {
 async function call(fixture, method, pathname, body) {
   return fetch(`${fixture.baseUrl}${pathname}`, {
     method,
-    headers: { Authorization: `Bearer ${API_KEY}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    headers: { Authorization: `Bearer ${ROLE_API_KEY}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
 }

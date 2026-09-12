@@ -6,6 +6,7 @@ import {
   sendJson
 } from './runtime.js';
 import { getSearchAdWriteRuntime, requiredSearchAdIdempotencyKey, requireSearchAdHttpWrites } from './searchad-write-runtime.js';
+import { assertSearchAdRole, assertSearchAdCustomerAccess, requireSearchAdPlanAccess } from './searchad-write-access.js';
 import { buildSearchAdOpenApi } from './openapi-searchad.js';
 import { SearchAdGatewayError, toPublicSearchAdError } from '../naver/searchad/gateway.js';
 
@@ -24,6 +25,10 @@ function asBoolean(value) {
   return /^(1|true|yes|on)$/i.test(String(value || ''));
 }
 
+function roleRoute(role, method, pattern, handler, options = {}) {
+  return { ...route(method, pattern, handler, { ...options, auth: true }), searchAdRole: role };
+}
+
 export function createSearchAdRoutes(context) {
   const { app, httpConfig, version } = context;
   const maxBodyBytes = app.searchAdConfig?.maxJsonBodyBytes || 8 * 1024 * 1024;
@@ -32,7 +37,7 @@ export function createSearchAdRoutes(context) {
       sendJson(req, res, 200, buildSearchAdOpenApi({ serverUrl: baseUrlFromRequest(req), version }));
     }, { auth: false }),
 
-    route('GET', /^\/api\/v1\/searchad\/status$/, async ({ req, res }) => {
+    roleRoute('reader', 'GET', /^\/api\/v1\/searchad\/status$/, async ({ req, res }) => {
       const gateway = requireGateway(app);
       sendJson(req, res, 200, {
         ok: true,
@@ -42,12 +47,14 @@ export function createSearchAdRoutes(context) {
       });
     }),
 
-    route('GET', /^\/api\/v1\/searchad\/accounts$/, async ({ req, res }) => {
+    roleRoute('reader', 'GET', /^\/api\/v1\/searchad\/accounts$/, async ({ req, res, principal }) => {
       const gateway = requireGateway(app);
-      sendJson(req, res, 200, { ok: true, accounts: gateway.credentialsRegistry.listCustomers() });
+      const allowed = new Set(principal.customerIds.map(String));
+      const accounts = gateway.credentialsRegistry.listCustomers().filter(account => allowed.has(String(account.customerId)));
+      sendJson(req, res, 200, { ok: true, accounts });
     }),
 
-    route('GET', /^\/api\/v1\/searchad\/operations$/, async ({ req, res, url }) => {
+    roleRoute('reader', 'GET', /^\/api\/v1\/searchad\/operations$/, async ({ req, res, url }) => {
       const gateway = requireGateway(app);
       const result = gateway.list({
         sourceId: url.searchParams.get('sourceId') || undefined,
@@ -63,27 +70,31 @@ export function createSearchAdRoutes(context) {
       sendJson(req, res, 200, { ok: true, ...result });
     }),
 
-    route('GET', /^\/api\/v1\/searchad\/operations\/([^/]+)$/, async ({ req, res, match }) => {
+    roleRoute('reader', 'GET', /^\/api\/v1\/searchad\/operations\/([^/]+)$/, async ({ req, res, match }) => {
       const gateway = requireGateway(app);
       const operation = gateway.get(decodeURIComponent(match[1]));
       sendJson(req, res, 200, { ok: true, operation: publicOperation(gateway, operation) });
     }),
 
-    route('POST', /^\/api\/v1\/searchad\/operations\/([^/]+)\/preview$/, async ({ req, res, match, body }) => {
+    roleRoute('operator', 'POST', /^\/api\/v1\/searchad\/operations\/([^/]+)\/preview$/, async ({ req, res, match, body, principal }) => {
       const gateway = requireGateway(app);
-      const preview = gateway.preview(decodeURIComponent(match[1]), body);
+      const customerId = assertSearchAdCustomerAccess(principal, body.customerId);
+      const preview = gateway.preview(decodeURIComponent(match[1]), { ...body, customerId });
       sendJson(req, res, 200, { ok: true, preview });
     }, { maxBodyBytes }),
 
-    route('POST', /^\/api\/v1\/searchad\/operations\/([^/]+)\/execute$/, async ({ req, res, match, body, requestId }) => {
+    roleRoute('reader', 'POST', /^\/api\/v1\/searchad\/operations\/([^/]+)\/execute$/, async ({ req, res, match, body, requestId, principal }) => {
       const gateway = requireGateway(app);
       const operationKey = decodeURIComponent(match[1]);
       const operation = gateway.get(operationKey);
       if (operation.sideEffect === false) {
-        const result = await gateway.execute(operationKey, body);
+        const customerId = assertSearchAdCustomerAccess(principal, body.customerId);
+        const result = await gateway.execute(operationKey, { ...body, customerId });
         sendJson(req, res, 200, { ok: true, result });
         return;
       }
+      // A generic operation endpoint is not an alternate authorization path.
+      assertSearchAdRole(principal, 'executor');
       requireSearchAdHttpWrites(context);
       const planId = String(body.planId || '').trim();
       if (!planId) {
@@ -97,7 +108,7 @@ export function createSearchAdRoutes(context) {
         throw new HttpError(400, 'SEARCHAD_APPROVED_PLAN_OVERRIDE_FORBIDDEN', '승인된 계획의 요청값은 실행 시 덮어쓸 수 없습니다.', { fields: overrides });
       }
       const runtime = getSearchAdWriteRuntime(context);
-      const plan = await runtime.planService.get(planId);
+      const plan = await requireSearchAdPlanAccess(runtime, planId, principal);
       if (plan.mutation_operation_key !== operationKey) {
         throw new HttpError(409, 'SEARCHAD_CHANGE_OPERATION_MISMATCH', '변경 계획과 실행 operation이 일치하지 않습니다.');
       }
@@ -106,16 +117,17 @@ export function createSearchAdRoutes(context) {
       }
       const result = await runtime.executionService.execute(planId, {
         ...body, idempotencyKey: requiredSearchAdIdempotencyKey(req, body)
-      }, { requestId });
+      }, { requestId, principal });
       sendJson(req, res, 200, { ok: true, result });
     }, { write: true, maxBodyBytes }),
 
-    route('POST', /^\/api\/v1\/searchad\/capabilities\/passive-probe$/, async ({ req, res, body }) => {
+    roleRoute('operator', 'POST', /^\/api\/v1\/searchad\/capabilities\/passive-probe$/, async ({ req, res, body, principal }) => {
       requireGateway(app);
+      const customerId = assertSearchAdCustomerAccess(principal, body.customerId);
       if (!app.searchAdCapabilityService) throw new HttpError(503, 'SEARCHAD_CAPABILITY_NOT_READY', 'SearchAd capability service is not ready.');
       try {
         const result = await app.searchAdCapabilityService.runPassive({
-          customerId: String(body.customerId || ''),
+          customerId,
           operations: body.operations,
           inputs: body.inputs,
           limit: body.limit
