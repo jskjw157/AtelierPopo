@@ -1,0 +1,100 @@
+name: Build canonical SearchAd sibling CI patch
+
+on:
+  push:
+    branches:
+      - codex/searchad-sibling-wip-20260913
+    paths:
+      - '.github/workflows/searchad-canonical-patch-builder.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/searchad-sibling-wip-20260913
+          fetch-depth: 1
+      - name: Build exact patched canonical workflow as a regular blob
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin codex/searchad-original-recovery-20260912
+          git show FETCH_HEAD:.github/workflows/searchad-write-ci.yml > /tmp/searchad-write-ci.yml
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('/tmp/searchad-write-ci.yml')
+          text = path.read_text()
+          marker = "            package.json package-lock.json \\\n"
+          excludes = (
+              "            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \\\n"
+              "            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \\\n"
+              "            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \\\n"
+              "            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \\\n"
+              "            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \\\n"
+          )
+          count = text.count(marker)
+          if count != 9:
+              raise SystemExit(f'expected 9 provenance diff package markers, found {count}')
+          text = text.replace(marker, excludes + marker)
+
+          child_pin = "          test \"$(git hash-object smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js)\" = '8f5f3352765dbae956e425f09840c0208456d921'\n"
+          setup = "      - uses: actions/setup-node@v4\n"
+          anchor = child_pin + setup
+          if text.count(anchor) != 1:
+              raise SystemExit(f'expected one child-cleanup/setup anchor, found {text.count(anchor)}')
+          provenance = child_pin + """          # Bounded keyword batch + TEXT_45 sibling continuation: exact five-file slice only.
+          sibling_base=b5f2a77d2b9ccb767790ef3ee51619c3339ae44c
+          git fetch --no-tags --depth=1 origin \"$sibling_base\"
+          git diff --exit-code \"$sibling_base\" HEAD -- \\
+            package.json package-lock.json \\
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \\
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \\
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \\
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \\
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \\
+            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \\
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js'
+          test \"$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js)\" = 'dbc21dd1d8855b4ab8b9a6c0b0e5483e610b7b72'
+          test \"$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js)\" = '1942223836b814f0c4f9c437377faf46303cebad'
+          test \"$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js)\" = '54fcf12d977bd2457c250d1ba88ee91b67a66844'
+          test \"$(git hash-object smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js)\" = '69df8e4da840f391fbbd3a1a1f99bf049d03e48e'
+          test \"$(git hash-object smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js)\" = '1f90ad692ac4befe35dc8e39190af09b64c99a62'
+""" + setup
+          text = text.replace(anchor, provenance, 1)
+
+          child_repeat = "          node --test test/postgres-searchad-child-first-cleanup.integration.test.js\n"
+          full = "      - name: Full regression test suite\n"
+          repeat_anchor = child_repeat + full
+          if text.count(repeat_anchor) != 1:
+              raise SystemExit(f'expected one repeated-child/full-regression anchor, found {text.count(repeat_anchor)}')
+          repeated = child_repeat + """      - name: Repeated bounded keyword and TEXT_45 sibling PostgreSQL contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n \"$TEST_DATABASE_URL\"
+          node --check src/naver/searchad/lifecycle/sibling-create-contract.js
+          node --check src/naver/searchad/lifecycle/sibling-create-service.js
+          node --check src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+          node --check test/searchad-hierarchy-sibling-contract.test.js
+          node --check test/postgres-searchad-sibling-create.integration.test.js
+          node --test test/searchad-hierarchy-sibling-contract.test.js test/postgres-searchad-sibling-create.integration.test.js
+""" + full
+          text = text.replace(repeat_anchor, repeated, 1)
+          path.write_text(text)
+          PY
+          cp /tmp/searchad-write-ci.yml .searchad-write-ci.patched.yml
+          grep -c "postgres-sibling-create-repository.js" .searchad-write-ci.patched.yml
+          git diff --no-index --check <(git show FETCH_HEAD:.github/workflows/searchad-write-ci.yml) .searchad-write-ci.patched.yml || test $? -eq 1
+      - name: Commit patched workflow blob as regular file
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .searchad-write-ci.patched.yml
+          git commit -m 'chore: stage exact canonical sibling CI blob'
+          git push origin HEAD:codex/searchad-sibling-wip-20260913
