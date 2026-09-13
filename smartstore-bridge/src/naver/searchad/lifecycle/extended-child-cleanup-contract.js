@@ -1,5 +1,6 @@
 const allowedTypes = new Set(['campaign', 'adgroup', 'keyword', 'creative']);
 const settledStates = new Set(['owned', 'deleted']);
+const targetStates = new Set(['owned', 'delete_pending', 'delete_unknown', 'manual_review', 'deleted']);
 
 function reject(message) {
   const error = new Error(message);
@@ -22,11 +23,11 @@ export function assertExtendedDeleteOrder(objects, targetId) {
   const group = groups[0];
   if (root.parentId !== null || group.parentId !== root.id || leaves.some(item => item.parentId !== group.id)) reject('bounded parent chain invalid');
   if (new Set(leaves.map(item => item.type)).size !== 1) reject('bounded sibling type mismatch');
-  if (objects.some(item => !settledStates.has(item.state))) reject('unresolved descendant state');
 
   const target = objects.find(item => item.id === targetId);
   if (!target) reject('target outside bounded graph');
-  if (target.state !== 'owned') reject('target is not owned');
+  if (!targetStates.has(target.state)) reject('unresolved target state');
+  if (objects.some(item => item.id !== targetId && !settledStates.has(item.state))) reject('unresolved descendant state');
 
   if (target.type === 'keyword' || target.type === 'creative') {
     if (root.state !== 'owned' || group.state !== 'owned') reject('descendant order violation');
