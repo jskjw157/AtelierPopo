@@ -121,7 +121,7 @@ export class PostgresChildFirstCleanupRepository {
   }
   async executionSnapshot(s){return this.#tx(async c=>{
     const g=await this.#graph(c,s),b=cleanupBinding(g,g.target,s.planId);await this.#approved(c,g,s,b);this.#gate(b.mutation);
-    const order=g.leaves.includes(g.target)?[g.root,g.child,g.target]:g.target===g.child?(g.leaves.length?[...g.leaves,g.root,g.child]:[g.root,g.child]):[g.child,g.root];
+    const order=g.leaves.includes(g.target)?[g.root,g.child,g.target]:g.target===g.child?(g.leaves.length?[...g.leaves,g.root,g.child]:[g.root,g.child]):(g.leaves.length?[...g.leaves,g.child,g.root]:[g.child,g.root]);
     return {ticket:this.#issue(g,s,'preflight',{startedAt:this.#now()}),reads:order.map(o=>targetDescriptor(s.customerId,o,'read')),identity:this.#identity(g.run)};
   });}
   async claim(ticket,observations){const v=this.#take(ticket,'preflight'),s=v.scope;return this.#tx(async c=>{
@@ -131,6 +131,9 @@ export class PostgresChildFirstCleanupRepository {
     else if(g.target===g.child&&g.leaves.length){
       const count=g.leaves.length;
       valid=Array.isArray(observations)&&observations.length===count+2&&observations.slice(0,count).every(observation=>observation?.kind==='absent')&&presentNode(g,g.root,observations[count])&&presentNode(g,g.child,observations[count+1]);
+    } else if(g.target===g.root&&g.leaves.length){
+      const count=g.leaves.length;
+      valid=Array.isArray(observations)&&observations.length===count+2&&observations.slice(0,count).every(observation=>observation?.kind==='absent')&&observations[count]?.kind==='absent'&&presentNode(g,g.root,observations[count+1]);
     } else if(Array.isArray(observations)&&observations.length===2)valid=g.target===g.child?presentNode(g,g.root,observations[0])&&presentNode(g,g.child,observations[1]):observations[0]?.kind==='absent'&&presentNode(g,g.root,observations[1]);
     if(!valid)problem('PREFLIGHT','Exact stopped ancestors, descendant absence, and target observations are required.');
     const intentId=`hierarchy:tree:delete:${s.planId}`,day=new Date(this.#now()).toISOString().slice(0,10);
