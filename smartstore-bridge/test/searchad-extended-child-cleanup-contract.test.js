@@ -41,3 +41,12 @@ test('mixed keyword+creative or unresolved leaf state is rejected instead of gue
   assert.throws(() => assertExtendedDeleteOrder(mixed,'kw1'), /bounded/i);
   assert.throws(() => assertExtendedDeleteOrder(graph({kw2:'manual_review'}),'kw1'), /unresolved/i);
 });
+
+test('only the current deletion target may enter transient cleanup states', async () => {
+  const { assertExtendedDeleteOrder } = await contract();
+  assert.equal(typeof assertExtendedDeleteOrder, 'function');
+  assert.doesNotThrow(() => assertExtendedDeleteOrder(graph({kw1:'delete_pending'}),'kw1'));
+  assert.doesNotThrow(() => assertExtendedDeleteOrder(graph({kw1:'delete_unknown'}),'kw1'));
+  assert.doesNotThrow(() => assertExtendedDeleteOrder(graph({kw1:'manual_review'}),'kw1'));
+  assert.throws(() => assertExtendedDeleteOrder(graph({kw2:'delete_pending'}),'kw1'), /unresolved/i);
+});
