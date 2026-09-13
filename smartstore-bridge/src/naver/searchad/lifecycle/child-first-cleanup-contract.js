@@ -52,10 +52,7 @@ export function creationProof(g, node, descriptor) {
   return plan;
 }
 
-/**
- * Verify one actual bounded sibling producer result. The producer creates either
- * a keyword batch or one TEXT_45 creative in a run; mixed leaf types are rejected.
- */
+/** Verify one actual bounded sibling producer result. */
 export function siblingCreationProof(g) {
   const leaves = g.leaves || [];
   if (!leaves.length) return null;
@@ -132,10 +129,11 @@ export function claimedProof(g,node,binding) {
 
 export function deletedProof(g,node) {
   const hold = g.holds.find(h => h.hierarchy_object_id === node.hierarchy_object_id);
+  if (node.state !== 'deleted' || hold?.state !== 'deleted' || !Number.isFinite(epoch(node.deleted_at))) problem('CHILD_PROOF','Every managed descendant must be deletion-proven before parent cleanup.');
   const event = oneEvent(g,node,'tree_cleanup_plan','planned',OPS[node.object_type].delete,'delete');
   const binding = cleanupBinding(g,node,event.details_json.planId); claimedProof(g,node,binding);
   const absent = g.events.filter(e => e.hierarchy_object_id === node.hierarchy_object_id && e.phase === 'tree_cleanup_observation' && e.status === 'absent');
   const e = absent[0];
-  if (node.state !== 'deleted' || hold?.state !== 'deleted' || !Number.isFinite(epoch(node.deleted_at)) || binding.plan.status !== 'applied' || !equal(binding.plan.applied_after_json,binding.plan.expected_after_json) || binding.plan.applied_after_hash !== contentHash(binding.plan.expected_after_json) || absent.length !== 1 || e.customer_id !== g.run.customer_id || e.operation_key !== OPS[node.object_type].delete || e.lifecycle_kind !== 'delete' || e.details_json?.planId !== binding.plan.plan_id || e.details_json.beforeHash !== binding.plan.before_hash || e.details_json.remoteId !== node.remote_id || e.details_json.readOnly !== true || e.details_json.upstreamStatus !== 404 || epoch(e.created_at) !== epoch(node.deleted_at) || epoch(binding.plan.applied_at) !== epoch(node.deleted_at)) problem('CHILD_PROOF','Deleted flags alone cannot authorize parent deletion.');
+  if (binding.plan.status !== 'applied' || !equal(binding.plan.applied_after_json,binding.plan.expected_after_json) || binding.plan.applied_after_hash !== contentHash(binding.plan.expected_after_json) || absent.length !== 1 || e.customer_id !== g.run.customer_id || e.operation_key !== OPS[node.object_type].delete || e.lifecycle_kind !== 'delete' || e.details_json?.planId !== binding.plan.plan_id || e.details_json.beforeHash !== binding.plan.before_hash || e.details_json.remoteId !== node.remote_id || e.details_json.readOnly !== true || e.details_json.upstreamStatus !== 404 || epoch(e.created_at) !== epoch(node.deleted_at) || epoch(binding.plan.applied_at) !== epoch(node.deleted_at)) problem('CHILD_PROOF','Deleted flags alone cannot authorize parent deletion.');
   return binding;
 }
