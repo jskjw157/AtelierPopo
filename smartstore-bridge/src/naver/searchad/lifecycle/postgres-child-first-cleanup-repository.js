@@ -121,15 +121,18 @@ export class PostgresChildFirstCleanupRepository {
   }
   async executionSnapshot(s){return this.#tx(async c=>{
     const g=await this.#graph(c,s),b=cleanupBinding(g,g.target,s.planId);await this.#approved(c,g,s,b);this.#gate(b.mutation);
-    const order=g.leaves.includes(g.target)?[g.root,g.child,g.target]:g.target===g.child?[g.root,g.child]:[g.child,g.root];
+    const order=g.leaves.includes(g.target)?[g.root,g.child,g.target]:g.target===g.child?(g.leaves.length?[...g.leaves,g.root,g.child]:[g.root,g.child]):[g.child,g.root];
     return {ticket:this.#issue(g,s,'preflight',{startedAt:this.#now()}),reads:order.map(o=>targetDescriptor(s.customerId,o,'read')),identity:this.#identity(g.run)};
   });}
   async claim(ticket,observations){const v=this.#take(ticket,'preflight'),s=v.scope;return this.#tx(async c=>{
     const g=await this.#graph(c,s);this.#same(g,v);const b=cleanupBinding(g,g.target,s.planId);let a=await this.#approved(c,g,s,b);
     let valid=false;
     if(g.leaves.includes(g.target))valid=Array.isArray(observations)&&observations.length===3&&presentNode(g,g.root,observations[0])&&presentNode(g,g.child,observations[1])&&presentNode(g,g.target,observations[2]);
-    else if(Array.isArray(observations)&&observations.length===2)valid=g.target===g.child?presentNode(g,g.root,observations[0])&&presentNode(g,g.child,observations[1]):observations[0]?.kind==='absent'&&presentNode(g,g.root,observations[1]);
-    if(!valid)problem('PREFLIGHT','Exact stopped ancestors and target observations are required.');
+    else if(g.target===g.child&&g.leaves.length){
+      const count=g.leaves.length;
+      valid=Array.isArray(observations)&&observations.length===count+2&&observations.slice(0,count).every(observation=>observation?.kind==='absent')&&presentNode(g,g.root,observations[count])&&presentNode(g,g.child,observations[count+1]);
+    } else if(Array.isArray(observations)&&observations.length===2)valid=g.target===g.child?presentNode(g,g.root,observations[0])&&presentNode(g,g.child,observations[1]):observations[0]?.kind==='absent'&&presentNode(g,g.root,observations[1]);
+    if(!valid)problem('PREFLIGHT','Exact stopped ancestors, descendant absence, and target observations are required.');
     const intentId=`hierarchy:tree:delete:${s.planId}`,day=new Date(this.#now()).toISOString().slice(0,10);
     await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[intentId]);
     if((await c.query('SELECT reservation_id FROM searchad_risk_reservations WHERE intent_id=$1 FOR UPDATE',[intentId])).rowCount)problem('REPLAY','Previously claimed risk is never recycled.');
