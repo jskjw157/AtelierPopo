@@ -21,7 +21,8 @@ export function getSearchAdWriteRuntime(context) {
   }
   if (!app.searchAdWriteRuntime) {
     app.searchAdWriteRuntime = createProductionSearchAdWriteRuntime({
-      gateway: app.searchAdGateway, env, baseDir: app.config?.workDir || process.cwd()
+      gateway: app.searchAdGateway, env, baseDir: app.config?.workDir || process.cwd(),
+      activationGuard: app.searchAdActivationRuntime?.guard
     });
   }
   return app.searchAdWriteRuntime;

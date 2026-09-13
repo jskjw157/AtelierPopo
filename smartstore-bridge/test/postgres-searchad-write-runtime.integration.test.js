@@ -192,6 +192,8 @@ test('PostgreSQL production runtime approves and executes a verified one-time-to
     await resetSearchAdWriteTables(pool);
     const gateway = statefulGatewayFixture();
     const runtime = createProductionSearchAdWriteRuntime({
+      // Authorization is a fixture here; real activation is covered by PostgreSQL composition.
+      activationGuard: { async assertMutationAllowed() { return { allowed: true }; } },
       gateway,
       postgresPool: pool,
       env: {

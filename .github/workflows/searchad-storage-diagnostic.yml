@@ -1,0 +1,78 @@
+name: SearchAd Storage Failure Diagnostic
+on:
+  push:
+    branches: [codex/searchad-original-recovery-20260912]
+    paths: ['.github/workflows/searchad-storage-diagnostic.yml']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      ATELIER_POSTGRES_SSL_MODE: disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Preserve failing code exactly
+        run: |
+          git fetch --no-tags --depth=1 origin d65824cf3e091929d06ba7e66bce5c24b1d66b1c
+          git diff --exit-code d65824cf3e091929d06ba7e66bce5c24b1d66b1c HEAD -- smartstore-bridge
+      - name: Start disposable PostgreSQL
+        run: |
+          docker run --name haar_storage_diag -d -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=atelier_test -p 127.0.0.1:5432:5432 postgres:16 -c log_min_messages=panic
+          for attempt in $(seq 1 30); do
+            if docker exec haar_storage_diag pg_isready -U postgres -d atelier_test; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Install unchanged dependencies
+        working-directory: smartstore-bridge
+        run: npm ci --no-audit --no-fund
+      - name: Reproduce same tests and print failure diagnostics only
+        working-directory: smartstore-bridge
+        shell: bash
+        run: |
+          set +e
+          mkdir -p /tmp/haar-storage-tap
+          failed=0
+          run() {
+            local label="$1"; shift
+            "$@" > "/tmp/haar-storage-tap/$label.log" 2>&1
+            local code=$?
+            echo "DIAGNOSTIC_STAGE $label EXIT_CODE $code"
+            python3 - "/tmp/haar-storage-tap/$label.log" <<'PY'
+          import re, sys
+          lines = open(sys.argv[1], encoding='utf-8').read().splitlines()
+          for line in lines:
+              if re.match(r'^# (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms) ', line):
+                  print(line)
+          spans = set()
+          for i, line in enumerate(lines):
+              if re.match(r'^\s*not ok ', line):
+                  spans.update(range(max(0, i-1), min(len(lines), i+55)))
+          if not spans and not any(line.startswith('# tests ') for line in lines):
+              spans.update(range(max(0, len(lines)-70), len(lines)))
+          for i in sorted(spans):
+              print(f'{i+1}: {lines[i]}')
+          PY
+            if [ "$code" -ne 0 ]; then failed=1; fi
+          }
+          run canary node --test test/searchad-active-canary-*.test.js test/searchad-gateway-active-canary.test.js test/searchad-http-access.test.js test/searchad-http-canary-*.test.js
+          run activation node --test test/searchad-activation-*.test.js test/searchad-passive-evidence.test.js test/searchad-account-control.test.js
+          run hierarchy node --test test/searchad-hierarchy-*.test.js
+          run write node --test test/searchad-write-*.test.js
+          run http node --test test/searchad-http-activation-recovery.test.js test/searchad-http-runtime-lifecycle.test.js test/searchad-http-readiness.test.js
+          run postgres node --test test/postgres-*.integration.test.js
+          run repeated node --test test/postgres-searchad-active-canary.integration.test.js test/postgres-searchad-canary-wiring.integration.test.js test/postgres-searchad-activation*.integration.test.js test/postgres-searchad-application-bootstrap.integration.test.js test/postgres-searchad-application-composition.integration.test.js
+          run storage node --test test/searchad-lifecycle-risk.test.js test/postgres-searchad-lifecycle-storage.integration.test.js
+          run full npm test
+          echo "DIAGNOSTIC_FINAL_FAILURE_FLAG $failed"
+          exit "$failed"
+      - name: Remove only diagnostic container
+        if: always()
+        run: docker rm -f haar_storage_diag || true

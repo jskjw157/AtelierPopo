@@ -5,6 +5,7 @@ on:
     branches:
       - codex/searchad-write-execution-v0.7.0
       - codex/searchad-recovery-2026-09-11
+      - codex/searchad-original-recovery-20260912
     paths:
       - 'smartstore-bridge/**'
       - '.github/workflows/searchad-write-ci.yml'
@@ -42,10 +43,406 @@ jobs:
       ATELIER_POSTGRES_SSL_MODE: disable
     steps:
       - uses: actions/checkout@v4
+      - name: Historical core provenance and explicit async HTTP integration
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        run: |
+          set -euo pipefail
+          baseline=0adbd11359440efe43fd07c279bd01a4d8914568
+          git fetch --no-tags --depth=1 origin "$baseline"
+          # Historical core hashes are distinct from newly integrated HTTP code.
+          # No dependency, old migration or unrelated production change is allowed.
+          git diff --exit-code "$baseline" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-adgroup-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-adgroup-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src \
+            ':(exclude)smartstore-bridge/src/naver/searchad/canary/**' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/activation/**' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/operations.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/hierarchy-validator.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/recipe-campaign.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/recipe-hierarchy.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/risk-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/hierarchy-reconcile-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-hierarchy-reconcile-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/capability.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/gateway.js' \
+            ':(exclude)smartstore-bridge/src/bootstrap-v05.js' \
+            ':(exclude)smartstore-bridge/src/http/server-v05.js' \
+            ':(exclude)smartstore-bridge/src/http/searchad-access-control.js' \
+            ':(exclude)smartstore-bridge/src/http/routes-searchad-canary.js' \
+            ':(exclude)smartstore-bridge/src/http/openapi-searchad-canary.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/write/execution-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/write/runtime-production.js' \
+            ':(exclude)smartstore-bridge/src/http/searchad-write-runtime.js' \
+            ':(exclude)smartstore-bridge/src/http/searchad-write-access.js' \
+            ':(exclude)smartstore-bridge/src/http/routes-searchad-write-v3.js' \
+            ':(exclude)smartstore-bridge/src/http/routes-searchad.js' \
+            ':(exclude)smartstore-bridge/src/http/routes-searchad-activation.js' \
+            ':(exclude)smartstore-bridge/src/http/openapi-searchad-activation.js' \
+            'smartstore-bridge/migrations/postgres/000[1-6]_*.sql'
+          while read -r expected source; do
+            actual=$(git hash-object "$source")
+            test "$actual" = "$expected" || { echo "Original blob mismatch: $source"; exit 1; }
+            echo "Verified original blob: $source $actual"
+          done <<'ORIGINAL_BLOBS'
+          3ff900a18b25e1bd411c87d36e6409ca50503a23 smartstore-bridge/src/naver/searchad/canary/active-canary-service.js
+          5bf189eceb22fb7bcc2f58ba78606788f3346bd0 smartstore-bridge/src/naver/searchad/canary/bootstrap.js
+          ff20a7acf03be04b9187f180a04ae68d47ed46d1 smartstore-bridge/src/naver/searchad/canary/config.js
+          0d8e052bffc3c54fd1400b3ad5c720520cefd4f5 smartstore-bridge/src/naver/searchad/canary/credential-fingerprint.js
+          db598e85224e3634cbcc992d730f9a5da66c1658 smartstore-bridge/src/naver/searchad/canary/postgres-repository.js
+          8660411a9a24f60bbd110704987242e65e7bec6d smartstore-bridge/src/naver/searchad/canary/production-recipe.js
+          b1e4f6face0ecc8fece48779bb70fb354f64f710 smartstore-bridge/src/naver/searchad/canary/remote-adapter.js
+          6233bd56e73d84820bbebba8d561fab4013edfaa smartstore-bridge/src/naver/searchad/canary/runtime-production.js
+          56a7856e067a5ec2e665da7ba06f0ac052f86177 smartstore-bridge/migrations/postgres/0007_searchad_active_canary.sql
+          0ce28568d406119369b2156bd1d87c49a32e8e5d smartstore-bridge/src/naver/searchad/gateway.js
+          7524eab3ebd31bb63bb34c4d58fc66b47cfff4e5 smartstore-bridge/src/http/searchad-access-control.js
+          c89df83aa2d24ead36980b6e407df63ac188452e smartstore-bridge/src/http/routes-searchad-canary.js
+          aaf96f35a39f3e16696a528dec217b4025f9fbb8 smartstore-bridge/src/http/openapi-searchad-canary.js
+          83c7e6fd582d41443e461ccf9f19a28454acfc97 smartstore-bridge/src/naver/searchad/activation/runtime-production.js
+          3426759e7f8cdcc6120db8751a66d3642163600d smartstore-bridge/src/naver/searchad/activation/activation-guard.js
+          678e881c3b3eff8d0685248ac7c5459efe4ed137 smartstore-bridge/src/naver/searchad/activation/passive-evidence-service.js
+          033bec66b8f094b7693f185f438a14658ceb1b4e smartstore-bridge/src/naver/searchad/activation/activation-service.js
+          493c7a9650702b08258e5901be579d7abd157bdd smartstore-bridge/src/naver/searchad/activation/postgres-repository.js
+          68c04a934b34321fc2870b44373549297c5ac75a smartstore-bridge/src/naver/searchad/activation/account-control-service.js
+          d35a6cd57b0a35d7c81a751425c5641dacacdbc0 smartstore-bridge/src/naver/searchad/activation/bootstrap.js
+          f612606526a55b12e09a62e16e2eeee4f433296e smartstore-bridge/migrations/postgres/0008_searchad_activation_control.sql
+          647b2e75c60613a723cc51cfa3be9d404ad6269b smartstore-bridge/src/naver/searchad/capability.js
+          64a98587ad8fedd78bf91d03ca702eeee02e356c smartstore-bridge/src/http/routes-searchad-activation.js
+          3897f4dddf5de8539b7bd42897b1911eee5a4c7d smartstore-bridge/src/http/openapi-searchad-activation.js
+          ORIGINAL_BLOBS
+          while read -r expected source; do
+            actual=$(git hash-object "$source")
+            test "$actual" = "$expected" || { echo "Integration blob mismatch: $source"; exit 1; }
+            echo "Pinned 25-D/E integration blob: $source $actual"
+          done <<'INTEGRATION_BLOBS'
+          22392a6b69b9ed782b05be9d31405dc86e10e49c smartstore-bridge/src/http/searchad-write-access.js
+          7df625756c97f74bc60aa3ab1fcbde0c2e2b328c smartstore-bridge/src/http/routes-searchad-write-v3.js
+          9e50822145ae90f0b24ab557a570db9be03d5b6c smartstore-bridge/src/http/routes-searchad.js
+          e2353c67f41489d2583750afdeee7c67d8df1719 smartstore-bridge/src/bootstrap-v05.js
+          1b565834531a7df7abd803ec29fb3ec7a4845674 smartstore-bridge/src/http/server-v05.js
+          INTEGRATION_BLOBS
+          node smartstore-bridge/scripts/searchad-activation-wiring-provenance.mjs
+          # B1 pure modules plus B2a storage only. Prior production and migrations
+          # stay unchanged; four version-only test edits (six expectations) are reverse-verified.
+          recipe_base=5a5ae1c713bfc8343be774635a8d63532030db55
+          git fetch --no-tags --depth=1 origin "$recipe_base"
+          git diff --exit-code "$recipe_base" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-adgroup-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-adgroup-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-dispatch.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/operations.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/hierarchy-validator.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/recipe-campaign.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/recipe-hierarchy.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/risk-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/hierarchy-reconcile-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-hierarchy-reconcile-repository.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-validator.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-recipes.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-lifecycle-storage.integration.test.js' \
+            ':(exclude)smartstore-bridge/migrations/postgres/0009_searchad_hierarchy_lifecycle.sql' \
+            ':(exclude)smartstore-bridge/test/searchad-lifecycle-risk.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-active-canary.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-activation.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-write.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-migrator.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-reconcile.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-gateway.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-reconcile.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-recovery.test.js'
+          while read -r expected source; do
+            actual=$(git hash-object "$source")
+            test "$actual" = "$expected" || { echo "Hierarchy recipe blob mismatch: $source"; exit 1; }
+            echo "Verified historical 26-B1 blob: $source $actual"
+          done <<'HIERARCHY_RECIPE_BLOBS'
+          77ce4a3e3c4e02abb868f1c887ee8a952ca6b7ec smartstore-bridge/src/naver/searchad/lifecycle/operations.js
+          bfaabbb7fb25a1396273e176a80882124a3acfb3 smartstore-bridge/src/naver/searchad/lifecycle/hierarchy-validator.js
+          96bf88b605d1c0c537350e510c5f578361f5c4f8 smartstore-bridge/src/naver/searchad/lifecycle/recipe-campaign.js
+          5fef7015926e3ba04bf9e9c2996fc4e41b704e02 smartstore-bridge/src/naver/searchad/lifecycle/recipe-hierarchy.js
+          1a5248d57ce8838bdafbaefd2b635d93836c67ed smartstore-bridge/test/searchad-hierarchy-validator.test.js
+          b0e956601c330ef61bb797155fe7aeb5cd56a798 smartstore-bridge/test/searchad-hierarchy-recipes.test.js
+          HIERARCHY_RECIPE_BLOBS
+          while read -r expected source; do
+            actual=$(git hash-object "$source")
+            test "$actual" = "$expected" || { echo "Storage recovery blob mismatch: $source"; exit 1; }
+            echo "Verified 26-B2a storage blob: $source $actual"
+          done <<'STORAGE_BLOBS'
+          ec8f25be8654febf25e5d30b5f9bb4ee45858ac7 smartstore-bridge/migrations/postgres/0009_searchad_hierarchy_lifecycle.sql
+          b63fd592d186ea56297fc2f60dac13e92e97203b smartstore-bridge/src/naver/searchad/lifecycle/postgres-repository.js
+          75f375f59752674ffd28f11c39582c3a73d73e98 smartstore-bridge/src/naver/searchad/lifecycle/risk-service.js
+          75673597c6801fdfb33ea2c6de09330516144702 smartstore-bridge/test/searchad-lifecycle-risk.test.js
+          ac840c24cba6d2b2babcac862a19285a6f71e7fb smartstore-bridge/scripts/searchad-lifecycle-storage-provenance.mjs
+          9a092eee2a5530491142a64f56aae14c2f3dd70e smartstore-bridge/test/postgres-searchad-lifecycle-storage.integration.test.js
+          STORAGE_BLOBS
+          node smartstore-bridge/scripts/searchad-lifecycle-storage-provenance.mjs
+          git grep -n -E "currentVersion.*000[789]" -- smartstore-bridge/test || true
+          # B2b read-only slice: preserve every prior source, migration and test.
+          reconcile_base=9ce414244ec1d978372e04d961ea4b8082ce6b73
+          git fetch --no-tags --depth=1 origin "$reconcile_base"
+          git diff --exit-code "$reconcile_base" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-adgroup-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-adgroup-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-dispatch.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/hierarchy-reconcile-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-hierarchy-reconcile-repository.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-reconcile.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-gateway.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-reconcile.integration.test.js'
+          while read -r expected source; do
+            actual=$(git hash-object "$source")
+            test "$actual" = "$expected" || { echo "Reconciliation slice mismatch: $source"; exit 1; }
+            echo "Pinned new B2b read-only source/test: $source $actual"
+          done <<'RECONCILE_BLOBS'
+          99f0e49295d1950de916cdfd10bd866d238e8909 smartstore-bridge/src/naver/searchad/lifecycle/hierarchy-reconcile-service.js
+          af07e783a8240e2d892caf28ba6445827a585dd9 smartstore-bridge/src/naver/searchad/lifecycle/postgres-hierarchy-reconcile-repository.js
+          994f3b589335cac92e16fbdff407932fad5c37a6 smartstore-bridge/test/searchad-hierarchy-reconcile.test.js
+          d39f5ae7420157877ba2c16f4430927f901c9b38 smartstore-bridge/test/postgres-searchad-hierarchy-reconcile.integration.test.js
+          RECONCILE_BLOBS
+          # Transport-composition increment is test-only: preserve every existing
+          # production/schema/test/dependency byte from its actual starting SHA.
+          transport_base=6445e52122b974f59dab341cd404c0ed666b0d88
+          git fetch --no-tags --depth=1 origin "$transport_base"
+          git diff --exit-code "$transport_base" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-adgroup-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-adgroup-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-dispatch.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-hierarchy-gateway.integration.test.js'
+          test "$(git hash-object smartstore-bridge/test/postgres-searchad-hierarchy-gateway.integration.test.js)" = '958c49b846ebd815990dcb18d1f1187b4079f434'
+          # B2b campaign dispatch preparation: only two new files are permitted.
+          dispatch_base=1aace72e45635c35ced4263a835347fa6a204662
+          git fetch --no-tags --depth=1 origin "$dispatch_base"
+          git diff --exit-code "$dispatch_base" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-adgroup-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-adgroup-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-dispatch.integration.test.js'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js)" = '3add8f099699e5a941deded3c77ff3ebf888f977'
+          test "$(git hash-object smartstore-bridge/test/postgres-searchad-campaign-dispatch.integration.test.js)" = '76e193591bdd5ffc6d7f6cf89523a7751bb6edef'
+          # One-shot campaign path: all previous production/test/schema bytes stay pinned.
+          create_base=a1dfe180a08d812f850e33e6146e4adbfe886093
+          git fetch --no-tags --depth=1 origin "$create_base"
+          git diff --exit-code "$create_base" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-adgroup-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-adgroup-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-create.integration.test.js'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/campaign-create-service.js)" = '8699f57ffc318d8e5abe1bc143bf3a66e84451b6'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-create-repository.js)" = '998d5f381e70f91dcda7383e3377373ffd447c78'
+          test "$(git hash-object smartstore-bridge/test/postgres-searchad-campaign-create.integration.test.js)" = '9438aa94acdcc8bed8fcba5184bfb7c441ba0455'
+          # Bounded campaign cleanup: preserve every previous source/test/schema byte.
+          cleanup_base=022a8d2bc1790b1bebfe2d696a5effaea050acbe
+          git fetch --no-tags --depth=1 origin "$cleanup_base"
+          git diff --exit-code "$cleanup_base" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-adgroup-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-adgroup-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/campaign-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-campaign-cleanup.integration.test.js'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/campaign-cleanup-service.js)" = '865dd6b47a3823a95b0d18344630d559081fde9a'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/postgres-campaign-cleanup-repository.js)" = '405318285e187929760c57b4fb313f93edeaab71'
+          test "$(git hash-object smartstore-bridge/test/postgres-searchad-campaign-cleanup.integration.test.js)" = 'a9b0f1b0330abae305abc823a76a9d984799c884'
+          # Bounded adgroup continuation: only the four new implementation/test paths.
+          adgroup_base=6d9bc90e3261b075e3f6427d01d5e1a485662f2e
+          git fetch --no-tags --depth=1 origin "$adgroup_base"
+          git diff --exit-code "$adgroup_base" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-adgroup-create-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-adgroup-create.integration.test.js'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-contract.js)" = '4b0e5606ec91a365cf1056c43687ee9794012b4f'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/adgroup-create-service.js)" = '0984f8f3e9a48858545461ef0eb3265524511a77'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/postgres-adgroup-create-repository.js)" = 'bba5939548da720d3d7e683795c6bc004c7dc160'
+          test "$(git hash-object smartstore-bridge/test/postgres-searchad-adgroup-create.integration.test.js)" = '65349a76e44a77f299d522537b581a077a66b918'
+          # Two-node approved child-first cleanup: no previous source/schema replacement.
+          child_cleanup_base=8e27468993bd0c20fe9fd953d844b6272d983227
+          git fetch --no-tags --depth=1 origin "$child_cleanup_base"
+          git diff --exit-code "$child_cleanup_base" HEAD -- \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-service.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-contract.js)" = 'b4094b59b85f66588b7c4be3a198ed089e10b08c'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/child-first-cleanup-service.js)" = '6e66a1ddcba9e4de868331c8b42bd12449533bb9'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js)" = '28bb693a751ec3cf377b21cd0de0b393ddce0b4a'
+          test "$(git hash-object smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js)" = '8f5f3352765dbae956e425f09840c0208456d921'
+          # Bounded keyword batch + TEXT_45 sibling continuation: exact five-file slice only.
+          sibling_base=b5f2a77d2b9ccb767790ef3ee51619c3339ae44c
+          git fetch --no-tags --depth=1 origin "$sibling_base"
+          git diff --exit-code "$sibling_base" HEAD -- \
+            package.json package-lock.json \
+            smartstore-bridge/package.json smartstore-bridge/package-lock.json \
+            smartstore-bridge/src smartstore-bridge/migrations smartstore-bridge/test \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \
+            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \
+            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \
+            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js)" = 'dbc21dd1d8855b4ab8b9a6c0b0e5483e610b7b72'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js)" = '1942223836b814f0c4f9c437377faf46303cebad'
+          test "$(git hash-object smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js)" = '54fcf12d977bd2457c250d1ba88ee91b67a66844'
+          test "$(git hash-object smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js)" = '69df8e4da840f391fbbd3a1a1f99bf049d03e48e'
+          test "$(git hash-object smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js)" = '1f90ad692ac4befe35dc8e39190af09b64c99a62'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: smartstore-bridge/package-lock.json
       - name: Install dependencies
         working-directory: smartstore-bridge
@@ -59,17 +456,130 @@ jobs:
           node --check src/http/errors-v05.js
           node --check src/http/openapi-searchad-write.js
           node --check scripts/searchad-write-safety.mjs
+      - name: Restored Canary gateway HTTP and core contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          find src/naver/searchad/canary -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check src/http/searchad-access-control.js
+          node --check src/http/routes-searchad-canary.js
+          node --check src/http/openapi-searchad-canary.js
+          node --test test/searchad-active-canary-*.test.js test/searchad-gateway-active-canary.test.js test/searchad-http-access.test.js test/searchad-http-canary-*.test.js
+      - name: Restored 0008 activation core and Customer boundary contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          find src/naver/searchad/activation -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --test test/searchad-activation-*.test.js test/searchad-passive-evidence.test.js test/searchad-account-control.test.js
+      - name: Recovered hierarchy validator and recipe contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          node --check src/naver/searchad/lifecycle/operations.js
+          node --check src/naver/searchad/lifecycle/hierarchy-validator.js
+          node --check src/naver/searchad/lifecycle/recipe-campaign.js
+          node --check src/naver/searchad/lifecycle/recipe-hierarchy.js
+          node --test test/searchad-hierarchy-*.test.js
       - name: Existing static checks
         working-directory: smartstore-bridge
         run: npm run check
       - name: Focused SearchAd write tests
         working-directory: smartstore-bridge
         run: node --test test/searchad-write-*.test.js
+      - name: Role HTTP activation readiness and runtime lifecycle contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          node --check src/http/searchad-write-access.js
+          node --check src/http/routes-searchad-activation.js
+          node --check src/http/openapi-searchad-activation.js
+          node --test test/searchad-http-activation-recovery.test.js test/searchad-http-runtime-lifecycle.test.js test/searchad-http-readiness.test.js
       - name: PostgreSQL integration tests (required)
         working-directory: smartstore-bridge
         run: |
           test -n "$TEST_DATABASE_URL"
           node --test test/postgres-*.integration.test.js
+      - name: Repeated Canary activation and full application PostgreSQL contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --test test/postgres-searchad-active-canary.integration.test.js test/postgres-searchad-canary-wiring.integration.test.js test/postgres-searchad-activation*.integration.test.js test/postgres-searchad-application-bootstrap.integration.test.js test/postgres-searchad-application-composition.integration.test.js
+      - name: Repeated isolated lifecycle storage and risk accounting contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --check src/naver/searchad/lifecycle/postgres-repository.js
+          node --check src/naver/searchad/lifecycle/risk-service.js
+          node --test test/searchad-lifecycle-risk.test.js test/postgres-searchad-lifecycle-storage.integration.test.js
+      - name: Repeated read-only hierarchy reconciliation PostgreSQL contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --check src/naver/searchad/lifecycle/hierarchy-reconcile-service.js
+          node --check src/naver/searchad/lifecycle/postgres-hierarchy-reconcile-repository.js
+          node --test test/searchad-hierarchy-reconcile.test.js test/postgres-searchad-hierarchy-reconcile.integration.test.js
+          node --check test/postgres-searchad-hierarchy-gateway.integration.test.js
+          node --test test/postgres-searchad-hierarchy-gateway.integration.test.js
+      - name: Repeated atomic campaign dispatch PostgreSQL contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --check src/naver/searchad/lifecycle/postgres-campaign-dispatch-repository.js
+          node --check test/postgres-searchad-campaign-dispatch.integration.test.js
+          node --test test/postgres-searchad-campaign-dispatch.integration.test.js
+      - name: Repeated one-shot campaign creation PostgreSQL contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --check src/naver/searchad/lifecycle/campaign-create-service.js
+          node --check src/naver/searchad/lifecycle/postgres-campaign-create-repository.js
+          node --check test/postgres-searchad-campaign-create.integration.test.js
+          node --test test/postgres-searchad-campaign-create.integration.test.js
+      - name: Repeated approved campaign cleanup PostgreSQL contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --check src/naver/searchad/lifecycle/campaign-cleanup-service.js
+          node --check src/naver/searchad/lifecycle/postgres-campaign-cleanup-repository.js
+          node --check test/postgres-searchad-campaign-cleanup.integration.test.js
+          node --test test/postgres-searchad-campaign-cleanup.integration.test.js
+      - name: Repeated bounded adgroup creation PostgreSQL contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --check src/naver/searchad/lifecycle/adgroup-create-contract.js
+          node --check src/naver/searchad/lifecycle/adgroup-create-service.js
+          node --check src/naver/searchad/lifecycle/postgres-adgroup-create-repository.js
+          node --check test/postgres-searchad-adgroup-create.integration.test.js
+          node --test test/postgres-searchad-adgroup-create.integration.test.js
+      - name: Repeated approved child-first cleanup PostgreSQL contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --check src/naver/searchad/lifecycle/child-first-cleanup-contract.js
+          node --check src/naver/searchad/lifecycle/child-first-cleanup-service.js
+          node --check src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js
+          node --check test/postgres-searchad-child-first-cleanup.integration.test.js
+          node --test test/postgres-searchad-child-first-cleanup.integration.test.js
+      - name: Repeated bounded keyword and TEXT_45 sibling PostgreSQL contracts
+        if: github.ref_name == 'codex/searchad-original-recovery-20260912' || github.head_ref == 'codex/searchad-original-recovery-20260912'
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --check src/naver/searchad/lifecycle/sibling-create-contract.js
+          node --check src/naver/searchad/lifecycle/sibling-create-service.js
+          node --check src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+          node --check test/searchad-hierarchy-sibling-contract.test.js
+          node --check test/postgres-searchad-sibling-create.integration.test.js
+          node --test test/searchad-hierarchy-sibling-contract.test.js test/postgres-searchad-sibling-create.integration.test.js
       - name: Full regression test suite
         working-directory: smartstore-bridge
         run: npm test
