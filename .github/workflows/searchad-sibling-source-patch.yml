@@ -1,0 +1,55 @@
+name: Temporary sibling source patch
+
+on:
+  push:
+    branches:
+      - codex/searchad-sibling-wip-20260913
+    paths:
+      - '.github/workflows/searchad-sibling-source-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/searchad-sibling-wip-20260913
+          fetch-depth: 1
+      - name: Move run-status guard out of structural graph validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js')
+          text = path.read_text()
+          old_graph = "||root.deleted_at||parent.deleted_at||run.completed_at!==null||run.status!=='cleanup_pending')fail('GRAPH','Exact owned campaign and adgroup parent are required.');"
+          new_graph = "||root.deleted_at||parent.deleted_at||run.completed_at!==null)fail('GRAPH','Exact owned campaign and adgroup parent are required.');"
+          old_available = "#available(g){if(!g.account||g.account.suspended!==false)fail('SUSPENDED','Customer is suspended or unavailable.',403);if(g.events.some(e=>e.phase.startsWith('tree_cleanup_')))fail('CLEANUP','Cleanup has begun; no sibling creation is allowed.');}"
+          new_available = "#available(g){if(!g.account||g.account.suspended!==false)fail('SUSPENDED','Customer is suspended or unavailable.',403);if(g.run.status!=='cleanup_pending')fail('STATE','Sibling creation requires cleanup_pending hierarchy state.');if(g.events.some(e=>e.phase.startsWith('tree_cleanup_')))fail('CLEANUP','Cleanup has begun; no sibling creation is allowed.');}"
+          if text.count(old_graph) != 1:
+              raise SystemExit(f'expected exactly one structural graph status guard, found {text.count(old_graph)}')
+          if text.count(old_available) != 1:
+              raise SystemExit(f'expected exactly one availability block, found {text.count(old_available)}')
+          text = text.replace(old_graph, new_graph, 1).replace(old_available, new_available, 1)
+          path.write_text(text)
+          PY
+          node --check smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+          git diff --check
+          git diff -- smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+      - name: Commit source-only fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js; then
+            echo 'Source already patched; nothing to commit.'
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+          git commit -m 'fix: separate sibling graph validity from mutation availability (#26)'
+          git push origin HEAD:codex/searchad-sibling-wip-20260913
