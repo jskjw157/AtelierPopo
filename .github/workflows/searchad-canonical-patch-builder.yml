@@ -28,21 +28,22 @@ jobs:
           from pathlib import Path
           path = Path('/tmp/searchad-write-ci.yml')
           text = path.read_text()
-          marker = "            package.json package-lock.json \\\n"
+          NL = chr(10)
+          marker = "            package.json package-lock.json \\" + NL
           excludes = (
-              "            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \\\n"
-              "            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \\\n"
-              "            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \\\n"
-              "            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \\\n"
-              "            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \\\n"
+              "            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js' \\" + NL
+              + "            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-contract.js' \\" + NL
+              + "            ':(exclude)smartstore-bridge/src/naver/searchad/lifecycle/sibling-create-service.js' \\" + NL
+              + "            ':(exclude)smartstore-bridge/test/postgres-searchad-sibling-create.integration.test.js' \\" + NL
+              + "            ':(exclude)smartstore-bridge/test/searchad-hierarchy-sibling-contract.test.js' \\" + NL
           )
           count = text.count(marker)
           if count != 9:
               raise SystemExit(f'expected 9 provenance diff package markers, found {count}')
           text = text.replace(marker, excludes + marker)
 
-          child_pin = "          test \"$(git hash-object smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js)\" = '8f5f3352765dbae956e425f09840c0208456d921'\n"
-          setup = "      - uses: actions/setup-node@v4\n"
+          child_pin = "          test \"$(git hash-object smartstore-bridge/test/postgres-searchad-child-first-cleanup.integration.test.js)\" = '8f5f3352765dbae956e425f09840c0208456d921'" + NL
+          setup = "      - uses: actions/setup-node@v4" + NL
           anchor = child_pin + setup
           if text.count(anchor) != 1:
               raise SystemExit(f'expected one child-cleanup/setup anchor, found {text.count(anchor)}')
@@ -66,8 +67,8 @@ jobs:
 """ + setup
           text = text.replace(anchor, provenance, 1)
 
-          child_repeat = "          node --test test/postgres-searchad-child-first-cleanup.integration.test.js\n"
-          full = "      - name: Full regression test suite\n"
+          child_repeat = "          node --test test/postgres-searchad-child-first-cleanup.integration.test.js" + NL
+          full = "      - name: Full regression test suite" + NL
           repeat_anchor = child_repeat + full
           if text.count(repeat_anchor) != 1:
               raise SystemExit(f'expected one repeated-child/full-regression anchor, found {text.count(repeat_anchor)}')
