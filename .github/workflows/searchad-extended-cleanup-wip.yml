@@ -1,0 +1,46 @@
+name: SearchAd Extended Cleanup WIP
+
+on:
+  push:
+    branches:
+      - codex/searchad-extended-cleanup-20260914
+    paths:
+      - 'smartstore-bridge/**'
+      - '.github/workflows/searchad-extended-cleanup-wip.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: atelier_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d atelier_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      ATELIER_POSTGRES_SSL_MODE: disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        working-directory: smartstore-bridge
+        run: npm ci
+      - name: Extended cleanup RED/GREEN contract
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-extended-child-first-cleanup.integration.test.js
