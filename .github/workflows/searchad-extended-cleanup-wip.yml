@@ -1,0 +1,47 @@
+name: SearchAd extended cleanup WIP
+on:
+  push:
+    branches: [searchad-extended-cleanup-wip]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: atelier
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d atelier"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/atelier
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: smartstore-bridge/package-lock.json
+      - name: Install dependencies
+        working-directory: smartstore-bridge
+        run: npm ci
+      - name: Extended cleanup contract
+        working-directory: smartstore-bridge
+        run: node --test test/searchad-extended-child-cleanup-contract.test.js
+      - name: Extended cleanup PostgreSQL integration
+        if: ${{ hashFiles('smartstore-bridge/test/postgres-searchad-extended-child-cleanup.integration.test.js') != '' }}
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-extended-child-cleanup.integration.test.js
+      - name: Full regression after GREEN
+        if: success() && ${{ hashFiles('smartstore-bridge/src/naver/searchad/lifecycle/extended-child-cleanup-service.js') != '' }}
+        working-directory: smartstore-bridge
+        run: npm test
