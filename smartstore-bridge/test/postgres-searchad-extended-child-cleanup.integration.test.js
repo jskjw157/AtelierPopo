@@ -35,11 +35,18 @@ test('verified keyword leaves must be cleaned before their adgroup and campaign'
   if(!url){assert.notEqual(process.env.CI,'true','CI requires PostgreSQL');return t.skip('Local PostgreSQL not configured');}
   const admin=createPostgresPool({connectionString:url,sslMode:'disable',logger});
   const originalFetch=globalThis.fetch;let escaped=0;globalThis.fetch=async()=>{escaped++;throw new Error('External transport forbidden');};
-  t.after(async()=>{globalThis.fetch=originalFetch;await closePostgresPool(admin);assert.equal(escaped,0);});
-
   const schema=`extended_cleanup_${randomUUID().replaceAll('-','')}`,pools=new Set();
   await admin.query(`CREATE SCHEMA "${schema}"`);
-  t.after(async()=>{try{await Promise.all([...pools].map(p=>closePostgresPool(p)));}finally{await admin.query(`DROP SCHEMA "${schema}" CASCADE`);}});
+  t.after(async()=>{
+    globalThis.fetch=originalFetch;
+    try{
+      await Promise.all([...pools].map(pool=>closePostgresPool(pool)));
+      await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
+    } finally {
+      await closePostgresPool(admin);
+    }
+    assert.equal(escaped,0);
+  });
   const scoped=new URL(url);scoped.searchParams.set('options',`-csearch_path=${schema} -ctimezone=UTC`);scoped.searchParams.set('application_name',schema);
   const connect=()=>{const p=createPostgresPool({connectionString:scoped.toString(),sslMode:'disable',logger});pools.add(p);return p;};
   const pool=connect();await runPostgresMigrations({pool,migrationsDir:path.resolve('migrations/postgres'),logger});
