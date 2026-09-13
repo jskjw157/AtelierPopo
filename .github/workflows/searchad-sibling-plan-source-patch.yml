@@ -1,0 +1,55 @@
+name: Temporary sibling plan-state patch
+
+on:
+  push:
+    branches:
+      - codex/searchad-sibling-wip-20260913
+    paths:
+      - '.github/workflows/searchad-sibling-plan-source-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/searchad-sibling-wip-20260913
+          fetch-depth: 1
+      - name: Separate immutable plan binding from executable plan status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js')
+          text = path.read_text()
+          old_binding = "if(!e||!p||p.status!=='approved'||e.details_json.kind!==kind||p.mutation_operation_key!==descriptor.operationKey"
+          new_binding = "if(!e||!p||e.details_json.kind!==kind||p.mutation_operation_key!==descriptor.operationKey"
+          old_approved = "async #approved(c,g,s,kind,b){this.#available(g);const a=(await c.query('SELECT * FROM searchad_write_approvals WHERE plan_id=$1 AND token_hash=$2 FOR UPDATE',[s.planId,s.tokenHash])).rows[0];"
+          new_approved = "async #approved(c,g,s,kind,b){this.#available(g);if(b.p.status!=='approved')fail('REPLAY','Only a separately approved, unclaimed sibling plan may execute.');const a=(await c.query('SELECT * FROM searchad_write_approvals WHERE plan_id=$1 AND token_hash=$2 FOR UPDATE',[s.planId,s.tokenHash])).rows[0];"
+          if text.count(old_binding) != 1:
+              raise SystemExit(f'expected one binding status check, found {text.count(old_binding)}')
+          if text.count(old_approved) != 1:
+              raise SystemExit(f'expected one approved block, found {text.count(old_approved)}')
+          text = text.replace(old_binding, new_binding, 1).replace(old_approved, new_approved, 1)
+          path.write_text(text)
+          PY
+          node --check smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+          git diff --check
+          git diff -- smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+      - name: Commit source-only fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js; then
+            echo 'Source already patched; nothing to commit.'
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add smartstore-bridge/src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+          git commit -m 'fix: separate sibling plan binding from executable status (#26)'
+          git push origin HEAD:codex/searchad-sibling-wip-20260913
