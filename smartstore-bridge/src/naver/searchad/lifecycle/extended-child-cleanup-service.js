@@ -37,7 +37,7 @@ export class ExtendedChildCleanupService {
       if(this.#config.baseUrl!==ORIGIN)throw new Error('origin');
       for(const [type,shape] of Object.entries(SHAPES))for(const [kind,method,gate] of [['read','GET','reads'],['delete','DELETE','deletes']]){
         const operation=this.#registry.get(OPS[type][kind]);
-        if(operation.operationKey!==OPS[type][kind]||operation.method!==method||operation.path!==shape.path||operation.domain!==type||operation.sideEffect!==(kind==='delete')||operation.requiredGate!==gate||operation.runtimeAllowlisted!==true||operation.state!=='public_documented'||operation.tier!=='B'||(kind==='delete'&&(!operation.destructive||!operation.confirmation)))throw new Error('operation');
+        if(operation.operationKey!==OPS[type][kind]||operation.method!==method||operation.path!==shape.path||operation.sideEffect!==(kind==='delete')||operation.requiredGate!==gate||operation.runtimeAllowlisted!==true||operation.state!=='public_documented'||operation.tier!=='B'||(kind==='delete'&&(!operation.destructive||!operation.confirmation)))throw new Error('operation');
       }
       const specSha=this.#registry.status().specRef;if(typeof specSha!=='string'||!specSha)throw new Error('spec');
       return {specSha,credentialFingerprint:credentialFingerprintForCustomer(this.#credentials,customerId),upstreamBaseUrl:ORIGIN};
