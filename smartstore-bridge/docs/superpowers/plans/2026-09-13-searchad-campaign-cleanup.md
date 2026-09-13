@@ -25,12 +25,12 @@
 - [x] Test denied scope/confirmation/authority, stopped preflight, atomic rollback/COMMIT loss, two pools, redirect/error, persisted-ID drift, children, recovery and no evidence/risk recycling.
 - [x] Run explicit negative control (duplicate DELETE), restore source, run fresh focused and regression checks.
 - [x] Add narrowly scoped CI preservation exceptions/new pins/repeat step without removing previous checks.
-- [ ] Publish only verified files; observe fresh canonical CI. Sync dashboard/issue23/issue26/PR24 with exact scope and evidence. Keep issue OPEN and PR Draft.
+- [x] Publish verified files and observe canonical code CI; retain issue26 OPEN and PR24 Draft. Documentation successor and tracker synchronization are recorded separately in issue26/PR24.
 
-## Local checkpoint and pending publication
+## Local and canonical checkpoints
 
 Fresh cleanup suite: 48 passed / 0 failed / 0 skipped (47 children + parent). Initial missing-module RED: 0/1/0. Expiry regression: 44/2/0 before the final pre-COMMIT expiry check. Duplicate-DELETE negative control on the earlier 46-test suite: 38/8/0; exact source restored and 46/0/0, then the two additional contracts gave 48/0/0. Do not claim each behavior had its own RED.
 
-Local workspace is an isolated exported baseline, not a historical clone. The 348 older exported blobs and the current create modules were hash-checked; the current workflow was rehydrated and matched blob 4d93d8f1642f938a7ed895854a64ee01c0ece3f4. The previous 48-test creation integration file is absent locally, so the exported full/required counts are NOT canonical whole-branch counts. Remote canonical CI must include it unchanged before claiming whole-branch regression. No source-export workflow was created this turn: that attempted action was blocked.
+Local workspace is an isolated exported baseline, not a historical clone. The 348 older exported blobs and the current create modules were hash-checked; the current workflow was rehydrated and matched blob 4d93d8f1642f938a7ed895854a64ee01c0ece3f4. The previous 48-test creation integration file is absent locally, so the exported full/required counts are NOT canonical whole-branch counts. Canonical CI below includes that earlier creation test unchanged; local exported counts remain a distinct, smaller test scope. No source-export workflow was created this turn: that attempted action was blocked.
 
-Independent reviewer approval and remote CI are pending. Final suspension/send fencing, all child/batch operations, expired-plan abandonment/replanning, lifecycle evidence issuance and application HTTP remain out of scope. No live execution or merge.
+Published code b4f150eb85c6dc47817e7e741a2f15a46ffd7abb passed canonical CI34728180337/job103645987241: full510/0/0, requiredPG220/0/0, repeatedcleanup48/0/0, priorcreate48/0/0. Complete job log and all final step conclusions were reviewed. Every configured preservation/static/safety/coverage/audit step passed; both final migrations0009/applied:[]. Independent reviewer approval remains pending. Final suspension/send fencing, all child/batch operations, expired-plan abandonment/replanning, lifecycle evidence issuance and application HTTP remain out of scope. No live execution or merge.
