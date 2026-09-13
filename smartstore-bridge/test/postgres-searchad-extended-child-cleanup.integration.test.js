@@ -28,7 +28,7 @@ async function loadCleanupService(){
   catch{return null;}
 }
 
-test('verified keyword leaves must be cleaned before their adgroup and campaign', {timeout:180_000}, async t=>{
+test('verified keyword leaves clean child-first; flags cannot fake proof; ambiguous DELETE reconciles by GET only', {timeout:180_000}, async t=>{
   const Service=await loadCleanupService();
   assert.equal(typeof Service,'function','missing ExtendedChildCleanupService');
   const url=process.env.TEST_DATABASE_URL;
@@ -55,7 +55,7 @@ test('verified keyword leaves must be cleaned before their adgroup and campaign'
   const credentials=new SearchAdCredentialsRegistry(config.topology);
   const identity={specSha:registry.status().specRef,credentialFingerprint:credentialFingerprintForCustomer(credentials,'1001'),upstreamBaseUrl:'https://api.searchad.naver.com'};
   await pool.query("INSERT INTO searchad_canary_accounts(customer_id,suspended) VALUES('1001',false)");
-  let time=NOW;const calls=[],gone=new Set();let rootRemote,groupRemote,keywordRemote=[];
+  let time=NOW;const calls=[],gone=new Set();let rootRemote,groupRemote,keywordRemote=[],ambiguousDeleteId=null,ambiguousThrown=false;
   const authority=async(operation,fields,kind)=>{const activationId=randomUUID(),evidenceId=`synthetic-${randomUUID()}`,start=new Date(time-1000).toISOString(),end=new Date(time+3600000).toISOString();
     await pool.query(`INSERT INTO searchad_verification_evidence(evidence_id,evidence_type,customer_id,spec_sha,credential_fingerprint,upstream_base_url,operation_keys_json,field_scope_json,lifecycle_kinds_json,result,created_at,expires_at) VALUES($1,'active_canary','1001',$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,'verified',$8,$9)`,[evidenceId,identity.specSha,identity.credentialFingerprint,identity.upstreamBaseUrl,JSON.stringify([operation]),JSON.stringify(fields),JSON.stringify([kind]),start,end]);
     await pool.query(`INSERT INTO searchad_activation_grants(activation_id,evidence_id,evidence_type,customer_id,spec_sha,credential_fingerprint,upstream_base_url,operation_keys_json,field_scope_json,lifecycle_kinds_json,activated_by_principal_id,activated_at,expires_at) VALUES($1,$2,'active_canary','1001',$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,'fixture-authority',$9,$10)`,[activationId,evidenceId,identity.specSha,identity.credentialFingerprint,identity.upstreamBaseUrl,JSON.stringify([operation]),JSON.stringify(fields),JSON.stringify([kind]),start,end]);return activationId;};
@@ -66,7 +66,10 @@ test('verified keyword leaves must be cleaned before their adgroup and campaign'
     const campaignPath=`/ncc/campaigns/${rootRemote?.nccCampaignId}`,groupPath=`/ncc/adgroups/${groupRemote?.nccAdgroupId}`;
     if(u.pathname===campaignPath||u.pathname===groupPath||u.pathname.startsWith('/ncc/keywords/')){
       const id=u.pathname.split('/').at(-1),key=u.pathname===campaignPath?'campaign':u.pathname===groupPath?'adgroup':id;
-      if(init.method==='DELETE'){gone.add(key);return json(null,204);}
+      if(init.method==='DELETE'){
+        if(key===ambiguousDeleteId&&!ambiguousThrown){ambiguousThrown=true;throw new Error('simulated ambiguous delete transport');}
+        gone.add(key);return json(null,204);
+      }
       if(init.method==='GET'){
         if(gone.has(key))return json({code:'NOT_FOUND'},404);
         if(key==='campaign')return json(rootRemote);
@@ -93,10 +96,34 @@ test('verified keyword leaves must be cleaned before their adgroup and campaign'
 
   await assert.rejects(prepare(group.hierarchyObjectId,'adgroup'));
   assert.equal(calls.length,0,'parent planning must fail locally while a leaf is owned');
+
+  const leafIds=leaves.map(row=>row.hierarchy_object_id);
+  await pool.query("UPDATE searchad_hierarchy_objects SET state='deleted',deleted_at=NOW() WHERE hierarchy_object_id=ANY($1::uuid[])",[leafIds]);
+  await pool.query("UPDATE searchad_remote_object_ownership SET state='deleted' WHERE hierarchy_object_id=ANY($1::uuid[])",[leafIds]);
+  await assert.rejects(prepare(group.hierarchyObjectId,'adgroup'),/proof|claim|plan|deletion/i);
+  await pool.query("UPDATE searchad_hierarchy_objects SET state='owned',deleted_at=NULL WHERE hierarchy_object_id=ANY($1::uuid[])",[leafIds]);
+  await pool.query("UPDATE searchad_remote_object_ownership SET state='owned' WHERE hierarchy_object_id=ANY($1::uuid[])",[leafIds]);
+
   for(let index=0;index<leaves.length;index+=1){
     const leaf=leaves[index],plan=await prepare(leaf.hierarchy_object_id,'keyword');
-    assert.equal((await execute(plan,leaf.hierarchy_object_id)).state,'deleted');
-    assert.equal(calls.filter(call=>call===`DELETE /ncc/keywords/${leaf.remote_id}`).length,1);
+    if(index===0){
+      ambiguousDeleteId=leaf.remote_id;
+      const unresolved=await execute(plan,leaf.hierarchy_object_id);
+      assert.equal(unresolved.state,'delete_unknown');
+      assert.equal(calls.filter(call=>call===`DELETE /ncc/keywords/${leaf.remote_id}`).length,1);
+      const risk=(await pool.query("SELECT state FROM searchad_risk_reservations WHERE intent_id=$1",[`hierarchy:extended:delete:${plan.planId}`])).rows[0];
+      assert.equal(risk?.state,'consumed');
+      await assert.rejects(prepare(group.hierarchyObjectId,'adgroup'));
+      gone.add(leaf.remote_id);
+      const deleteCount=calls.filter(call=>call===`DELETE /ncc/keywords/${leaf.remote_id}`).length;
+      const reconciled=await cleanup.reconcile({...scope(leaf.hierarchy_object_id),planId:plan.planId},context);
+      assert.equal(reconciled.state,'deleted');
+      assert.equal(calls.filter(call=>call===`DELETE /ncc/keywords/${leaf.remote_id}`).length,deleteCount,'reconcile must never replay DELETE');
+      ambiguousDeleteId=null;
+    }else{
+      assert.equal((await execute(plan,leaf.hierarchy_object_id)).state,'deleted');
+      assert.equal(calls.filter(call=>call===`DELETE /ncc/keywords/${leaf.remote_id}`).length,1);
+    }
     if(index===0)await assert.rejects(prepare(group.hierarchyObjectId,'adgroup'));
   }
   const groupDelete=await prepare(group.hierarchyObjectId,'adgroup');assert.equal((await execute(groupDelete,group.hierarchyObjectId)).state,'deleted');
