@@ -24,7 +24,7 @@ const adgroupFields=['adgroup.nccCampaignId','adgroup.name','adgroup.userLock'];
 const keywordFields=['keyword.keyword'];
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
 
-test('existing child-first cleanup can plan a verified keyword leaf created by the bounded sibling producer', {timeout:180_000}, async t=>{
+test('verified keyword leaf is planned, deleted once, and settled only by GET404', {timeout:180_000}, async t=>{
   const url=process.env.TEST_DATABASE_URL;
   if(!url){assert.notEqual(process.env.CI,'true','CI requires PostgreSQL');return t.skip('Local PostgreSQL not configured');}
   const admin=createPostgresPool({connectionString:url,sslMode:'disable',logger});
@@ -53,7 +53,7 @@ test('existing child-first cleanup can plan a verified keyword leaf created by t
   }
 
   let rootRemote,adgroupRemote,keywordRemote;
-  const calls=[];
+  const deletedKeywords=new Set(),calls=[];
   const fetchImpl=async(urlValue,init)=>{
     const u=new URL(urlValue),body=init.body?JSON.parse(init.body):null;calls.push(`${init.method} ${u.pathname}`);
     assert.equal(u.origin,'https://api.searchad.naver.com');assert.equal(init.redirect,'error');
@@ -62,7 +62,8 @@ test('existing child-first cleanup can plan a verified keyword leaf created by t
     if(init.method==='POST'&&u.pathname==='/ncc/adgroups'){adgroupRemote={customerId:'1001',nccAdgroupId:`grp-${randomUUID()}`,...body};return json(adgroupRemote,201);}
     if(init.method==='GET'&&u.pathname===`/ncc/adgroups/${adgroupRemote?.nccAdgroupId}`)return json(adgroupRemote);
     if(init.method==='POST'&&u.pathname==='/ncc/keywords'){keywordRemote=body.map((item,index)=>({nccKeywordId:`kw-${index+1}-${randomUUID()}`,keyword:item.keyword}));return json(keywordRemote);}
-    if(init.method==='GET'&&u.pathname.startsWith('/ncc/keywords/')){const id=u.pathname.split('/').at(-1);const row=keywordRemote?.find(v=>v.nccKeywordId===id);return row?json({customerId:'1001',nccAdgroupId:adgroupRemote.nccAdgroupId,...row}):json({code:'NOT_FOUND'},404);}
+    if(init.method==='DELETE'&&u.pathname.startsWith('/ncc/keywords/')){deletedKeywords.add(u.pathname.split('/').at(-1));return json({accepted:true});}
+    if(init.method==='GET'&&u.pathname.startsWith('/ncc/keywords/')){const id=u.pathname.split('/').at(-1);if(deletedKeywords.has(id))return json({code:'NOT_FOUND'},404);const row=keywordRemote?.find(v=>v.nccKeywordId===id);return row?json({customerId:'1001',nccAdgroupId:adgroupRemote.nccAdgroupId,...row}):json({code:'NOT_FOUND'},404);}
     throw new Error(`Unexpected ${init.method} ${u.pathname}`);
   };
   const args=extra=>({pool,registry,credentialsRegistry:credentials,config,enabled:true,dailyBudget:1000,riskUnits:1,dailyCapacityUnits:100,planTtlSeconds:300,preflightMaxAgeMs:5000,clock:()=>NOW,fetchImpl,logger,...extra});
@@ -88,7 +89,10 @@ test('existing child-first cleanup can plan a verified keyword leaf created by t
   calls.length=0;
   const cleanup=new ChildFirstCleanupService(args());
   const planned=await cleanup.prepare({customerId:'1001',hierarchyRunId:root.hierarchyRunId,hierarchyObjectId:keyword.hierarchy_object_id,activationId:await authority(OPS.keyword.delete,[],'delete')},context);
-  assert.equal(planned.objectType,'keyword');
-  assert.equal(planned.state,'planned');
-  assert.equal(calls.length,0,'planning must not contact Naver');
+  assert.equal(planned.objectType,'keyword');assert.equal(planned.state,'planned');assert.equal(calls.length,0,'planning must not contact Naver');
+  const token=await approve(planned.planId);
+  const deleted=await cleanup.execute({customerId:'1001',hierarchyRunId:root.hierarchyRunId,hierarchyObjectId:keyword.hierarchy_object_id,planId:planned.planId,executionToken:token.executionToken,confirmation:planned.requiredConfirmation,secondConfirmation:planned.requiredSecondConfirmation},context);
+  assert.equal(deleted.state,'deleted');
+  assert.equal(calls.filter(value=>value===`DELETE /ncc/keywords/${keyword.remote_id}`).length,1,'DELETE is attempted at most once');
+  assert.ok(calls.includes(`GET /ncc/keywords/${keyword.remote_id}`),'a separate GET must prove absence');
 });
