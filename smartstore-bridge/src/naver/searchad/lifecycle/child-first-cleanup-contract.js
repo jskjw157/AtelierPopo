@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual as equal } from 'node:util';
 import { contentHash } from '../write/canonical.js';
 import { fail, record } from './postgres-campaign-create-repository.js';
+import { createHierarchyChildRecipe } from './recipe-hierarchy.js';
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
 
 export const IDENTITY = Object.freeze({ specSha: 'spec_sha', credentialFingerprint: 'credential_fingerprint', upstreamBaseUrl: 'upstream_base_url' });
@@ -11,6 +12,7 @@ export const problem = (code, message, status = 409) => fail(`SEARCHAD_CHILD_CLE
 export const epoch = value => value instanceof Date ? value.getTime() : Date.parse(value);
 export const active = (start, end, now) => Number.isFinite(epoch(start)) && epoch(start) <= now && Number.isFinite(epoch(end)) && epoch(end) > now;
 export const dayOf = value => value instanceof Date ? value.toISOString().slice(0,10) : value;
+const sameSet = (left, right) => Array.isArray(left) && Array.isArray(right) && left.length === right.length && new Set(left).size === left.length && left.every(value => right.includes(value));
 
 export function cleanupScope(input, context, mode) {
   const keys = ['customerId','hierarchyRunId','hierarchyObjectId', ...(mode === 'prepare' ? ['activationId'] : ['planId']), ...(mode === 'execute' ? ['executionToken','confirmation','secondConfirmation'] : [])];
@@ -34,7 +36,7 @@ export function oneEvent(g, object, phase, status, operation, kind) {
   return e;
 }
 
-/** Creation provenance is verified independently of mutable cleanup states. */
+/** Campaign/adgroup creation provenance stays byte-for-byte compatible with the bounded two-node path. */
 export function creationProof(g, node, descriptor) {
   const prefix = node.object_type === 'campaign' ? '' : 'adgroup_';
   const result = oneEvent(g,node,`${prefix}create_result`,'returned_id_recorded',OPS[node.object_type].create,'create');
@@ -50,14 +52,62 @@ export function creationProof(g, node, descriptor) {
   return plan;
 }
 
+/**
+ * Verify one actual bounded sibling producer result. The producer creates either
+ * a keyword batch or one TEXT_45 creative in a run; mixed leaf types are rejected.
+ */
+export function siblingCreationProof(g) {
+  const leaves = g.leaves || [];
+  if (!leaves.length) return null;
+  const types = [...new Set(leaves.map(node => node.object_type))];
+  if (types.length !== 1 || !['keyword','creative'].includes(types[0]) || (types[0] === 'creative' && leaves.length !== 1)) problem('PROVENANCE','Only one verified sibling producer result is supported.');
+  const type = types[0], kind = type === 'keyword' ? 'keywords' : 'creative';
+  const lifecycle = type === 'keyword' ? 'batch_create' : 'create', operation = OPS[type].create;
+  const planned = g.events.filter(event => event.phase === 'sibling_plan' && event.status === 'planned' && event.operation_key === operation && event.lifecycle_kind === lifecycle && record(event.details_json));
+  if (planned.length !== 1 || planned[0].details_json.kind !== kind || !UUID.test(String(planned[0].details_json.planId || ''))) problem('PROVENANCE','One exact sibling producer plan event is required.');
+  const event = planned[0], plan = g.plans.find(item => item.plan_id === event.details_json.planId);
+  const objectIds = leaves.map(node => node.hierarchy_object_id);
+  if (!plan || plan.customer_id !== g.run.customer_id || plan.status !== 'applied' || !sameSet(event.details_json.objectIds,objectIds)) problem('PROVENANCE','Sibling producer plan and owned leaves must agree.');
+  const parent = { customerId:g.run.customer_id, hierarchyRunId:g.run.hierarchy_run_id, objectType:'adgroup', state:'owned', remoteId:g.child.remote_id };
+  let recipe, descriptor;
+  if (type === 'keyword') {
+    if (!Array.isArray(plan.mutation_json?.body) || plan.mutation_json.body.length !== leaves.length || plan.mutation_json.body.some(item => !record(item) || Object.keys(item).length !== 1 || typeof item.keyword !== 'string' || !item.keyword.trim())) problem('PROVENANCE','Keyword producer request shape is invalid.');
+    recipe = createHierarchyChildRecipe({keywordTexts:plan.mutation_json.body.map(item => item.keyword)});
+    descriptor = recipe.createKeywords({customerId:g.run.customer_id,hierarchyRunId:g.run.hierarchy_run_id,parent});
+  } else {
+    const body = plan.mutation_json?.body;
+    if (!record(body) || body.type !== 'TEXT_45' || !record(body.ad) || !record(body.ad.pc) || !record(body.ad.mobile)) problem('PROVENANCE','Creative producer request shape is invalid.');
+    recipe = createHierarchyChildRecipe({creative:{type:'TEXT_45',headline:body.ad.headline,description:body.ad.description,pcFinal:body.ad.pc.final,mobileFinal:body.ad.mobile.final}});
+    descriptor = recipe.createCreative({customerId:g.run.customer_id,hierarchyRunId:g.run.hierarchy_run_id,parent});
+  }
+  const meta = { kind:`haar_${kind}_create_v1`, customerId:g.run.customer_id, hierarchyRunId:g.run.hierarchy_run_id, parentObjectId:g.child.hierarchy_object_id, parentRemoteId:g.child.remote_id, rootObjectId:g.root.hierarchy_object_id, rootRemoteId:g.root.remote_id, activationId:event.details_json.activationId, objectIds:event.details_json.objectIds };
+  const applied = leaves.map(node => ({objectType:node.object_type,remoteId:node.remote_id,parentObjectId:g.child.hierarchy_object_id}));
+  const result = g.events.filter(item => item.phase === 'sibling_create_result' && item.details_json?.planId === plan.plan_id);
+  const verified = g.events.filter(item => item.phase === 'sibling_create_verification' && item.details_json?.planId === plan.plan_id);
+  const firstObjectId = event.details_json.objectIds[0];
+  if (plan.mutation_operation_key !== operation || !equal(plan.mutation_json,descriptor) || !equal(plan.expected_after_json,descriptor.body) || !equal(plan.before_json,meta) || plan.before_hash !== contentHash(meta) || !equal(plan.applied_after_json,applied) || plan.applied_after_hash !== contentHash(applied) || plan.rollback_json !== null || event.details_json.beforeHash !== plan.before_hash || event.details_json.requestFingerprint !== contentHash(descriptor) || result.length !== 1 || verified.length !== 1 || result[0].hierarchy_object_id !== firstObjectId || verified[0].hierarchy_object_id !== firstObjectId || result[0].customer_id !== g.run.customer_id || verified[0].customer_id !== g.run.customer_id || result[0].status !== 'returned_ids_recorded' || verified[0].status !== 'verified' || result[0].operation_key !== operation || verified[0].operation_key !== operation || result[0].lifecycle_kind !== lifecycle || verified[0].lifecycle_kind !== lifecycle || result[0].details_json?.kind !== kind || verified[0].details_json?.kind !== kind || result[0].details_json?.returnedIdsRecorded !== true || result[0].details_json?.count !== leaves.length || verified[0].details_json?.readOnly !== true) problem('PROVENANCE','Sibling returned IDs and read verification must exactly match the applied producer plan.');
+  return Object.freeze({plan,descriptor,kind,lifecycle});
+}
+
 export function targetDescriptor(customerId, node, kind) {
-  return { operationKey:OPS[node.object_type][kind], customerId, pathParams:{ [node.object_type === 'campaign' ? 'campaignId' : 'adgroupId']:node.remote_id } };
+  const pathKey = {campaign:'campaignId',adgroup:'adgroupId',keyword:'nccKeywordId',creative:'adId'}[node.object_type];
+  if (!pathKey) problem('GRAPH','Unsupported cleanup object type.');
+  return { operationKey:OPS[node.object_type][kind], customerId, pathParams:{ [pathKey]:node.remote_id } };
 }
 export function cleanupMetadata(g, node, activationId) {
-  const create = node.object_type === 'campaign' ? g.rootCreate : g.childCreate;
-  return { kind:'haar_two_node_cleanup_v1', customerId:g.run.customer_id, hierarchyRunId:g.run.hierarchy_run_id, hierarchyObjectId:node.hierarchy_object_id, objectType:node.object_type, remoteId:node.remote_id,
+  if (!g.leaves?.length) {
+    const create = node.object_type === 'campaign' ? g.rootCreate : g.childCreate;
+    return { kind:'haar_two_node_cleanup_v1', customerId:g.run.customer_id, hierarchyRunId:g.run.hierarchy_run_id, hierarchyObjectId:node.hierarchy_object_id, objectType:node.object_type, remoteId:node.remote_id,
+      rootObjectId:g.root.hierarchy_object_id, rootRemoteId:g.root.remote_id, rootCreatePlanId:g.rootCreate.plan_id, rootAfterHash:g.rootCreate.applied_after_hash,
+      childObjectId:g.child.hierarchy_object_id, childRemoteId:g.child.remote_id, childCreatePlanId:g.childCreate.plan_id, childAfterHash:g.childCreate.applied_after_hash,
+      createPlanId:create.plan_id, activationId };
+  }
+  const create = node.object_type === 'campaign' ? g.rootCreate : node.object_type === 'adgroup' ? g.childCreate : g.siblingCreate.plan;
+  return { kind:'haar_extended_child_cleanup_v1', customerId:g.run.customer_id, hierarchyRunId:g.run.hierarchy_run_id, hierarchyObjectId:node.hierarchy_object_id, objectType:node.object_type, remoteId:node.remote_id,
     rootObjectId:g.root.hierarchy_object_id, rootRemoteId:g.root.remote_id, rootCreatePlanId:g.rootCreate.plan_id, rootAfterHash:g.rootCreate.applied_after_hash,
     childObjectId:g.child.hierarchy_object_id, childRemoteId:g.child.remote_id, childCreatePlanId:g.childCreate.plan_id, childAfterHash:g.childCreate.applied_after_hash,
+    siblingKind:g.siblingCreate.kind, siblingCreatePlanId:g.siblingCreate.plan.plan_id, siblingAfterHash:g.siblingCreate.plan.applied_after_hash,
+    leafObjects:g.leaves.map(leaf => ({objectId:leaf.hierarchy_object_id,objectType:leaf.object_type,remoteId:leaf.remote_id,parentObjectId:leaf.parent_object_id})),
     createPlanId:create.plan_id, activationId };
 }
 export const fullTarget = (customerId,node) => `searchad:${customerId}:${node.object_type}:${node.remote_id}`;
