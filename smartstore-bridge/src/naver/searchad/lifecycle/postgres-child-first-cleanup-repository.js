@@ -6,8 +6,21 @@ import { createHierarchyCampaignRecipe } from './recipe-campaign.js';
 import { createHierarchyChildRecipe } from './recipe-hierarchy.js';
 import { campaignResponse } from './postgres-campaign-create-repository.js';
 import { adgroupResponse } from './adgroup-create-contract.js';
+import { keywordReadResponse, creativeResponse } from './sibling-create-contract.js';
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
 import { problem, IDENTITY, UUID, REMOTE, epoch, active, creationProof, siblingCreationProof, cleanupMetadata, targetDescriptor, fullTarget, cleanupBinding, claimedProof, deletedProof } from './child-first-cleanup-contract.js';
+
+function presentNode(g,node,observation){
+  if(observation?.kind!=='present')return false;
+  if(node===g.root)return Boolean(campaignResponse(observation.result,g.rootDescriptor,false,g.root.remote_id));
+  if(node===g.child)return Boolean(adgroupResponse(observation.result,g.childDescriptor,false,g.child.remote_id));
+  if(node.object_type==='keyword'){
+    const index=g.leaves.findIndex(leaf=>leaf.hierarchy_object_id===node.hierarchy_object_id),expected=g.siblingCreate?.descriptor?.body?.[index]?.keyword;
+    return typeof expected==='string'&&Boolean(keywordReadResponse(observation.result,{customerId:g.run.customer_id,parentRemoteId:g.child.remote_id,remoteId:node.remote_id,keyword:expected}));
+  }
+  if(node.object_type==='creative')return Boolean(creativeResponse(observation.result,g.siblingCreate.descriptor,false,node.remote_id));
+  return false;
+}
 
 /** Internal bounded hierarchy coordinator. Never issues tokens or performs network I/O. */
 export class PostgresChildFirstCleanupRepository {
@@ -24,8 +37,6 @@ export class PostgresChildFirstCleanupRepository {
     finally{if(c)c.release(discard);}
   }
   async #graph(c,s) {
-    // Same account/run prefix lock order as the existing producers. Reject broad
-    // foreign links rather than hiding them with a Customer filter.
     const account=(await c.query('SELECT * FROM searchad_canary_accounts WHERE customer_id=$1 FOR UPDATE',[s.customerId])).rows[0];
     const run=(await c.query('SELECT *,xmin::text AS version FROM searchad_hierarchy_canary_runs WHERE hierarchy_run_id=$1 AND customer_id=$2 FOR UPDATE',[s.hierarchyRunId,s.customerId])).rows[0];
     if(!run)problem('NOT_FOUND','Exact local hierarchy scope was not found.',404);
@@ -110,15 +121,15 @@ export class PostgresChildFirstCleanupRepository {
   }
   async executionSnapshot(s){return this.#tx(async c=>{
     const g=await this.#graph(c,s),b=cleanupBinding(g,g.target,s.planId);await this.#approved(c,g,s,b);this.#gate(b.mutation);
-    const order=g.target===g.child?[g.root,g.child]:[g.child,g.root];
+    const order=g.leaves.includes(g.target)?[g.root,g.child,g.target]:g.target===g.child?[g.root,g.child]:[g.child,g.root];
     return {ticket:this.#issue(g,s,'preflight',{startedAt:this.#now()}),reads:order.map(o=>targetDescriptor(s.customerId,o,'read')),identity:this.#identity(g.run)};
   });}
   async claim(ticket,observations){const v=this.#take(ticket,'preflight'),s=v.scope;return this.#tx(async c=>{
     const g=await this.#graph(c,s);this.#same(g,v);const b=cleanupBinding(g,g.target,s.planId);let a=await this.#approved(c,g,s,b);
-    if(!Array.isArray(observations)||observations.length!==2)problem('PREFLIGHT','Exact two-node observations required.');
-    const goodRoot=observation=>observation?.kind==='present'&&campaignResponse(observation.result,g.rootDescriptor,false,g.root.remote_id);
-    const valid=g.target===g.child?goodRoot(observations[0])&&observations[1]?.kind==='present'&&adgroupResponse(observations[1].result,g.childDescriptor,false,g.child.remote_id):observations[0]?.kind==='absent'&&goodRoot(observations[1]);
-    if(!valid)problem('PREFLIGHT','Parent must be stopped, and the exact child must be present or deletion-proven absent as required.');
+    let valid=false;
+    if(g.leaves.includes(g.target))valid=Array.isArray(observations)&&observations.length===3&&presentNode(g,g.root,observations[0])&&presentNode(g,g.child,observations[1])&&presentNode(g,g.target,observations[2]);
+    else if(Array.isArray(observations)&&observations.length===2)valid=g.target===g.child?presentNode(g,g.root,observations[0])&&presentNode(g,g.child,observations[1]):observations[0]?.kind==='absent'&&presentNode(g,g.root,observations[1]);
+    if(!valid)problem('PREFLIGHT','Exact stopped ancestors and target observations are required.');
     const intentId=`hierarchy:tree:delete:${s.planId}`,day=new Date(this.#now()).toISOString().slice(0,10);
     await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[intentId]);
     if((await c.query('SELECT reservation_id FROM searchad_risk_reservations WHERE intent_id=$1 FOR UPDATE',[intentId])).rowCount)problem('REPLAY','Previously claimed risk is never recycled.');
@@ -153,14 +164,13 @@ export class PostgresChildFirstCleanupRepository {
   async observe(ticket,observation){const v=this.#take(ticket,'observation'),s=v.scope;return this.#tx(async c=>{
     const g=await this.#graph(c,s);this.#same(g,v);const b=cleanupBinding(g,g.target,s.planId);claimedProof(g,g.target,b);if(g.target===g.root)deletedProof(g,g.child);
     this.#fresh(v);const kind=observation?.kind;
-    const present=kind==='present'&&(g.target===g.root?campaignResponse(observation.result,g.rootDescriptor,false,g.root.remote_id):adgroupResponse(observation.result,g.childDescriptor,false,g.child.remote_id));
+    const present=kind==='present'&&presentNode(g,g.target,observation);
     const observed=kind==='absent'?'absent':kind==='unavailable'?'unavailable':present?'present':'mismatch';
     const state=observed==='absent'?'deleted':observed==='mismatch'?'manual_review':'delete_unknown',at=new Date(this.#now()).toISOString();
     await c.query('UPDATE searchad_hierarchy_objects SET state=$2,updated_at=$3,deleted_at=$4 WHERE hierarchy_object_id=$1',[s.hierarchyObjectId,state,at,state==='deleted'?at:null]);
     await c.query('UPDATE searchad_remote_object_ownership SET state=$2,updated_at=$3 WHERE ownership_id=$1',[g.hold.ownership_id,state==='deleted'?'deleted':state==='manual_review'?'manual_review':'delete_unknown',at]);
     if(state==='deleted')await c.query("UPDATE searchad_write_change_plans SET status='applied',applied_at=$2,applied_after_json=$3::jsonb,applied_after_hash=$4 WHERE plan_id=$1",[s.planId,at,JSON.stringify(b.plan.expected_after_json),contentHash(b.plan.expected_after_json)]);
     else await c.query('UPDATE searchad_write_change_plans SET status=$2 WHERE plan_id=$1',[s.planId,state==='manual_review'?'manual_review':'unknown_outcome']);
-    // Cleanup is not a zero-spend Canary pass and issues no capability evidence.
     await c.query("UPDATE searchad_hierarchy_canary_runs SET status='cleanup_pending' WHERE hierarchy_run_id=$1",[s.hierarchyRunId]);
     await this.#audit(c,g,s,'tree_cleanup_observation',observed,{readOnly:true,remoteId:g.target.remote_id,beforeHash:b.plan.before_hash,upstreamStatus:observed==='absent'?404:kind==='present'?200:null},at);
     this.#identity(g.run);this.#fresh(v);return {...this.#view(g,s),state};
