@@ -40,7 +40,7 @@ jobs:
       - name: Extended cleanup PostgreSQL integration
         if: ${{ hashFiles('smartstore-bridge/test/postgres-searchad-extended-child-cleanup.integration.test.js') != '' }}
         working-directory: smartstore-bridge
-        run: node --test test/postgres-searchad-extended-child-cleanup.integration.test.js
+        run: node --test test/postgres-searchad-extended-child-cleanup.integration.test.js test/postgres-searchad-extended-creative-cleanup.integration.test.js
       - name: Full regression after GREEN
         if: success() && ${{ hashFiles('smartstore-bridge/src/naver/searchad/lifecycle/extended-child-cleanup-service.js') != '' }}
         working-directory: smartstore-bridge
