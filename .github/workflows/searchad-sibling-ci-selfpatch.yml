@@ -38,28 +38,13 @@ jobs:
           path.write_text(text)
           PY
           git diff --check
-          git diff -- .github/workflows/searchad-write-ci.yml
-      - name: Create orphan Git commit object for connector ref update
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
+      - name: Print local object IDs then attempt workflow push
         run: |
           set -euo pipefail
-          HEAD_SHA=$(git rev-parse HEAD)
-          BASE_TREE=$(git rev-parse HEAD^{tree})
-          BLOB_SHA=$(jq -Rs '{content:.,encoding:"utf-8"}' < .github/workflows/searchad-write-ci.yml | \
-            curl -fsSL -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/$REPO/git/blobs" -d @- | jq -r .sha)
-          test -n "$BLOB_SHA" && test "$BLOB_SHA" != null
-          TREE_SHA=$(jq -n --arg base "$BASE_TREE" --arg blob "$BLOB_SHA" \
-            '{base_tree:$base,tree:[{path:".github/workflows/searchad-write-ci.yml",mode:"100644",type:"blob",sha:$blob}]}' | \
-            curl -fsSL -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/$REPO/git/trees" -d @- | jq -r .sha)
-          test -n "$TREE_SHA" && test "$TREE_SHA" != null
-          COMMIT_SHA=$(jq -n --arg msg 'ci: admit exact sibling batch contract paths (#26)' --arg tree "$TREE_SHA" --arg parent "$HEAD_SHA" \
-            '{message:$msg,tree:$tree,parents:[$parent]}' | \
-            curl -fsSL -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/$REPO/git/commits" -d @- | jq -r .sha)
-          test -n "$COMMIT_SHA" && test "$COMMIT_SHA" != null
-          echo "ORPHAN_COMMIT_SHA=$COMMIT_SHA"
-          echo "WORKFLOW_BLOB_SHA=$BLOB_SHA"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/searchad-write-ci.yml
+          git commit -m 'ci: admit exact sibling batch contract paths (#26)'
+          echo "LOCAL_COMMIT_SHA=$(git rev-parse HEAD)"
+          echo "WORKFLOW_BLOB_SHA=$(git hash-object .github/workflows/searchad-write-ci.yml)"
+          git push origin HEAD:codex/searchad-original-recovery-20260912
