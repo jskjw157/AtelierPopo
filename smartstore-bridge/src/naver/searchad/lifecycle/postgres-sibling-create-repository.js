@@ -32,7 +32,7 @@ export class PostgresSiblingCreateRepository {
     const holds=(await c.query('SELECT *,xmin::text AS version FROM searchad_remote_object_ownership WHERE owner_run_id=$1 ORDER BY ownership_id FOR UPDATE',[s.hierarchyRunId])).rows;
     const events=(await c.query('SELECT * FROM searchad_hierarchy_events WHERE hierarchy_run_id=$1 ORDER BY event_id',[s.hierarchyRunId])).rows;
     const root=objects.find(o=>o.object_type==='campaign'),parent=objects.find(o=>o.hierarchy_object_id===s.parentObjectId&&o.object_type==='adgroup');
-    if(!root||!parent||root.parent_object_id!==null||parent.parent_object_id!==root.hierarchy_object_id||root.state!=='owned'||parent.state!=='owned'||root.deleted_at||parent.deleted_at||run.completed_at!==null||run.status!=='cleanup_pending')fail('GRAPH','Exact owned campaign and adgroup parent are required.');
+    if(!root||!parent||root.parent_object_id!==null||parent.parent_object_id!==root.hierarchy_object_id||root.state!=='owned'||parent.state!=='owned'||root.deleted_at||parent.deleted_at||run.completed_at!==null)fail('GRAPH','Exact owned campaign and adgroup parent are required.');
     const rootHold=holds.find(h=>h.hierarchy_object_id===root.hierarchy_object_id),parentHold=holds.find(h=>h.hierarchy_object_id===parent.hierarchy_object_id);
     if(!rootHold||!parentHold||rootHold.state!=='owned'||parentHold.state!=='owned'||rootHold.remote_id!==root.remote_id||parentHold.remote_id!==parent.remote_id)fail('GRAPH','Owned parent holds are required.');
     const rootResult=events.find(e=>e.hierarchy_object_id===root.hierarchy_object_id&&e.phase==='create_result');
@@ -49,7 +49,7 @@ export class PostgresSiblingCreateRepository {
     this.#identity(run);
     return {account,run,objects,holds,events,root,parent,rootPlan,parentPlan,rootDescriptor,parentDescriptor,plan,childObjects};
   }
-  #available(g){if(!g.account||g.account.suspended!==false)fail('SUSPENDED','Customer is suspended or unavailable.',403);if(g.events.some(e=>e.phase.startsWith('tree_cleanup_')))fail('CLEANUP','Cleanup has begun; no sibling creation is allowed.');}
+  #available(g){if(!g.account||g.account.suspended!==false)fail('SUSPENDED','Customer is suspended or unavailable.',403);if(g.run.status!=='cleanup_pending')fail('STATE','Sibling creation requires cleanup_pending hierarchy state.');if(g.events.some(e=>e.phase.startsWith('tree_cleanup_')))fail('CLEANUP','Cleanup has begun; no sibling creation is allowed.');}
   async #authority(c,g,id,kind,now){
     this.#identity(g.run);const op=kind==='keywords'?OPS.keyword.create:OPS.creative.create,fields=kind==='keywords'?KEYWORD_FIELDS:CREATIVE_FIELDS,lifecycle=kind==='keywords'?'batch_create':'create';
     const grant=(await c.query('SELECT * FROM searchad_activation_grants WHERE activation_id=$1',[id])).rows[0],e=grant?(await c.query('SELECT * FROM searchad_verification_evidence WHERE evidence_id=$1',[grant.evidence_id])).rows[0]:null;
