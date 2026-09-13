@@ -38,9 +38,9 @@
 - [x] Run focused PG repeatedly, local available regressions, syntax/static checks and migration reruns.
 - [x] Exercise a disposable negative-control mutant, restore exact source and rerun.
 - [x] Review limitations explicitly; no independent reviewer approval unless actually obtained.
-- [ ] Publish only verified new paths and additive canonical CI changes, preserving remote base tree.
-- [ ] Read final canonical CI steps/logs; record local missing-suite scope separately from complete remote suite.
-- [ ] Update dashboard and #23/#26/PR24 resume point without closing overall work.
+- [x] Publish only verified new paths and additive canonical CI changes, preserving remote base tree.
+- [x] Read final canonical CI steps/logs; record local missing-suite scope separately from complete remote suite.
+- [ ] Synchronize this documentation successor and #23/#26/PR24. Completion and successor CI are recorded in the trackers after publication; this checkbox reflects the documentation-publication checkpoint, not overall #26 completion.
 
 ## Local source provenance
 
@@ -51,3 +51,7 @@ The mounted source export is 93a522e09b9e36e474886ad1365d8e4966353e6c (348 hashe
 New PG 80/0/0 (79 children plus parent). Available exported regression 494/0/0 and available required PG 204/0/0; these omit the two existing 48-test campaign suites and are not canonical totals. Static/syntax/safety/coverage pass; migration reruns are 0009/applied:[] twice. Canonical workflow is reconstructed to exact baseline blob 10489f2eab6f51b1ed99e05074462a126d9366cd, then adds 53 lines; all prior lines/steps/pins remain.
 
 Observed missing-service RED 0/1/0; final-audit credential rotation regression 78/2/0 fixed by a last identity check before owned-promotion COMMIT. Disposable duplicate-POST control 52/28/0 was not published. One immediate restored repeat was interrupted by the command time limit and is not counted as passing; exact source hash was checked and a fresh complete repeat finished 80/0/0. Manual source/test review only; independent reviewer approval is still pending. Remote publication and canonical CI observations will be recorded separately.
+
+## Canonical code checkpoint
+
+Published implementation: ba22f14796a337831c60f0b366b79303d233e78a. CI [34732369828](https://github.com/jskjw157/AtelierPopo/actions/runs/34732369828), job103657392347, completed/success. Full decoded log and every final step reviewed: full590/0/0, requiredPG300/0/0, newadgroup80/0/0; both existing campaign48-test suites are included. Old pins/protected diffs and all configured checks pass. Both final migration reruns0009/applied:[]; bridge production audit0. Documentation successor/tracker synchronization is a separate checkpoint. Child cleanup, keyword/creative/batch, general C/D/E/F, final suspend-to-send fence, lifecycle issuer and independent review remain pending.
