@@ -115,6 +115,9 @@ test('trusted partial keyword result is quarantined without ownership promotion 
   assert.equal(holds[0].state,'manual_review');
   assert.equal(holds[0].parent_hierarchy_object_id,group.hierarchyObjectId);
 
+  const partialEvent=(await pool.query("SELECT details_json FROM searchad_hierarchy_events WHERE phase='sibling_create_result' AND status='partial_ids_recorded' ORDER BY created_at DESC LIMIT 1")).rows[0];
+  assert.deepEqual(partialEvent?.details_json?.quarantined,[{index:0,objectId:quarantined[0].hierarchy_object_id,remoteId:quarantined[0].remote_id}], 'immutable audit must bind the returned partial ID to its local object and request index');
+
   await assert.rejects(siblings.execute(execution,context));
   assert.equal(calls.filter(value=>value==='POST /ncc/keywords').length,1,'partial batch must never be blindly resent');
 });
