@@ -46,11 +46,14 @@ jobs:
         run: |
           node --check src/naver/searchad/lifecycle/sibling-create-contract.js
           node --check src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+          node --check src/naver/searchad/lifecycle/child-first-cleanup-contract.js
+          node --check src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js
           node --test test/searchad-hierarchy-sibling-contract.test.js
           node --test test/postgres-searchad-sibling-create.integration.test.js
           node --test test/searchad-hierarchy-sibling-partial-contract.test.js
           node --test test/postgres-searchad-partial-keyword-quarantine.integration.test.js
           node --test test/postgres-searchad-partial-keyword-quarantine-cleanup.integration.test.js
+          node --test test/postgres-searchad-creative-child-first-cleanup.integration.test.js
           node --test test/postgres-searchad-extended-child-first-cleanup.integration.test.js
           node --test test/postgres-searchad-extended-parent-cleanup.integration.test.js
           node --test test/postgres-searchad-extended-root-cleanup.integration.test.js
