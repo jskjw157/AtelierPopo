@@ -23,24 +23,55 @@ export function siblingScope(input, context, mode) {
   return Object.freeze({...scope,actorPrincipalId:principal.principalId});
 }
 
-/** Conservative batch parser: partial, extra, duplicate or contradictory results are never promoted. */
-export function keywordBatchResponse(result, descriptor) {
+/**
+ * Classify a keyword batch without promoting partial results to ownership.
+ * Partial recovery is accepted only when every returned ID explicitly echoes
+ * one unique requested keyword, so no positional inference is needed.
+ */
+export function keywordBatchOutcome(result, descriptor) {
   if (!record(result) || Object.hasOwn(result, 'body') || Object.hasOwn(result, 'value')) return null;
   if (result.operation?.operationKey !== OPS.keyword.create || result.operation?.sideEffect !== true) return null;
   if (![200, 201].includes(result.upstream?.status)) return null;
   if (!record(descriptor) || descriptor.operationKey !== OPS.keyword.create || typeof descriptor.customerId !== 'string' || !descriptor.customerId) return null;
   if (!record(descriptor.query) || typeof descriptor.query.nccAdgroupId !== 'string' || !REMOTE_ID.test(descriptor.query.nccAdgroupId)) return null;
   if (!Array.isArray(descriptor.body) || descriptor.body.length < 1 || descriptor.body.length > KEYWORD_CREATE_MAX_BATCH) return null;
-  if (!Array.isArray(result.data) || result.data.length !== descriptor.body.length) return null;
-  const ids=[];
-  for(let index=0;index<descriptor.body.length;index+=1){
-    const expected=descriptor.body[index],item=result.data[index];
-    if(!record(expected)||typeof expected.keyword!=='string'||!expected.keyword.trim()||!record(item))return null;
-    const id=String(item.nccKeywordId??'').trim();if(!REMOTE_ID.test(id))return null;
-    if(Object.hasOwn(item,'keyword')&&String(item.keyword)!==expected.keyword)return null;
-    ids.push(id);
+  if (!Array.isArray(result.data) || result.data.length < 1 || result.data.length > descriptor.body.length) return null;
+
+  const ids = new Set();
+  if (result.data.length === descriptor.body.length) {
+    const items=[];
+    for(let index=0;index<descriptor.body.length;index+=1){
+      const expected=descriptor.body[index],item=result.data[index];
+      if(!record(expected)||typeof expected.keyword!=='string'||!expected.keyword.trim()||!record(item))return null;
+      const id=String(item.nccKeywordId??'').trim();if(!REMOTE_ID.test(id)||ids.has(id))return null;
+      if(Object.hasOwn(item,'keyword')&&String(item.keyword)!==expected.keyword)return null;
+      ids.add(id);items.push(Object.freeze({index,remoteId:id}));
+    }
+    return Object.freeze({kind:'exact',items:Object.freeze(items)});
   }
-  return new Set(ids).size===ids.length?Object.freeze(ids):null;
+
+  const expectedByKeyword=new Map();
+  for(let index=0;index<descriptor.body.length;index+=1){
+    const expected=descriptor.body[index];
+    if(!record(expected)||typeof expected.keyword!=='string'||!expected.keyword.trim()||expectedByKeyword.has(expected.keyword))return null;
+    expectedByKeyword.set(expected.keyword,index);
+  }
+  const indexes=new Set(),items=[];
+  for(const item of result.data){
+    if(!record(item)||!Object.hasOwn(item,'keyword')||typeof item.keyword!=='string')return null;
+    const id=String(item.nccKeywordId??'').trim(),index=expectedByKeyword.get(item.keyword);
+    if(!REMOTE_ID.test(id)||index===undefined||ids.has(id)||indexes.has(index))return null;
+    ids.add(id);indexes.add(index);items.push(Object.freeze({index,remoteId:id}));
+  }
+  items.sort((a,b)=>a.index-b.index);
+  return Object.freeze({kind:'partial',items:Object.freeze(items)});
+}
+
+/** Conservative exact parser: partial, extra, duplicate or contradictory results are never promoted. */
+export function keywordBatchResponse(result, descriptor) {
+  const outcome=keywordBatchOutcome(result,descriptor);
+  if(outcome?.kind!=='exact')return null;
+  return Object.freeze(outcome.items.map(item=>item.remoteId));
 }
 
 export function keywordReadResponse(result,{customerId,parentRemoteId,remoteId,keyword}){
