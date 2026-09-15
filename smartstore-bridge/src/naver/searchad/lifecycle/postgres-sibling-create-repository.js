@@ -94,8 +94,9 @@ export class PostgresSiblingCreateRepository {
         }
         await c.query("UPDATE searchad_write_change_plans SET status='manual_review' WHERE plan_id=$1",[s.planId]);
         await c.query("UPDATE searchad_hierarchy_canary_runs SET status='manual_review' WHERE hierarchy_run_id=$1",[s.hierarchyRunId]);
-        const remoteIds=keywordOutcome.items.map(item=>item.remoteId);
-        await this.#audit(c,{...s,objectIds:b.meta.objectIds},'sibling_create_result','partial_ids_recorded',b.descriptor.operationKey,'batch_create',{kind,returnedIdsRecorded:true,count:remoteIds.length,partial:true},at);
+        const quarantined=keywordOutcome.items.map(item=>({index:item.index,objectId:objects[item.index].hierarchy_object_id,remoteId:item.remoteId}));
+        const remoteIds=quarantined.map(item=>item.remoteId);
+        await this.#audit(c,{...s,objectIds:b.meta.objectIds},'sibling_create_result','partial_ids_recorded',b.descriptor.operationKey,'batch_create',{kind,returnedIdsRecorded:true,count:remoteIds.length,partial:true,quarantined},at);
         return {projection:{...s,kind,state:'manual_review',remoteIds},ticket:null};
       }
       for(const o of objects)await c.query('UPDATE searchad_hierarchy_objects SET state=$2,updated_at=$3 WHERE hierarchy_object_id=$1',[o.hierarchy_object_id,state,at]);
