@@ -14,7 +14,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -41,11 +41,18 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci
-      - name: Extended cleanup RED/GREEN contracts
+      - name: Focused sibling and extended cleanup contracts
         working-directory: smartstore-bridge
         run: |
+          node --check src/naver/searchad/lifecycle/sibling-create-contract.js
+          node --check src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+          node --test test/searchad-hierarchy-sibling-contract.test.js
+          node --test test/postgres-searchad-sibling-create.integration.test.js
           node --test test/searchad-hierarchy-sibling-partial-contract.test.js
           node --test test/postgres-searchad-partial-keyword-quarantine.integration.test.js
           node --test test/postgres-searchad-extended-child-first-cleanup.integration.test.js
           node --test test/postgres-searchad-extended-parent-cleanup.integration.test.js
           node --test test/postgres-searchad-extended-root-cleanup.integration.test.js
+      - name: Full regression test suite
+        working-directory: smartstore-bridge
+        run: npm test
