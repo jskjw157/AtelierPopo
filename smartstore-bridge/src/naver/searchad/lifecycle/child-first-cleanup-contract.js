@@ -83,7 +83,42 @@ export function siblingCreationProof(g) {
   const verified = g.events.filter(item => item.phase === 'sibling_create_verification' && item.details_json?.planId === plan.plan_id);
   const firstObjectId = event.details_json.objectIds[0];
   if (plan.mutation_operation_key !== operation || !equal(plan.mutation_json,descriptor) || !equal(plan.expected_after_json,descriptor.body) || !equal(plan.before_json,meta) || plan.before_hash !== contentHash(meta) || !equal(plan.applied_after_json,applied) || plan.applied_after_hash !== contentHash(applied) || plan.rollback_json !== null || event.details_json.beforeHash !== plan.before_hash || event.details_json.requestFingerprint !== contentHash(descriptor) || result.length !== 1 || verified.length !== 1 || result[0].hierarchy_object_id !== firstObjectId || verified[0].hierarchy_object_id !== firstObjectId || result[0].customer_id !== g.run.customer_id || verified[0].customer_id !== g.run.customer_id || result[0].status !== 'returned_ids_recorded' || verified[0].status !== 'verified' || result[0].operation_key !== operation || verified[0].operation_key !== operation || result[0].lifecycle_kind !== lifecycle || verified[0].lifecycle_kind !== lifecycle || result[0].details_json?.kind !== kind || verified[0].details_json?.kind !== kind || result[0].details_json?.returnedIdsRecorded !== true || result[0].details_json?.count !== leaves.length || verified[0].details_json?.readOnly !== true) problem('PROVENANCE','Sibling returned IDs and read verification must exactly match the applied producer plan.');
-  return Object.freeze({plan,descriptor,kind,lifecycle});
+  return Object.freeze({plan,descriptor,kind,lifecycle,partial:false});
+}
+
+/** A partial batch never becomes ownership. It can only prove exact returned IDs for leaf-only quarantine cleanup. */
+export function siblingQuarantineProof(g) {
+  const leaves=g.leaves||[];
+  if(leaves.length<2||leaves.some(node=>node.object_type!=='keyword'))problem('PROVENANCE','Partial quarantine cleanup supports keyword batches only.');
+  const operation=OPS.keyword.create,lifecycle='batch_create',kind='keywords';
+  const planned=g.events.filter(event=>event.phase==='sibling_plan'&&event.status==='planned'&&event.operation_key===operation&&event.lifecycle_kind===lifecycle&&record(event.details_json));
+  if(planned.length!==1||planned[0].details_json.kind!==kind||!UUID.test(String(planned[0].details_json.planId||''))||!Array.isArray(planned[0].details_json.objectIds)||planned[0].details_json.objectIds.length!==leaves.length)problem('PROVENANCE','One exact partial sibling producer plan is required.');
+  const event=planned[0],plan=g.plans.find(item=>item.plan_id===event.details_json.planId),objectIds=leaves.map(node=>node.hierarchy_object_id);
+  if(!plan||plan.customer_id!==g.run.customer_id||plan.status!=='manual_review'||!sameSet(event.details_json.objectIds,objectIds))problem('PROVENANCE','Partial producer plan and local leaves must agree.');
+  if(!Array.isArray(plan.mutation_json?.body)||plan.mutation_json.body.length!==leaves.length||plan.mutation_json.body.some(item=>!record(item)||Object.keys(item).length!==1||typeof item.keyword!=='string'||!item.keyword.trim()))problem('PROVENANCE','Partial keyword producer request shape is invalid.');
+  const parent={customerId:g.run.customer_id,hierarchyRunId:g.run.hierarchy_run_id,objectType:'adgroup',state:'owned',remoteId:g.child.remote_id};
+  const recipe=createHierarchyChildRecipe({keywordTexts:plan.mutation_json.body.map(item=>item.keyword)}),descriptor=recipe.createKeywords({customerId:g.run.customer_id,hierarchyRunId:g.run.hierarchy_run_id,parent});
+  const meta={kind:'haar_keywords_create_v1',customerId:g.run.customer_id,hierarchyRunId:g.run.hierarchy_run_id,parentObjectId:g.child.hierarchy_object_id,parentRemoteId:g.child.remote_id,rootObjectId:g.root.hierarchy_object_id,rootRemoteId:g.root.remote_id,activationId:event.details_json.activationId,objectIds:event.details_json.objectIds};
+  const results=g.events.filter(item=>item.phase==='sibling_create_result'&&item.details_json?.planId===plan.plan_id),verified=g.events.filter(item=>item.phase==='sibling_create_verification'&&item.details_json?.planId===plan.plan_id);
+  const result=results[0],quarantined=result?.details_json?.quarantined;
+  if(plan.mutation_operation_key!==operation||!equal(plan.mutation_json,descriptor)||!equal(plan.expected_after_json,descriptor.body)||!equal(plan.before_json,meta)||plan.before_hash!==contentHash(meta)||plan.rollback_json!==null||plan.applied_at!==null||plan.applied_after_json!==null||plan.applied_after_hash!==null||event.details_json.beforeHash!==plan.before_hash||event.details_json.requestFingerprint!==contentHash(descriptor)||results.length!==1||verified.length!==0||result.hierarchy_object_id!==event.details_json.objectIds[0]||result.customer_id!==g.run.customer_id||result.status!=='partial_ids_recorded'||result.operation_key!==operation||result.lifecycle_kind!==lifecycle||result.details_json?.kind!==kind||result.details_json?.returnedIdsRecorded!==true||result.details_json?.partial!==true||!Array.isArray(quarantined)||quarantined.length<1||quarantined.length>=leaves.length||result.details_json.count!==quarantined.length)problem('PROVENANCE','Partial result must remain manual-review and bind only explicit returned IDs.');
+  const indexes=new Set(),localIds=new Set(),remoteIds=new Set(),known=new Map();
+  for(const item of quarantined){
+    if(!record(item)||Object.keys(item).length!==3||!Number.isInteger(item.index)||item.index<0||item.index>=descriptor.body.length||typeof item.objectId!=='string'||!UUID.test(item.objectId)||typeof item.remoteId!=='string'||!REMOTE.test(item.remoteId)||indexes.has(item.index)||localIds.has(item.objectId)||remoteIds.has(item.remoteId)||!event.details_json.objectIds.includes(item.objectId))problem('PROVENANCE','Partial quarantine mapping is malformed or ambiguous.');
+    const leaf=leaves.find(node=>node.hierarchy_object_id===item.objectId),hold=g.holds.find(h=>h.hierarchy_object_id===item.objectId);
+    const allowed=(leaf?.state==='manual_review'&&hold?.state==='manual_review')||(leaf?.state==='delete_pending'&&hold?.state==='delete_unknown')||(leaf?.state==='delete_unknown'&&hold?.state==='delete_unknown')||(leaf?.state==='deleted'&&hold?.state==='deleted');
+    if(!leaf||leaf.remote_id!==item.remoteId||leaf.parent_object_id!==g.child.hierarchy_object_id||!hold||hold.customer_id!==g.run.customer_id||hold.object_type!=='keyword'||hold.remote_id!==item.remoteId||hold.owner_kind!=='hierarchy_canary'||hold.owner_run_id!==g.run.hierarchy_run_id||hold.hierarchy_object_id!==item.objectId||hold.parent_hierarchy_object_id!==g.child.hierarchy_object_id||hold.created_operation_key!==operation||!allowed||(leaf.state==='deleted')!==Number.isFinite(epoch(leaf.deleted_at)))problem('PROVENANCE','Known partial leaf must match its immutable quarantine mapping and hold.');
+    indexes.add(item.index);localIds.add(item.objectId);remoteIds.add(item.remoteId);known.set(item.objectId,item);
+  }
+  const unresolved=[];
+  for(const leaf of leaves){
+    if(known.has(leaf.hierarchy_object_id))continue;
+    if(leaf.remote_id!==null||leaf.state!=='manual_review'||leaf.deleted_at!==null||g.holds.some(h=>h.hierarchy_object_id===leaf.hierarchy_object_id))problem('PROVENANCE','Unreturned partial siblings must remain unresolved without invented ownership.');
+    unresolved.push(leaf.hierarchy_object_id);
+  }
+  const leafHolds=g.holds.filter(h=>h.object_type==='keyword');
+  if(leafHolds.length!==quarantined.length)problem('PROVENANCE','Only explicitly returned partial keyword IDs may have quarantine holds.');
+  return Object.freeze({plan,descriptor,kind,lifecycle,partial:true,result,quarantined:Object.freeze(quarantined.map(item=>Object.freeze({...item}))),unresolvedObjectIds:Object.freeze(event.details_json.objectIds.filter(id=>unresolved.includes(id)))});
 }
 
 export function targetDescriptor(customerId, node, kind) {
@@ -98,6 +133,13 @@ export function cleanupMetadata(g, node, activationId) {
       rootObjectId:g.root.hierarchy_object_id, rootRemoteId:g.root.remote_id, rootCreatePlanId:g.rootCreate.plan_id, rootAfterHash:g.rootCreate.applied_after_hash,
       childObjectId:g.child.hierarchy_object_id, childRemoteId:g.child.remote_id, childCreatePlanId:g.childCreate.plan_id, childAfterHash:g.childCreate.applied_after_hash,
       createPlanId:create.plan_id, activationId };
+  }
+  if(g.siblingCreate?.partial===true){
+    return {kind:'haar_partial_quarantine_cleanup_v1',customerId:g.run.customer_id,hierarchyRunId:g.run.hierarchy_run_id,hierarchyObjectId:node.hierarchy_object_id,objectType:node.object_type,remoteId:node.remote_id,
+      rootObjectId:g.root.hierarchy_object_id,rootRemoteId:g.root.remote_id,rootCreatePlanId:g.rootCreate.plan_id,rootAfterHash:g.rootCreate.applied_after_hash,
+      childObjectId:g.child.hierarchy_object_id,childRemoteId:g.child.remote_id,childCreatePlanId:g.childCreate.plan_id,childAfterHash:g.childCreate.applied_after_hash,
+      siblingKind:'keywords',siblingCreatePlanId:g.siblingCreate.plan.plan_id,siblingBeforeHash:g.siblingCreate.plan.before_hash,partialResultEventId:g.siblingCreate.result.event_id,partialResultHash:contentHash(g.siblingCreate.result.details_json),
+      quarantined:g.siblingCreate.quarantined.map(item=>({...item})),unresolvedObjectIds:[...g.siblingCreate.unresolvedObjectIds],createPlanId:g.siblingCreate.plan.plan_id,activationId};
   }
   const create = node.object_type === 'campaign' ? g.rootCreate : node.object_type === 'adgroup' ? g.childCreate : g.siblingCreate.plan;
   return { kind:'haar_extended_child_cleanup_v1', customerId:g.run.customer_id, hierarchyRunId:g.run.hierarchy_run_id, hierarchyObjectId:node.hierarchy_object_id, objectType:node.object_type, remoteId:node.remote_id,
