@@ -44,6 +44,7 @@ jobs:
       - name: Extended cleanup RED/GREEN contracts
         working-directory: smartstore-bridge
         run: |
+          node --test test/searchad-hierarchy-sibling-partial-contract.test.js
           node --test test/postgres-searchad-extended-child-first-cleanup.integration.test.js
           node --test test/postgres-searchad-extended-parent-cleanup.integration.test.js
           node --test test/postgres-searchad-extended-root-cleanup.integration.test.js
