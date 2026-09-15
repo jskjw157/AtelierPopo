@@ -111,8 +111,25 @@ test('known partial keyword leaf can be deleted once while unresolved sibling ke
   assert.ok(known);assert.ok(unresolved);
   assert.equal(known.state,'manual_review');assert.equal(unresolved.state,'manual_review');
 
-  calls.length=0;
   const cleanup=new ChildFirstCleanupService(args());
+  calls.length=0;
+  await assert.rejects(
+    cleanup.prepare({customerId:'1001',hierarchyRunId:root.hierarchyRunId,hierarchyObjectId:unresolved.hierarchy_object_id,activationId:await authority(OPS.keyword.delete,[],'delete')},context),
+    error=>error?.code==='SEARCHAD_CHILD_CLEANUP_STATE'
+  );
+  assert.equal(calls.length,0,'unreturned partial sibling is never read, guessed, or deleted');
+
+  const tampered='kw-tampered-partial';
+  await pool.query('UPDATE searchad_hierarchy_objects SET remote_id=$2 WHERE hierarchy_object_id=$1',[known.hierarchy_object_id,tampered]);
+  await pool.query('UPDATE searchad_remote_object_ownership SET remote_id=$2 WHERE hierarchy_object_id=$1',[known.hierarchy_object_id,tampered]);
+  await assert.rejects(
+    cleanup.prepare({customerId:'1001',hierarchyRunId:root.hierarchyRunId,hierarchyObjectId:known.hierarchy_object_id,activationId:await authority(OPS.keyword.delete,[],'delete')},context),
+    error=>error?.code==='SEARCHAD_CHILD_CLEANUP_PROVENANCE'
+  );
+  assert.equal(calls.length,0,'jointly tampered mutable object and hold cannot replace immutable partial-result provenance');
+  await pool.query('UPDATE searchad_hierarchy_objects SET remote_id=$2 WHERE hierarchy_object_id=$1',[known.hierarchy_object_id,partialRemote]);
+  await pool.query('UPDATE searchad_remote_object_ownership SET remote_id=$2 WHERE hierarchy_object_id=$1',[known.hierarchy_object_id,partialRemote]);
+
   const cleanupPlan=await cleanup.prepare({customerId:'1001',hierarchyRunId:root.hierarchyRunId,hierarchyObjectId:known.hierarchy_object_id,activationId:await authority(OPS.keyword.delete,[],'delete')},context);
   assert.equal(cleanupPlan.objectType,'keyword');assert.equal(cleanupPlan.state,'planned');assert.equal(calls.length,0,'planning must stay local');
   const cleaned=await cleanup.execute({customerId:'1001',hierarchyRunId:root.hierarchyRunId,hierarchyObjectId:known.hierarchy_object_id,planId:cleanupPlan.planId,executionToken:(await approve(cleanupPlan.planId)).executionToken,confirmation:cleanupPlan.requiredConfirmation,secondConfirmation:cleanupPlan.requiredSecondConfirmation},context);
