@@ -8,14 +8,15 @@ import { campaignResponse } from './postgres-campaign-create-repository.js';
 import { adgroupResponse } from './adgroup-create-contract.js';
 import { keywordReadResponse, creativeResponse } from './sibling-create-contract.js';
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
-import { problem, IDENTITY, UUID, REMOTE, epoch, active, creationProof, siblingCreationProof, cleanupMetadata, targetDescriptor, fullTarget, cleanupBinding, claimedProof, deletedProof } from './child-first-cleanup-contract.js';
+import { problem, IDENTITY, UUID, REMOTE, epoch, active, creationProof, siblingCreationProof, siblingQuarantineProof, cleanupMetadata, targetDescriptor, fullTarget, cleanupBinding, claimedProof, deletedProof } from './child-first-cleanup-contract.js';
 
 function presentNode(g,node,observation){
   if(observation?.kind!=='present')return false;
   if(node===g.root)return Boolean(campaignResponse(observation.result,g.rootDescriptor,false,g.root.remote_id));
   if(node===g.child)return Boolean(adgroupResponse(observation.result,g.childDescriptor,false,g.child.remote_id));
   if(node.object_type==='keyword'){
-    const index=g.leaves.findIndex(leaf=>leaf.hierarchy_object_id===node.hierarchy_object_id),expected=g.siblingCreate?.descriptor?.body?.[index]?.keyword;
+    const mapping=g.siblingCreate?.partial===true?g.siblingCreate.quarantined.find(item=>item.objectId===node.hierarchy_object_id):null;
+    const index=g.siblingCreate?.partial===true?mapping?.index:g.leaves.findIndex(leaf=>leaf.hierarchy_object_id===node.hierarchy_object_id),expected=g.siblingCreate?.descriptor?.body?.[index]?.keyword;
     return typeof expected==='string'&&Boolean(keywordReadResponse(observation.result,{customerId:g.run.customer_id,parentRemoteId:g.child.remote_id,remoteId:node.remote_id,keyword:expected}));
   }
   if(node.object_type==='creative')return Boolean(creativeResponse(observation.result,g.siblingCreate.descriptor,false,node.remote_id));
@@ -47,10 +48,14 @@ export class PostgresChildFirstCleanupRepository {
     const root=objects.find(o=>o.object_type==='campaign'),child=objects.find(o=>o.object_type==='adgroup'),leaves=objects.filter(o=>['keyword','creative'].includes(o.object_type));
     const leafTypes=[...new Set(leaves.map(o=>o.object_type))];
     const leavesSupported=leaves.length===0||(leafTypes.length===1&&((leafTypes[0]==='keyword'&&leaves.length>=1)||(leafTypes[0]==='creative'&&leaves.length===1))&&leaves.every(o=>o.parent_object_id===child?.hierarchy_object_id));
-    if(objects.length!==2+leaves.length||holds.length!==objects.length||!root||!child||!leavesSupported||root.parent_object_id!==null||child.parent_object_id!==root.hierarchy_object_id||run.recipe_id!==this.#rootRecipe.id||run.completed_at!==null)problem('GRAPH','Only one verified campaign, its adgroup, and one bounded sibling producer result are supported.');
-    for(const o of objects){
+    if(objects.length!==2+leaves.length||!root||!child||!leavesSupported||root.parent_object_id!==null||child.parent_object_id!==root.hierarchy_object_id||run.recipe_id!==this.#rootRecipe.id||run.completed_at!==null)problem('GRAPH','Only one verified campaign, its adgroup, and one bounded sibling producer result are supported.');
+    for(const o of [root,child]){
       const h=holds.find(x=>x.hierarchy_object_id===o.hierarchy_object_id),op=OPS[o.object_type];
       if(!op||o.customer_id!==s.customerId||o.hierarchy_run_id!==s.hierarchyRunId||typeof o.remote_id!=='string'||!REMOTE.test(o.remote_id)||o.create_operation_key!==op.create||o.read_operation_key!==op.read||o.delete_operation_key!==op.delete||!h||h.customer_id!==s.customerId||h.object_type!==o.object_type||h.remote_id!==o.remote_id||h.owner_kind!=='hierarchy_canary'||h.owner_run_id!==s.hierarchyRunId||h.hierarchy_object_id!==o.hierarchy_object_id||h.parent_hierarchy_object_id!==o.parent_object_id||h.created_operation_key!==op.create)problem('GRAPH','Object, returned ID, Customer, parent and ownership must agree.');
+    }
+    for(const o of leaves){
+      const op=OPS[o.object_type];
+      if(!op||o.customer_id!==s.customerId||o.hierarchy_run_id!==s.hierarchyRunId||o.parent_object_id!==child.hierarchy_object_id||o.create_operation_key!==op.create||o.read_operation_key!==op.read||o.delete_operation_key!==op.delete)problem('GRAPH','Leaf Customer, parent and operations must agree before provenance evaluation.');
     }
     if(events.some(e=>e.customer_id!==s.customerId||e.hierarchy_run_id!==s.hierarchyRunId||(e.hierarchy_object_id!==null&&!local.includes(e.hierarchy_object_id))||e.phase.startsWith('cleanup_')))problem('GRAPH','Foreign or competing cleanup events are not supported.');
     const planIds=[...new Set([...events.map(e=>e.details_json?.planId).filter(id=>typeof id==='string'&&UUID.test(id)),s.planId].filter(Boolean))];
@@ -62,7 +67,16 @@ export class PostgresChildFirstCleanupRepository {
     g.rootCreate=creationProof(g,root,g.rootDescriptor);
     g.childDescriptor=this.#childRecipe.createAdgroup({customerId:s.customerId,hierarchyRunId:s.hierarchyRunId,parent:{customerId:s.customerId,hierarchyRunId:s.hierarchyRunId,objectType:'campaign',state:'owned',remoteId:root.remote_id}});
     g.childCreate=creationProof(g,child,g.childDescriptor);
-    g.siblingCreate=leaves.length?siblingCreationProof(g):null;
+    g.siblingCreate=leaves.length?(run.status==='manual_review'?siblingQuarantineProof(g):siblingCreationProof(g)):null;
+    if(g.siblingCreate?.partial===true){
+      if(holds.length!==2+g.siblingCreate.quarantined.length)problem('GRAPH','Partial quarantine graph contains unexpected ownership holds.');
+    } else {
+      if(holds.length!==objects.length)problem('GRAPH','Verified owned graph requires one ownership hold per object.');
+      for(const o of leaves){
+        const h=holds.find(x=>x.hierarchy_object_id===o.hierarchy_object_id),op=OPS[o.object_type];
+        if(typeof o.remote_id!=='string'||!REMOTE.test(o.remote_id)||!h||h.customer_id!==s.customerId||h.object_type!==o.object_type||h.remote_id!==o.remote_id||h.owner_kind!=='hierarchy_canary'||h.owner_run_id!==s.hierarchyRunId||h.hierarchy_object_id!==o.hierarchy_object_id||h.parent_hierarchy_object_id!==o.parent_object_id||h.created_operation_key!==op.create)problem('GRAPH','Verified leaf returned ID and ownership must agree.');
+      }
+    }
     g.target=objects.find(o=>o.hierarchy_object_id===s.hierarchyObjectId);
     if(!g.target)problem('NOT_FOUND','Selected target is outside the verified bounded graph.',404);
     g.hold=holds.find(h=>h.hierarchy_object_id===g.target.hierarchy_object_id);
@@ -70,6 +84,13 @@ export class PostgresChildFirstCleanupRepository {
   }
   #available(g) {
     if(!g.account||g.account.suspended!==false)problem('SUSPENDED','Customer is suspended or unavailable.',403);
+    if(g.siblingCreate?.partial===true){
+      const mapping=g.siblingCreate.quarantined.find(item=>item.objectId===g.target.hierarchy_object_id);
+      if(g.run.status!=='manual_review'||!mapping||g.target.object_type!=='keyword'||g.target.state!=='manual_review'||g.hold?.state!=='manual_review'||g.target.remote_id!==mapping.remoteId||g.target.deleted_at!==null)problem('STATE','Partial quarantine permits deletion of an explicitly returned manual-review keyword leaf only.');
+      const rootHold=g.holds.find(h=>h.hierarchy_object_id===g.root.hierarchy_object_id),childHold=g.holds.find(h=>h.hierarchy_object_id===g.child.hierarchy_object_id);
+      if(g.root.state!=='owned'||g.child.state!=='owned'||rootHold?.state!=='owned'||childHold?.state!=='owned'||g.root.deleted_at!==null||g.child.deleted_at!==null||g.events.some(e=>[g.root.hierarchy_object_id,g.child.hierarchy_object_id].includes(e.hierarchy_object_id)&&e.phase.startsWith('tree_cleanup_')))problem('PARENT','Partial leaf cleanup requires untouched owned ancestors.');
+      return;
+    }
     if(g.run.status!=='cleanup_pending'||g.target.state!=='owned'||g.hold.state!=='owned'||g.target.deleted_at!==null)problem('STATE','Only a verified owned target with no prior dispatch can be deleted.');
     if(g.leaves.includes(g.target)){
       const rootHold=g.holds.find(h=>h.hierarchy_object_id===g.root.hierarchy_object_id),childHold=g.holds.find(h=>h.hierarchy_object_id===g.child.hierarchy_object_id);
@@ -105,7 +126,7 @@ export class PostgresChildFirstCleanupRepository {
     if(g.events.some(e=>e.hierarchy_object_id===s.hierarchyObjectId&&e.phase.startsWith('tree_cleanup_')))problem('PRIOR_PLAN','An existing cleanup plan must not be replaced or reused.');
     const scope={...s,planId:randomUUID()},meta=cleanupMetadata(g,g.target,s.activationId),d=targetDescriptor(s.customerId,g.target,'delete'),read=targetDescriptor(s.customerId,g.target,'read');
     const at=new Date(this.#now()).toISOString(),expiresAt=new Date(Math.min(until,this.#now()+this.#ttl*1000)).toISOString();
-    await c.query(`INSERT INTO searchad_write_change_plans(plan_id,customer_id,mutation_operation_key,mutation_json,read_json,before_json,before_hash,expected_after_json,rollback_json,reason,status,created_by,created_at,expires_at) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7,$8::jsonb,NULL,$9,'planned',$10,$11,$12)`,[scope.planId,s.customerId,d.operationKey,JSON.stringify(d),JSON.stringify(read),JSON.stringify(meta),contentHash(meta),JSON.stringify({absent:true,remoteId:g.target.remote_id}),g.leaves.length?'Separately approved deletion of one verified bounded hierarchy target.':'Separately approved deletion of one verified two-node target.',s.actorPrincipalId,at,expiresAt]);
+    await c.query(`INSERT INTO searchad_write_change_plans(plan_id,customer_id,mutation_operation_key,mutation_json,read_json,before_json,before_hash,expected_after_json,rollback_json,reason,status,created_by,created_at,expires_at) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7,$8::jsonb,NULL,$9,'planned',$10,$11,$12)`,[scope.planId,s.customerId,d.operationKey,JSON.stringify(d),JSON.stringify(read),JSON.stringify(meta),contentHash(meta),JSON.stringify({absent:true,remoteId:g.target.remote_id}),g.siblingCreate?.partial===true?'Separately approved deletion of one explicitly returned partial keyword quarantine target.':g.leaves.length?'Separately approved deletion of one verified bounded hierarchy target.':'Separately approved deletion of one verified two-node target.',s.actorPrincipalId,at,expiresAt]);
     await this.#audit(c,g,scope,'tree_cleanup_plan','planned',{activationId:s.activationId,beforeHash:contentHash(meta),requestFingerprint:contentHash(d),actorPrincipalId:s.actorPrincipalId});
     await this.#authority(c,g,s.activationId,this.#now());if(this.#now()>=Date.parse(expiresAt))problem('EXPIRED','Planning authority expired before commit.');
     return {...this.#view(g,scope),state:'planned',expiresAt,requiredConfirmation:this.#confirm(g.target.object_type),requiredSecondConfirmation:fullTarget(s.customerId,g.target)};
@@ -177,7 +198,7 @@ export class PostgresChildFirstCleanupRepository {
     await c.query('UPDATE searchad_remote_object_ownership SET state=$2,updated_at=$3 WHERE ownership_id=$1',[g.hold.ownership_id,state==='deleted'?'deleted':state==='manual_review'?'manual_review':'delete_unknown',at]);
     if(state==='deleted')await c.query("UPDATE searchad_write_change_plans SET status='applied',applied_at=$2,applied_after_json=$3::jsonb,applied_after_hash=$4 WHERE plan_id=$1",[s.planId,at,JSON.stringify(b.plan.expected_after_json),contentHash(b.plan.expected_after_json)]);
     else await c.query('UPDATE searchad_write_change_plans SET status=$2 WHERE plan_id=$1',[s.planId,state==='manual_review'?'manual_review':'unknown_outcome']);
-    await c.query("UPDATE searchad_hierarchy_canary_runs SET status='cleanup_pending' WHERE hierarchy_run_id=$1",[s.hierarchyRunId]);
+    await c.query('UPDATE searchad_hierarchy_canary_runs SET status=$2 WHERE hierarchy_run_id=$1',[s.hierarchyRunId,g.siblingCreate?.partial===true?'manual_review':'cleanup_pending']);
     await this.#audit(c,g,s,'tree_cleanup_observation',observed,{readOnly:true,remoteId:g.target.remote_id,beforeHash:b.plan.before_hash,upstreamStatus:observed==='absent'?404:kind==='present'?200:null},at);
     this.#identity(g.run);this.#fresh(v);return {...this.#view(g,s),state};
   });}
