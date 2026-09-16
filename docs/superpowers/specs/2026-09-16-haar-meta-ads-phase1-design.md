@@ -8,13 +8,14 @@ Branch: `feat/haar-meta-ads-phase1`
 
 HAAR Social Studio already manages HAAR products, uploaded media, Facebook/Instagram publishing, scheduling, post analytics, audit logs, and a Meta OAuth connection. The current Meta OAuth flow persists Page and Instagram credentials but does not preserve a Marketing API user credential or an advertising account. The UI has no Ads area.
 
-The goal of Phase 1 is to extend the same application into a small HAAR Meta Ads console rather than build a separate service.
+The goal of Phase 1 is to extend the same application into a small HAAR Meta Ads console and expose the same safe operations to ChatGPT, rather than build a separate ad product.
 
 User-approved scope:
 
 - Connect/select a Meta ad account.
 - Read current campaigns, ad sets, ads, and performance.
 - Create local ad drafts using HAAR products, media, or an existing published post as source material.
+- Let ChatGPT use the same read/draft services through an authenticated remote tool bridge.
 - Require explicit approval before every action that can change spend or delivery.
 - After approval, create/activate, pause/resume, or change budgets.
 - Do not add automatic optimization in Phase 1.
@@ -23,7 +24,7 @@ User-approved scope:
 
 ### A. Extend the existing Social Studio — selected
 
-Add a Marketing API module, ads database tables, Ads UI, and guarded mutation endpoints to the current Node/React/PostgreSQL application.
+Add a Marketing API module, ads database tables, Ads UI, and an authenticated ChatGPT tool surface to the current Node/React/PostgreSQL application.
 
 Advantages: reuses products/media/posts, existing encrypted secret storage, audit trail, authentication, deployment, and Meta connection. Lowest operational complexity.
 
@@ -86,6 +87,34 @@ The page has four sections/tabs:
 4. **Approvals** — pending/approved/executed/failed spend-impacting actions with exact budget and action summary.
 
 The existing Account page gains an `광고 계정` block for permission status and ad-account selection.
+
+### 3.4 ChatGPT remote tool bridge
+
+Phase 1 includes a remote HTTPS tool surface hosted with the Social Studio/VPS so the user can operate the ads workflow from ChatGPT instead of repeatedly opening the web UI.
+
+The bridge is a thin adapter only. It does not contain a second copy of advertising business logic. It calls the same domain services used by the browser API, so ChatGPT cannot bypass validation, audit, idempotency, or approval rules.
+
+Initial tool capabilities:
+
+- ads connection/account status and account discovery;
+- campaign/ad-set/ad and insights reads;
+- create/update local ad drafts;
+- prepare an immutable spend-impacting action request and return its exact summary;
+- inspect pending approval requests;
+- execute an action only after the corresponding exact request has been approved.
+
+The bridge uses its own scoped server credential and HTTPS authentication. It never accepts browser session cookies as an integration secret, never returns Meta access tokens, and never exposes app secrets. Read/draft tools are separate from mutation tools.
+
+The intended conversational flow is:
+
+1. User asks ChatGPT to inspect performance or prepare an ad.
+2. ChatGPT calls read/draft tools without spend approval.
+3. For a spend-impacting change, the server creates a pending `meta_ad_action_requests` record and returns the exact account, target, schedule, budget, creative, destination, and maximum spend when calculable.
+4. ChatGPT presents that exact summary to the user.
+5. Only after explicit user confirmation does ChatGPT invoke approval/execution for that request ID.
+6. The server rechecks payload hash, expiry, current permissions, and live target state before the Meta mutation.
+
+A changed request never inherits a previous approval.
 
 ## 4. Meta authentication and account selection
 
@@ -247,11 +276,11 @@ The following are allowed without approval:
 - generating copy/creative suggestions;
 - calculating projected maximum spend from the draft.
 
-Approval records are one-time, expire, and cannot be replayed. Mutation endpoints are idempotent and audited.
+Approval records are one-time, expire, and cannot be replayed. Mutation endpoints are idempotent and audited. The same policy applies whether the action originates from the web UI or ChatGPT tool bridge.
 
 ## 10. Error and ambiguity handling
 
-- Never log Meta access tokens, app secrets, or raw sensitive API payloads.
+- Never log Meta access tokens, app secrets, connector credentials, or raw sensitive API payloads.
 - Normalize Meta errors through existing sanitized error handling.
 - Missing scopes: downgrade capability and show reconnect/re-authorize guidance.
 - Expired credential: mark ads connection expired; do not attempt writes.
@@ -260,12 +289,14 @@ Approval records are one-time, expire, and cannot be replayed. Mutation endpoint
 - Ambiguous timeout after a create/update call: query Meta for the object/reconciliation key before any retry. Do not blindly create duplicates.
 - Budget unit mismatch: reject before external call.
 - Conversion metric unavailable: mark unavailable, never infer purchase or ROAS.
+- Tool bridge authentication failure: deny before domain invocation and write a sanitized security/audit event where appropriate.
+- Expired/already-used approval request: reject mutation without contacting Meta.
 
-## 11. API surface
+## 11. API and tool surface
 
 Browser-admin endpoints remain behind existing authenticated session + CSRF rules.
 
-Representative endpoints:
+Representative browser endpoints:
 
 - `GET /api/meta/ads/status`
 - `GET /api/meta/ads/accounts`
@@ -279,9 +310,20 @@ Representative endpoints:
 - `POST /api/meta/ads/actions/:id/approve`
 - `POST /api/meta/ads/actions/:id/execute`
 
-Mutation execution must compare the stored approved payload hash immediately before calling Meta.
+Representative ChatGPT tools:
 
-A future/parallel ChatGPT tool surface should wrap the same domain services rather than bypass them. That ensures an assistant-triggered action obeys the identical approval, audit, idempotency, and safety logic as the web UI.
+- `haar_ads_status`
+- `haar_ads_accounts`
+- `haar_ads_insights`
+- `haar_ads_campaigns`
+- `haar_ads_create_draft`
+- `haar_ads_update_draft`
+- `haar_ads_prepare_action`
+- `haar_ads_pending_actions`
+- `haar_ads_approve_action`
+- `haar_ads_execute_approved_action`
+
+Mutation execution must compare the stored approved payload hash immediately before calling Meta. The tool layer wraps the same domain services as browser endpoints; it never implements an alternate write path.
 
 ## 12. Testing strategy
 
@@ -309,6 +351,15 @@ Service tests with mocked Graph transport:
 - duplicate client request does not duplicate Meta objects;
 - pause/resume/budget change each require their own approval.
 
+Tool bridge tests:
+
+- unauthenticated remote tool requests are denied;
+- read/draft tools never mutate Meta delivery/spend state;
+- mutation tools cannot bypass pending approval;
+- an expired, replayed, or hash-mismatched action is rejected before any Meta call;
+- tool output never contains Meta access tokens or connector secrets;
+- web UI and ChatGPT paths produce the same domain/audit records for equivalent operations.
+
 Frontend/build tests:
 
 - Ads route/nav renders;
@@ -322,15 +373,16 @@ Deployment verification:
 - schema migration is idempotent;
 - health endpoint remains healthy;
 - production can read selected ad account before enabling writes;
+- remote ChatGPT tool bridge can authenticate and perform a read-only status call;
 - no real paid ad is launched as part of automated CI.
 
 ## 13. Deployment and rollout
 
-1. Deploy schema, OAuth/account discovery, and read-only ads views first.
+1. Deploy schema, OAuth/account discovery, read-only ads views, and read-only ChatGPT tools first.
 2. Re-authorize Meta connection with advertising scopes and select HAAR ad account.
-3. Verify read access and live metrics.
-4. Verify write capability with non-spending capability checks/local drafts; automated CI never activates an ad.
-5. Enable approval-gated mutations.
+3. Verify read access and live metrics from both web UI and ChatGPT tool bridge.
+4. Enable local draft creation through both surfaces and verify that it causes no Meta write.
+5. Enable approval-gated mutations only after replay/hash/expiry tests pass.
 6. First live advertising action is a user-approved, explicitly budgeted HAAR test; verify Meta IDs and delivery state afterward.
 
 ## 14. Phase 1 non-goals
