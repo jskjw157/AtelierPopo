@@ -81,7 +81,9 @@ test('descendant inventory pins only the three approved read-only parent-child l
 test('non-empty inventory proves remote descendant presence only and never creates local mapping authority', () => {
   for (const entry of scopes) {
     const classified = classifyDescendantInventoryPage(envelope(entry, entry.rows), entry.scope);
-    const expectedIds = entry.rows.map(row => row.nccAdgroupId ?? row.nccKeywordId ?? row.nccAdId);
+    const idKey = entry.scope.childType === 'adgroup' ? 'nccAdgroupId' :
+      entry.scope.childType === 'keyword' ? 'nccKeywordId' : 'nccAdId';
+    const expectedIds = entry.rows.map(row => row[idKey]);
 
     assert.deepEqual(classified, {
       kind: 'present_remote_descendants',
