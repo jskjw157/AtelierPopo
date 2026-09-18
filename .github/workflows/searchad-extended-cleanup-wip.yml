@@ -57,6 +57,7 @@ jobs:
           node --test test/postgres-searchad-partial-keyword-quarantine.integration.test.js
           node --test test/postgres-searchad-partial-keyword-quarantine-cleanup.integration.test.js
           node --test test/searchad-partial-keyword-inventory-contract.test.js
+          node --test test/searchad-descendant-inventory-contract.test.js
           node --test test/postgres-searchad-partial-keyword-inventory.integration.test.js
           node --test test/postgres-searchad-creative-child-first-cleanup.integration.test.js
           node --test test/postgres-searchad-extended-child-first-cleanup.integration.test.js
