@@ -167,8 +167,8 @@ test('unmanaged descendant inventory persists immutable read-only observations o
       assert.equal(Object.hasOwn(result,'matchedLocalObjectId'),false);
 
       const event=(await pool.query(
-        "SELECT phase,status,operation_key,lifecycle_kind,details_json FROM searchad_hierarchy_events WHERE hierarchy_run_id=$1 AND hierarchy_object_id=$2 AND phase='descendant_inventory' ORDER BY created_at DESC,event_id DESC LIMIT 1",
-        [runId,item.parentObjectId]
+        "SELECT phase,status,operation_key,lifecycle_kind,details_json FROM searchad_hierarchy_events WHERE hierarchy_run_id=$1 AND hierarchy_object_id=$2 AND phase='descendant_inventory' AND operation_key=$3 ORDER BY created_at DESC,event_id DESC LIMIT 1",
+        [runId,item.parentObjectId,item.operationKey]
       )).rows[0];
       assert.equal(event.phase,'descendant_inventory');
       assert.equal(event.status,'observed_present_remote_descendants');
@@ -192,8 +192,8 @@ test('unmanaged descendant inventory persists immutable read-only observations o
       assert.equal(result.kind,'empty_unproven');assert.equal(result.count,0);
       assert.deepEqual(result.remoteIds,[]);assert.equal(result.completeAbsence,false);assert.equal(result.changed,false);
       const event=(await pool.query(
-        "SELECT details_json FROM searchad_hierarchy_events WHERE hierarchy_run_id=$1 AND hierarchy_object_id=$2 AND phase='descendant_inventory' AND status='observed_empty_unproven' ORDER BY created_at DESC,event_id DESC LIMIT 1",
-        [runId,item.parentObjectId]
+        "SELECT details_json FROM searchad_hierarchy_events WHERE hierarchy_run_id=$1 AND hierarchy_object_id=$2 AND phase='descendant_inventory' AND status='observed_empty_unproven' AND operation_key=$3 ORDER BY created_at DESC,event_id DESC LIMIT 1",
+        [runId,item.parentObjectId,item.operationKey]
       )).rows[0];
       assert.deepEqual(event.details_json,{
         readOnly:true,parentType:item.parentType,childType:item.childType,observation:'empty_unproven',
