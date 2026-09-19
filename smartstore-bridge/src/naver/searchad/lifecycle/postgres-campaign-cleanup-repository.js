@@ -6,6 +6,7 @@ import { SEARCHAD_APPROVAL_CONFIRMATION } from '../write/approval-service.js';
 import { createHierarchyCampaignRecipe } from './recipe-campaign.js';
 import { fail, record } from './postgres-campaign-create-repository.js';
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
+import { hasUnprovenInventory } from './inventory-cleanup-fence.js';
 
 const IDENTITY = { specSha:'spec_sha', credentialFingerprint:'credential_fingerprint', upstreamBaseUrl:'upstream_base_url' };
 const epoch = v => v instanceof Date ? v.getTime() : Date.parse(v);
@@ -67,6 +68,7 @@ export class PostgresCampaignCleanupRepository {
   }
   #owned(g) {
     if(!g.account||g.account.suspended!==false)problem('SUSPENDED','Customer is unavailable or suspended.',403);
+    if(hasUnprovenInventory({target:g.object,objects:g.objects,events:g.events}))problem('INVENTORY_UNPROVEN','Recorded descendant inventory is not complete remote-absence proof; campaign deletion remains blocked.');
     if(g.run.status!=='cleanup_pending'||g.object.state!=='owned'||g.object.deleted_at!==null||g.hold.state!=='owned')problem('STATE','Only an owned campaign with no previous cleanup attempt may be dispatched.');
   }
   async #authority(c,g,activationId,now) {
