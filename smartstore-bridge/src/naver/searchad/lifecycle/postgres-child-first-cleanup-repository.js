@@ -138,7 +138,7 @@ export class PostgresChildFirstCleanupRepository {
     if(s.confirmation!==this.#confirm(g.target.object_type)||s.secondConfirmation!==fullTarget(s.customerId,g.target))problem('CONFIRMATION','Exact operation and full target confirmations are required.',400);
     const a=g.approvals.find(a=>a.plan_id===s.planId&&a.token_hash===s.tokenHash);
     if(b.plan.status!=='approved'||!a||a.used_at!==null||a.confirmation!=='APPROVE_SEARCHAD_CHANGE'||!a.actor?.trim()||g.events.some(e=>e.hierarchy_object_id===s.hierarchyObjectId&&e.phase==='tree_cleanup_intent'))problem('APPROVAL','Unused separate approval and unclaimed plan are required.',403);
-    const now=this.#now(),until=await this.#authority(c,g,s.activationId,now);
+    const now=this.#now(),until=await this.#authority(c,g,b.meta.activationId,now);
     if(!active(b.plan.created_at,b.plan.expires_at,now)||!active(a.created_at,a.expires_at,now)||!Number.isFinite(epoch(b.plan.approved_at))||epoch(b.plan.approved_at)>now)problem('EXPIRED','Plan or token expired.');
     return {approval:a,until:Math.min(until,epoch(a.expires_at),epoch(b.plan.expires_at))};
   }
@@ -169,7 +169,7 @@ export class PostgresChildFirstCleanupRepository {
     if(!balance||balance.capacity_units!==this.#capacity||balance.consumed_units+balance.reserved_units+this.#units>balance.capacity_units)problem('CAPACITY','Shared capacity is exhausted or differs from policy.');
     const used=await c.query('UPDATE searchad_write_approvals SET used_at=$2 WHERE approval_id=$1 AND used_at IS NULL RETURNING approval_id',[a.approval.approval_id,at]);if(used.rowCount!==1)problem('APPROVAL','Approval was already used.');
     await c.query('UPDATE searchad_daily_risk_capacity SET consumed_units=consumed_units+$3,updated_at=$4 WHERE customer_id=$1 AND risk_date=$2::date',[s.customerId,day,this.#units,at]);
-    await c.query(`INSERT INTO searchad_risk_reservations(reservation_id,intent_id,customer_id,risk_date,operation_key,lifecycle_kind,units,state,owner_kind,owner_run_id,created_at,updated_at,consumed_at) VALUES($1,$2,$3,$4,$5,'delete',$6,'consumed','hierarchy_canary',$7,$8,$8,$8)`,[randomUUID(),intentId,s.customerId,day,b.mutation.operationKey,this.#units,s.hierarchyRunId,at]);
+    await c.query(`INSERT INTO searchad_risk_reservations(reservation_id,intent_id,customer_id,risk_date,operation_key,lifecycle_kind,units,state,owner_kind,owner_run_id,created_at,updated_at,consumed_at) VALUES($1,$2,$3,$4::date,$5,'delete',$6,'consumed','hierarchy_canary',$7,$8,$8,$8)`,[randomUUID(),intentId,s.customerId,day,b.mutation.operationKey,this.#units,s.hierarchyRunId,at]);
     await c.query("UPDATE searchad_hierarchy_objects SET state='delete_pending',updated_at=$2 WHERE hierarchy_object_id=$1",[s.hierarchyObjectId,at]);
     await c.query("UPDATE searchad_remote_object_ownership SET state='delete_unknown',updated_at=$2 WHERE ownership_id=$1",[g.hold.ownership_id,at]);
     await c.query("UPDATE searchad_write_change_plans SET status='unknown_outcome' WHERE plan_id=$1",[s.planId]);
