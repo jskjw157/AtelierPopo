@@ -59,6 +59,7 @@ jobs:
           node --test test/searchad-partial-keyword-inventory-contract.test.js
           node --test test/searchad-descendant-inventory-contract.test.js
           node --test test/postgres-searchad-partial-keyword-inventory.integration.test.js
+          node --test test/postgres-searchad-descendant-inventory.integration.test.js
           node --test test/postgres-searchad-creative-child-first-cleanup.integration.test.js
           node --test test/postgres-searchad-extended-child-first-cleanup.integration.test.js
           node --test test/postgres-searchad-extended-parent-cleanup.integration.test.js
