@@ -34,22 +34,19 @@ test('inventory observations cannot be ignored by a subsequent parent cleanup', 
     return t.skip('Local PostgreSQL not configured');
   }
   const admin = createPostgresPool({ connectionString: url, sslMode: 'disable', logger });
-  const schema = `inventory_fence_${randomUUID().replaceAll('-', '')}`;
-  let pool;
+  const pools = new Set(), schemas = [];
   let escaped = 0;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => { escaped++; throw new Error('External transport forbidden'); };
   t.after(async () => {
     globalThis.fetch = originalFetch;
-    try { if (pool) await closePostgresPool(pool); }
-    finally { await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`); await closePostgresPool(admin); }
+    try { await Promise.all([...pools].map(pool => closePostgresPool(pool))); }
+    finally {
+      try { for (const schema of schemas) await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`); }
+      finally { await closePostgresPool(admin); }
+    }
     assert.equal(escaped, 0);
   });
-  await admin.query(`CREATE SCHEMA "${schema}"`);
-  const scoped = new URL(url);
-  scoped.searchParams.set('options', `-csearch_path=${schema} -ctimezone=UTC`);
-  pool = createPostgresPool({ connectionString: scoped.toString(), sslMode: 'disable', logger });
-  await runPostgresMigrations({ pool, migrationsDir: path.resolve('migrations/postgres'), logger });
   const registry = loadSearchAdSpecRegistry('specs/naver-searchad/current.json');
   const config = loadSearchAdConfig({
     NAVER_SEARCHAD_ACCESS_LICENSE: 'fixture-license', NAVER_SEARCHAD_SECRET_KEY: 'fixture-secret',
@@ -57,20 +54,29 @@ test('inventory observations cannot be ignored by a subsequent parent cleanup', 
   });
   const credentials = new SearchAdCredentialsRegistry(config.topology);
   const identity = { specSha: registry.status().specRef, credentialFingerprint: credentialFingerprintForCustomer(credentials, '1001'), upstreamBaseUrl: 'https://api.searchad.naver.com' };
-  await pool.query("INSERT INTO searchad_canary_accounts(customer_id,suspended) VALUES('1001',false)");
-  const approvals = new SearchAdApprovalService({ repository: new PostgresSearchAdWriteRepository({ pool }), config: { approvalTtlSeconds: 300 }, clock: () => NOW });
-  const approve = planId => approvals.approve(planId, { confirmation: 'APPROVE_SEARCHAD_CHANGE', actor: 'fixture-approver' });
-  const storage = new PostgresSearchAdLifecycleRepository({ pool });
-
-  async function authority(operation, fields, kind = 'create') {
-    const activationId = randomUUID(), evidenceId = `synthetic-${randomUUID()}`;
-    const start = new Date(NOW - 1000).toISOString(), end = new Date(NOW + 3600000).toISOString();
-    await pool.query(`INSERT INTO searchad_verification_evidence(evidence_id,evidence_type,customer_id,spec_sha,credential_fingerprint,upstream_base_url,operation_keys_json,field_scope_json,lifecycle_kinds_json,result,created_at,expires_at) VALUES($1,'active_canary','1001',$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,'verified',$8,$9)`, [evidenceId, identity.specSha, identity.credentialFingerprint, identity.upstreamBaseUrl, JSON.stringify([operation]), JSON.stringify(fields), JSON.stringify([kind]), start, end]);
-    await pool.query(`INSERT INTO searchad_activation_grants(activation_id,evidence_id,evidence_type,customer_id,spec_sha,credential_fingerprint,upstream_base_url,operation_keys_json,field_scope_json,lifecycle_kinds_json,activated_by_principal_id,activated_at,expires_at) VALUES($1,$2,'active_canary','1001',$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,'fixture-authority',$9,$10)`, [activationId, evidenceId, identity.specSha, identity.credentialFingerprint, identity.upstreamBaseUrl, JSON.stringify([operation]), JSON.stringify(fields), JSON.stringify([kind]), start, end]);
-    return activationId;
-  }
 
   async function graph({ withGroup = true, withKeyword = false } = {}) {
+    // Each independent producer run gets its own real schema. Do not disable the
+    // production constraint allowing only one unresolved run per Customer.
+    const schema = `inventory_fence_${randomUUID().replaceAll('-', '')}`;
+    await admin.query(`CREATE SCHEMA "${schema}"`); schemas.push(schema);
+    const scoped = new URL(url);
+    scoped.searchParams.set('options', `-csearch_path=${schema} -ctimezone=UTC`);
+    const pool = createPostgresPool({ connectionString: scoped.toString(), sslMode: 'disable', logger }); pools.add(pool);
+    await runPostgresMigrations({ pool, migrationsDir: path.resolve('migrations/postgres'), logger });
+    await pool.query("INSERT INTO searchad_canary_accounts(customer_id,suspended) VALUES('1001',false)");
+    const approvals = new SearchAdApprovalService({ repository: new PostgresSearchAdWriteRepository({ pool }), config: { approvalTtlSeconds: 300 }, clock: () => NOW });
+    const approve = planId => approvals.approve(planId, { confirmation: 'APPROVE_SEARCHAD_CHANGE', actor: 'fixture-approver' });
+    const storage = new PostgresSearchAdLifecycleRepository({ pool });
+
+    async function authority(operation, fields, kind = 'create') {
+      const activationId = randomUUID(), evidenceId = `synthetic-${randomUUID()}`;
+      const start = new Date(NOW - 1000).toISOString(), end = new Date(NOW + 3600000).toISOString();
+      await pool.query(`INSERT INTO searchad_verification_evidence(evidence_id,evidence_type,customer_id,spec_sha,credential_fingerprint,upstream_base_url,operation_keys_json,field_scope_json,lifecycle_kinds_json,result,created_at,expires_at) VALUES($1,'active_canary','1001',$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,'verified',$8,$9)`, [evidenceId, identity.specSha, identity.credentialFingerprint, identity.upstreamBaseUrl, JSON.stringify([operation]), JSON.stringify(fields), JSON.stringify([kind]), start, end]);
+      await pool.query(`INSERT INTO searchad_activation_grants(activation_id,evidence_id,evidence_type,customer_id,spec_sha,credential_fingerprint,upstream_base_url,operation_keys_json,field_scope_json,lifecycle_kinds_json,activated_by_principal_id,activated_at,expires_at) VALUES($1,$2,'active_canary','1001',$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,'fixture-authority',$9,$10)`, [activationId, evidenceId, identity.specSha, identity.credentialFingerprint, identity.upstreamBaseUrl, JSON.stringify([operation]), JSON.stringify(fields), JSON.stringify([kind]), start, end]);
+      return activationId;
+    }
+
     const remotes = new Map(), deleted = new Set(), calls = [];
     let beforeRead = null;
     const fetchImpl = async (urlValue, init) => {
@@ -136,7 +142,7 @@ test('inventory observations cannot be ignored by a subsequent parent cleanup', 
       }
       return values;
     }
-    return { root, group, leaf, cleanup, planningInput, approved, observe, state, calls, setBeforeRead: hook => { beforeRead = hook; } };
+    return { root, group, leaf, cleanup, storage, planningInput, approved, observe, state, calls, setBeforeRead: hook => { beforeRead = hook; } };
   }
 
   for (const kind of ['present', 'empty', 'outage']) {
@@ -206,15 +212,16 @@ test('inventory observations cannot be ignored by a subsequent parent cleanup', 
   await t.test('legacy inventory and a forged completeAbsence flag cannot become cleanup proof', async () => {
     const g = await graph();
     assert.equal((await g.cleanup.execute(await g.approved(g.group, 'adgroup'), context)).state, 'deleted');
-    await storage.addEvent({ eventId: randomUUID(), hierarchyRunId: g.root.hierarchyRunId, hierarchyObjectId: g.group.hierarchyObjectId, customerId: '1001', phase: 'partial_keyword_inventory', status: 'observed_empty_unproven', operationKey: null, lifecycleKind: null, details: { completeAbsence: true, cleanupAuthority: true }, createdAt: new Date(NOW).toISOString() });
+    await g.storage.addEvent({ eventId: randomUUID(), hierarchyRunId: g.root.hierarchyRunId, hierarchyObjectId: g.group.hierarchyObjectId, customerId: '1001', phase: 'partial_keyword_inventory', status: 'observed_empty_unproven', operationKey: null, lifecycleKind: null, details: { completeAbsence: true, cleanupAuthority: true }, createdAt: new Date(NOW).toISOString() });
     const input = await g.planningInput(g.root, 'campaign'); g.calls.length = 0;
     await assert.rejects(g.cleanup.prepare(input, context), error => error?.code === 'SEARCHAD_CHILD_CLEANUP_INVENTORY_UNPROVEN');
     assert.deepEqual(g.calls, []);
   });
 
-  await t.test('inventory in another run does not block an unrelated bounded cleanup', async () => {
-    const target = await graph(), other = await graph({ withGroup: false });
-    await other.observe(other.root, 'adgroup', 'present');
+  await t.test('inventory in another Customer run does not block an unrelated bounded cleanup', async () => {
+    const target = await graph(), otherRunId = randomUUID();
+    await target.storage.createRun({ hierarchyRunId: otherRunId, customerId: '1002', recipeId: 'foreign-inventory-fixture', status: 'manual_review', startedByPrincipalId: 'fixture', ...identity, startedAt: new Date(NOW).toISOString() });
+    await target.storage.addEvent({ eventId: randomUUID(), hierarchyRunId: otherRunId, customerId: '1002', phase: 'descendant_inventory', status: 'observed_present_remote_descendants', details: { completeAbsence: false }, createdAt: new Date(NOW).toISOString() });
     target.calls.length = 0;
     assert.equal((await target.cleanup.execute(await target.approved(target.group, 'adgroup'), context)).state, 'deleted');
     assert.equal(target.calls.filter(call => call.startsWith('DELETE ')).length, 1);
