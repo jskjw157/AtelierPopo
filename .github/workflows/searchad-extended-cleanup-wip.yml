@@ -51,6 +51,8 @@ jobs:
           node --check src/naver/searchad/lifecycle/partial-keyword-inventory-contract.js
           node --check src/naver/searchad/lifecycle/partial-keyword-inventory-service.js
           node --check src/naver/searchad/lifecycle/postgres-partial-keyword-inventory-repository.js
+          node --check src/naver/searchad/lifecycle/descendant-inventory-service.js
+          node --check src/naver/searchad/lifecycle/postgres-descendant-inventory-repository.js
           node --test test/searchad-hierarchy-sibling-contract.test.js
           node --test test/postgres-searchad-sibling-create.integration.test.js
           node --test test/searchad-hierarchy-sibling-partial-contract.test.js
