@@ -83,7 +83,13 @@ test('expired never-dispatched campaign plans retire atomically and require expl
     const service = (p = pool) => new Service({ repository: new Repository({ pool: p, dailyBudget: 1000, current: () => current, clock: () => now }), enabled: true });
     const rows = async table => (await pool.query(`SELECT to_jsonb(t) AS data FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows.map(r => r.data);
     const tables = ['searchad_hierarchy_canary_runs', 'searchad_hierarchy_objects', 'searchad_hierarchy_events', 'searchad_write_change_plans', 'searchad_write_approvals', 'searchad_write_attempts', 'searchad_write_locks', 'searchad_remote_object_ownership', 'searchad_risk_reservations', 'searchad_daily_risk_capacity', 'searchad_verification_evidence', 'searchad_activation_grants'];
-    const state = async () => Object.fromEntries(await Promise.all(tables.map(async table => [table, await rows(table)])));
+    const state = async () => {
+      const snapshot = {};
+      // These snapshots are not a concurrency exercise. Avoid opening a full
+      // pool per retained fixture; independent-pool race tests remain below.
+      for (const table of tables) snapshot[table] = await rows(table);
+      return snapshot;
+    };
     const executeInput = (p = plan, a = approval) => ({ customerId: '1001', hierarchyRunId: p.hierarchyRunId, hierarchyObjectId: p.hierarchyObjectId, planId: p.planId, executionToken: a?.executionToken || 'A'.repeat(43) });
     return { pool, makePool, args, creator, approve, approval, plan, scope, service, rows, state, calls, executeInput, activationId, setNow: n => { now = n; }, expire: () => { now = Date.parse(plan.expiresAt); }, rotate: () => { current = { ...identity, credentialFingerprint: 'rotated' }; } };
   }
