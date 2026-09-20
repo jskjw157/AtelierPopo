@@ -1,0 +1,65 @@
+name: HAAR Meta Ads Verification
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths:
+      - 'social-studio/**'
+      - '.github/workflows/meta-ads-verification.yml'
+permissions:
+  contents: read
+concurrency:
+  group: haar-meta-ads-verification
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: haar_ads_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U test -d haar_ads_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://test:test_only@127.0.0.1:5432/haar_ads_test
+      META_ADS_WRITES_ENABLED: 'false'
+      HAAR_MCP_WRITE_TOOLS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install reproducible dependencies
+        working-directory: social-studio
+        run: |
+          if test -f package-lock.json; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - name: Test application and ads safety
+        working-directory: social-studio
+        run: |
+          npm test
+          if test -d test/meta-ads; then node --test test/meta-ads/*.test.mjs; fi
+          npm run check:syntax
+          npm run build
+      - name: Verify Caddy routing regression
+        working-directory: social-studio
+        run: python -m unittest discover -s test -p 'test_*.py'
+      - name: Export source snapshot for isolated implementation
+        if: always()
+        run: |
+          mkdir -p /tmp/haar-export
+          git archive HEAD social-studio docs/superpowers .github/workflows > /tmp/haar-export/source.tar
+          gzip -n /tmp/haar-export/source.tar
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: haar-meta-ads-source
+          path: /tmp/haar-export/source.tar.gz
+          retention-days: 7
