@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci
+      - name: Expired unused campaign plan retirement
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-campaign-plan-retirement.integration.test.js
       - name: Remote absence counterexamples and veto sensitivity
         working-directory: smartstore-bridge
         run: node scripts/verify-searchad-absence-boundary.mjs
