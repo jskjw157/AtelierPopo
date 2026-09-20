@@ -890,7 +890,14 @@ Expected: FAIL.
 
 - [ ] **Step 3: Add MCP dependency and implementation**
 
-Add the current official MCP JS SDK dependency. Mount a Streamable HTTP transport under `/mcp`.
+Install the official MCP JS SDK and mount a Streamable HTTP transport under `/mcp`:
+
+```bash
+cd social-studio
+npm install @modelcontextprotocol/sdk
+```
+
+Use `McpServer` from `@modelcontextprotocol/sdk/server/mcp.js` and `StreamableHTTPServerTransport` from `@modelcontextprotocol/sdk/server/streamableHttp.js`. Commit the exact resolved version in `package-lock.json`.
 
 Use a dedicated bearer credential:
 ```dotenv
@@ -901,7 +908,7 @@ HAAR_TOOL_BEARER_TOKEN=<32+ byte random secret>
 
 Every tool handler calls the same domain function as the browser route. No tool may contain direct `graphPost()` calls.
 
-**Current Pro behavior:** expose/read-test the read/fetch-compatible tools in ChatGPT developer mode. Do not claim that Pro can invoke custom MCP write tools. Keep server-side write tool definitions tested and disabled/not relied on for the current Pro client; the browser UI remains the supported write path until the client/plan supports full MCP writes.
+**Current Pro behavior:** follow OpenAI's current developer-mode limitation documented at `https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt`: expose/read-test the read/fetch-compatible tools in ChatGPT developer mode. Do not claim that Pro can invoke custom MCP write tools. Keep server-side write tool definitions tested and disabled/not relied on for the current Pro client; the browser UI remains the supported write path until the client/plan supports full MCP writes.
 
 - [ ] **Step 4: Run bridge/full tests**
 
