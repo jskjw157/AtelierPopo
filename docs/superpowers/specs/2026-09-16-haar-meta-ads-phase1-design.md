@@ -116,6 +116,16 @@ The intended conversational flow is:
 
 A changed request never inherits a previous approval.
 
+### 3.5 Current ChatGPT Pro client constraint
+
+The backend/tool bridge is implemented so read, draft, approval, and execution operations share one policy surface. However, as of 2026-09-20, OpenAI's current ChatGPT developer-mode documentation says Pro users can connect custom MCPs for read/fetch permissions, while full custom MCP write/modify actions are currently limited to Business and Enterprise/Edu. Therefore Phase 1 must not promise direct custom-MCP write execution from the user's current Pro plan.
+
+Rollout behavior:
+- On the current Pro plan, the custom ChatGPT connection is enabled for read/fetch operations that the client permits.
+- Local draft creation, approval recording, and spend-impacting execution remain fully available through the HAAR Social Studio web UI and server APIs.
+- The remote bridge still implements write-capable server tools behind the same approval gate so they can be enabled without a backend redesign if the user's ChatGPT plan/client gains full MCP write support.
+- No workaround may bypass ChatGPT client permissions, Meta authorization, or the server-side approval gate.
+
 ## 4. Meta authentication and account selection
 
 The existing OAuth flow currently exchanges a user token and then stores Page tokens. Phase 1 preserves the long-lived user credential separately, encrypted with the existing token encryption key. Page credentials continue to serve publishing; the user credential serves advertising APIs.
