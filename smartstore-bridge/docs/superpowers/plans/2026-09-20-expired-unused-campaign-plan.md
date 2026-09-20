@@ -43,11 +43,29 @@ Interfaces:
 - Repository: new PostgresCampaignPlanRetirementRepository({pool,dailyBudget,current,clock}).retire(copiedScope).
 - Result identifies local scope, planStatus expired, runStatus failed, changed boolean, remoteDispatched false, replacementCreated false, requiresNewApproval true.
 
-- [ ] RED: add real producer/PG tests and run focused Actions. Missing new exports must fail the explicit availability assertion; do not report a skipped suite as RED.
-- [ ] GREEN: implement service and repository only after inspecting that failure. Default OFF rejects before DB access; current identity is server-injected and synchronous.
-- [ ] Verify: unapproved and approved expiry, exact time boundary, already-expired plan from approval service, explicit fresh prepare/approval/execution with synthetic transport, old-token denial, scope/role rejection, all prior-work refusal, storage rollback, context/time drift, concurrent calls and COMMIT ambiguity.
-- [ ] Inspect focused and full npm test completed logs. Review changed-file scope. Append exact evidence to PR #28 and Issue #26, without treating this bounded unit as complete #26.
+- [x] RED: add real producer/PG tests and run focused Actions. Missing new exports failed the explicit availability assertion; a skipped suite was not counted as RED.
+- [x] GREEN: implement service and repository only after inspecting that failure. Default OFF rejects before DB access; current identity is server-injected and synchronous.
+- [x] Verify: unapproved and approved expiry, exact time boundary, already-expired plan from approval service, explicit fresh prepare/approval/execution with synthetic transport, old-token denial, scope/role rejection, prior-work refusal cases, storage rollback, context/time drift, concurrent calls and COMMIT ambiguity.
+- [x] Inspect focused and full npm test completed logs. Review changed-file scope. Append exact evidence to PR #28 and Issue #26, without treating this bounded unit as complete #26.
 
 ## Execution ledger
 
-Starting head: 77945a95a3dd7f73bbc235085a18e3e56e73c3d0. Pre-flight: new retirement consumes unchanged producer records and changes only the old plan/run states plus audit; subsequent fresh prepare/approval stays in existing services. No runtime edits are needed to teach creation to ignore old events because the replacement has a new hierarchy run.
+Starting head: `77945a95a3dd7f73bbc235085a18e3e56e73c3d0`. Pre-flight: new retirement consumes unchanged producer records and changes only the old plan/run states plus audit; subsequent fresh prepare/approval stays in existing services. No runtime edits are needed to teach creation to ignore old events because the replacement has a new hierarchy run.
+
+**Task 1: complete — bounded root campaign CREATE plan retirement only.**
+
+- RED `16584c7ec1d6db390924096669e9666498f8d88a`: Actions run `35505108120`, job `106063480005`, explicit `CampaignPlanRetirementService must be implemented` assertion failed because the service did not exist.
+- Implementation `98db1eb52c45ed92c0ddc43fea55e4a793a3b1ad`: first run `35505248401`, job `106063838269`, was NOT green. First12 nested cases passed; retained fixture pools plus parallel12-table snapshots exhausted the PG client limit (`53300: sorry, too many clients already`).
+- Ruling: change only fixture snapshots to sequential table reads rather than raise the server client limit or weaken concurrency tests. Real independent-pool cases remain. Test-only correction `cd3b746ccd8528522efd71a3bdb4f8a76203a5f5`; compare confirms one test file +7/-1 and no production change for the failure.
+- **Verified code/test SHA `cd3b746ccd8528522efd71a3bdb4f8a76203a5f5`: Actions run `35505466878`, job `106064408924`, completed SUCCESS.** Completed decoded logs inspected: retirement integration24 nested plus wrapper = **25/25 PASS**; full bare `npm test` **769 passed / 0 failed / 0 skipped / 0 cancelled**, `1..353` top-level. Focused counts overlap with the full suite.
+- Existing scan PG11/11, scan unit12/12, inventory-to-cleanup fence12/12, sibling/extended cleanup checks and remote-absence disposable negative-control/restoration remained green. Existing action/runtime deprecation and SQLite experimental warnings remain; this is not a warning-free claim.
+- Base-to-verified-head comparison:3 commits, exactly5 files: new service, new repository, new integration test, this plan document and3 added workflow lines. Existing runtime source, schemas, dependencies and gate configuration are unchanged.
+- Durable checkpoint: PR #28 comment `5749291694`; Issue #26 RESUME HERE comment `5749293696`. This ledger update is documentation-only and does not change the tested implementation.
+
+## Acceptance scope and limits
+
+Real migrations, PostgreSQL persistence, existing campaign producer/approval/dispatch code and signed gateway are exercised. Activation rows and upstream transport are synthetic. The explicit replacement acceptance case sends one POST only to fixture transport after its new approval; it is not a live Naver call. No independent review approval or operational lifecycle evidence is claimed.
+
+Local retirement is not an upstream delete, remote absence proof, mutation retry, risk refund or automatic replacement. It retains historical object/approval records. A locally failed retired run does not mean the remote system rejected a request; the eligible request was never dispatched. Uncertain commit acknowledgement is reported as unknown and requires inspecting the same local scope.
+
+Child/sibling-create and cleanup-plan retirement/replanning remain pending. A run containing remote objects must not be terminated using this root-only rule. Deletion-safe remote completeness/consistency and all-writer observation-to-mutation fencing also remain unresolved. No parent cleanup authority, HTTP/bootstrap integration, main merge, deployment, production migration or operational gate change was added. Keep Issue #26 OPEN and PR #28 Draft/unmerged.
