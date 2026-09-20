@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci
+      - name: Remote absence counterexamples and veto sensitivity
+        working-directory: smartstore-bridge
+        run: node scripts/verify-searchad-absence-boundary.mjs
       - name: Bounded inventory scan contracts
         working-directory: smartstore-bridge
         run: |
