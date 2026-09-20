@@ -1,0 +1,31 @@
+name: HAAR Meta Ads Dev Dependencies
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/meta-ads-dev-dependencies.yml']
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve official SDK and test dependencies
+        working-directory: social-studio
+        run: |
+          npm install --save-exact @modelcontextprotocol/sdk --no-audit --no-fund
+          npm install --save-dev --save-exact supertest jsdom @testing-library/react @testing-library/user-event --no-audit --no-fund
+          npm test
+          npm run build
+          tar -czf /tmp/haar-dev-dependencies.tar.gz node_modules package.json package-lock.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haar-meta-ads-dev-dependencies
+          path: /tmp/haar-dev-dependencies.tar.gz
+          retention-days: 3
