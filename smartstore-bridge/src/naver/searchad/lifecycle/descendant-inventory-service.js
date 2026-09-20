@@ -3,6 +3,7 @@ import {
   buildDescendantInventoryDescriptor,
   classifyDescendantInventoryPage
 } from './descendant-inventory-contract.js';
+import { scanDescendantInventory } from './descendant-inventory-scan.js';
 
 const INPUT_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'childType']);
 const CUSTOMER_ID = /^\d{1,30}$/;
@@ -98,6 +99,36 @@ export class DescendantInventoryService {
         );
       }
     }
+  }
+
+  /** Opt-in bounded scan; retain a single repository snapshot across all pages. */
+  async scan(input = {}, context = {}) {
+    const scope = inputScope(input, context);
+    const snapshot = await this.repository.loadSnapshot(scope);
+    if (!snapshot || snapshot.run?.customerId !== scope.customerId ||
+        snapshot.run?.hierarchyRunId !== scope.hierarchyRunId ||
+        snapshot.parentObjectId !== scope.parentObjectId ||
+        snapshot.childType !== scope.childType ||
+        typeof snapshot.parentType !== 'string' || typeof snapshot.parentRemoteId !== 'string') {
+      fail('SEARCHAD_DESCENDANT_INVENTORY_NOT_FOUND', 'Descendant inventory scope was not found.', 404);
+    }
+    const observation = await scanDescendantInventory({
+      scope: {
+        customerId: scope.customerId,
+        parentType: snapshot.parentType,
+        parentRemoteId: snapshot.parentRemoteId,
+        childType: scope.childType
+      },
+      read: this.read,
+      assertCurrent: () => this.assertCurrent(snapshot.run)
+    });
+    const instant = new Date(this.clock());
+    if (!Number.isFinite(instant.getTime())) throw new TypeError('Inventory clock returned an invalid instant');
+    return this.repository.recordObservation(snapshot, {
+      ...observation,
+      remoteIds: [...observation.remoteIds],
+      observedAt: instant.toISOString()
+    });
   }
 
   async inventory(input = {}, context = {}) {

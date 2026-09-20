@@ -4,6 +4,7 @@ import { contentHash } from '../write/canonical.js';
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
 import { PostgresSearchAdLifecycleRepository, _internal as rows } from './postgres-repository.js';
 import { buildDescendantInventoryDescriptor } from './descendant-inventory-contract.js';
+import { validateInventoryScan } from './descendant-inventory-scan.js';
 
 const REMOTE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$/;
 const OBSERVATIONS = new Set(['present_remote_descendants', 'empty_unproven', 'unresolved']);
@@ -214,8 +215,10 @@ function assertInventoryGraph(snapshot) {
   return { parent, descriptor };
 }
 
-function observationInput(observation) {
+function observationInput(observation, childType) {
   const keys = ['kind', 'count', 'remoteIds', 'completeAbsence', 'observedAt'];
+  const hasScan = observation != null && Object.hasOwn(observation, 'scan');
+  if (hasScan) keys.push('scan');
   if (!observation || typeof observation !== 'object' || Array.isArray(observation) ||
       Object.keys(observation).length !== keys.length ||
       Object.keys(observation).some(key => !keys.includes(key)) ||
@@ -236,7 +239,20 @@ function observationInput(observation) {
     fail('SEARCHAD_DESCENDANT_INVENTORY_OBSERVATION_INVALID', 'Inventory observation IDs are invalid.', 400);
   }
 
-  return { ...observation, remoteIds: ids };
+  let scan;
+  if (hasScan) {
+    try {
+      scan = validateInventoryScan(observation.scan, ids.length, childType);
+      const observedEmpty = ['empty_page_observed', 'single_response_observed'].includes(scan.termination);
+      const expectedKind = ids.length ? 'present_remote_descendants' : observedEmpty ? 'empty_unproven' : 'unresolved';
+      if (observation.kind !== expectedKind || observation.remoteIds.some(id => typeof id !== 'string')) {
+        throw new TypeError('Scan classification is inconsistent');
+      }
+    } catch {
+      fail('SEARCHAD_DESCENDANT_INVENTORY_OBSERVATION_INVALID', 'Inventory scan metadata is invalid.', 400);
+    }
+  }
+  return { ...observation, remoteIds: ids, ...(hasScan ? { scan } : {}) };
 }
 
 /**
@@ -287,7 +303,7 @@ export class PostgresDescendantInventoryRepository {
       fail('SEARCHAD_DESCENDANT_INVENTORY_OBSERVATION_INVALID', 'An issued repository snapshot is required.', 400);
     }
 
-    const observation = observationInput(rawObservation);
+    const observation = observationInput(rawObservation, receipt.scope.childType);
 
     return transaction(this.pool, async client => {
       const graph = await rawGraph(client, receipt.scope, true);
@@ -324,7 +340,8 @@ export class PostgresDescendantInventoryRepository {
           completeAbsence: false,
           remoteIdsHash: contentHash([...observation.remoteIds].sort()),
           localMapping: false,
-          cleanupAuthority: false
+          cleanupAuthority: false,
+          ...(observation.scan ? { scan: observation.scan } : {})
         },
         createdAt: observation.observedAt
       });
@@ -338,7 +355,8 @@ export class PostgresDescendantInventoryRepository {
         count: observation.count,
         remoteIds: [...observation.remoteIds],
         completeAbsence: false,
-        changed: false
+        changed: false,
+        ...(observation.scan ? { scan: observation.scan } : {})
       };
     });
   }
