@@ -19,8 +19,11 @@ jobs:
           cp "$PGROOT/bin/"{postgres,pg_ctl,initdb,psql,createdb} /tmp/pg-test-runtime/bin/
           VER=$(basename "$PGROOT")
           cp -a "/usr/share/postgresql/$VER/." /tmp/pg-test-runtime/share/
-          cp -a "$PGROOT/lib/." /tmp/pg-test-runtime/lib/
-          find /tmp/pg-test-runtime/bin /tmp/pg-test-runtime/lib -type f -print0 | xargs -0 -r ldd 2>/dev/null | awk '/=> \/.* \(/{print $3}' | sort -u | while read -r lib; do cp -L -n "$lib" /tmp/pg-test-runtime/lib/; done
+          cp "$PGROOT/lib/plpgsql.so" "$PGROOT/lib/dict_snowball.so" /tmp/pg-test-runtime/lib/
+          ldd /tmp/pg-test-runtime/bin/* /tmp/pg-test-runtime/lib/*.so | awk '/=> \/.* \(/{print $3}' | sort -u | while read -r lib; do
+            case "$(basename "$lib")" in libc.so.*|libm.so.*|libpthread.so.*|librt.so.*|libdl.so.*|ld-linux*) continue;; esac
+            cp -L --update=none "$lib" /tmp/pg-test-runtime/lib/
+          done
           /tmp/pg-test-runtime/bin/postgres --version
           tar -czf /tmp/pg-test-runtime.tar.gz -C /tmp pg-test-runtime
       - uses: actions/upload-artifact@v4
