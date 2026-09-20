@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci
+      - name: Expired unused adgroup plan retirement preserves live parent
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-adgroup-plan-retirement.integration.test.js
       - name: Expired unused campaign plan retirement
         working-directory: smartstore-bridge
         run: node --test test/postgres-searchad-campaign-plan-retirement.integration.test.js
