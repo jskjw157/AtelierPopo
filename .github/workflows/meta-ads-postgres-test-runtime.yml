@@ -1,0 +1,30 @@
+name: HAAR Isolated PostgreSQL Test Runtime
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/meta-ads-postgres-test-runtime.yml']
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Package PostgreSQL test runtime without any user data
+        run: |
+          set -euo pipefail
+          PGROOT=$(find /usr/lib/postgresql -path '*/bin/initdb' -print -quit | sed 's@/bin/initdb@@')
+          test -n "$PGROOT"
+          mkdir -p /tmp/pg-test-runtime/bin /tmp/pg-test-runtime/lib /tmp/pg-test-runtime/share
+          cp "$PGROOT/bin/"{postgres,pg_ctl,initdb,psql,createdb} /tmp/pg-test-runtime/bin/
+          VER=$(basename "$PGROOT")
+          cp -a "/usr/share/postgresql/$VER/." /tmp/pg-test-runtime/share/
+          cp -a "$PGROOT/lib/." /tmp/pg-test-runtime/lib/
+          find /tmp/pg-test-runtime/bin /tmp/pg-test-runtime/lib -type f -print0 | xargs -0 -r ldd 2>/dev/null | awk '/=> \/.* \(/{print $3}' | sort -u | while read -r lib; do cp -L -n "$lib" /tmp/pg-test-runtime/lib/; done
+          /tmp/pg-test-runtime/bin/postgres --version
+          tar -czf /tmp/pg-test-runtime.tar.gz -C /tmp pg-test-runtime
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haar-postgres-test-runtime
+          path: /tmp/pg-test-runtime.tar.gz
+          retention-days: 1
