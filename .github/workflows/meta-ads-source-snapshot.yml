@@ -1,0 +1,30 @@
+name: HAAR Meta Ads Source Snapshot
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/meta-ads-source-snapshot.yml']
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export only the development source, no production credentials
+        run: |
+          set -euo pipefail
+          git ls-tree -r --name-only HEAD social-studio docs/superpowers .github/workflows | grep -E '(^|/)\.env($|\.[^/]*$)' | grep -v '\.example$' > /tmp/unexpected-env || true
+          if [ -s /tmp/unexpected-env ]; then echo 'Unexpected environment file; export blocked'; exit 1; fi
+          git archive --format=tar HEAD social-studio docs/superpowers .github/workflows | gzip > /tmp/haar-ads-source.tar.gz
+          git rev-parse HEAD > /tmp/haar-ads-source-sha.txt
+          sha256sum /tmp/haar-ads-source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haar-meta-ads-source
+          path: |
+            /tmp/haar-ads-source.tar.gz
+            /tmp/haar-ads-source-sha.txt
+          retention-days: 3
