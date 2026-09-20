@@ -40,13 +40,40 @@ Interfaces:
 - Repository receives those five local identifiers plus copied actorPrincipalId; constructor {pool,dailyBudget,current,clock}.
 - Result: local scope, planStatus:'expired', runStatus:'cleanup_pending', changed, targetRemoteDispatched:false, runTerminated:false, replacementCreated:false, requiresNewApproval:true, replanningSupported:false, cleanupAuthority:false.
 
-- [ ] RED: commit tests plus focused CI; inspect the explicit missing-export assertion on real Actions, not a skipped PG suite.
-- [ ] GREEN: implement the two new internal modules, leaving all existing producer/consumer source and schema unchanged.
-- [ ] Verify focused and full regression completed output, including preservation, expiry boundary, old tokens, prior-work refusal, actual committed child claim, rollback, context/time drift, input copying, concurrency and COMMIT ambiguity.
-- [ ] Review exact diff, record evidence and remaining replanning boundary in this ledger, PR #28, Issue #26 and parent tracking where appropriate. Do not close #26.
+- [x] RED: commit tests plus focused CI; inspect the explicit missing-export assertion on real Actions, not a skipped PG suite.
+- [x] GREEN: implement the two new internal modules, leaving all existing producer/consumer source and schema unchanged.
+- [x] Verify focused and full regression completed output, including preservation, expiry boundary, old tokens, prior-work refusal, actual committed child claim, rollback, context/time drift, input copying, concurrency and COMMIT ambiguity.
+- [x] Review exact diff and record canonical evidence and the remaining replanning boundary in this ledger.
+- [ ] Check this documentation successor's CI and synchronize PR #28, Issue #26, Master #23 and PR #24 via checkpoint comments. Those comments are the completion record for this final handoff step; do not close #26 or merge either PR.
 
 ## Execution ledger
 
 Starting head: fa061f110092b460e29e5f687b4ef8634f944008. Its previously pending documentation CI 35505839087/job106065392446 is now completed/success, including full regression.
 
 Pre-flight: existing child producer stores parentRemoteId/parentCreatePlanId/parentAfterHash/activationId in before_json, with immutable adgroup_plan event+attempt. Retirement must consume that exact binding. Existing producer refuses any prior adgroup history and parent cleanup refuses a planned child; this unit preserves both restrictions.
+
+### Canonical implementation checkpoint — 2026-09-20
+
+- RED commit: 242f3b8f91b6d856328f89ecb50dd5016ec4304c, run 35507717250 / job 106070230853. PostgreSQL/setup/dependencies succeeded; the focused test failed on the intended explicit assertion `AdgroupPlanRetirementService must be implemented` (undefined rather than function). 1 test failed, 0 skipped. This is feature-availability RED, not independent mutation sensitivity evidence for every guard.
+- GREEN canonical code/test commit: d7348fd28570c4754335c722c26975ee85b1841b.
+- Canonical workflow: https://github.com/jskjw157/AtelierPopo/actions/runs/35507855918 ; job 106070580554. Completed SUCCESS; decoded completed job logs inspected.
+- New adgroup retirement integration: 32 nested cases plus wrapper = 33/33 passed; 0 failed, skipped or cancelled.
+- Full `npm test`: 802 passed / 0 failed / 0 skipped / 0 cancelled / 0 todo; 354 top-level tests. Full summary at 2026-09-20T11:29:57Z. Focused totals overlap the full count and are not additive.
+- Existing root retirement, remote-absence negative control/restoration, bounded scan, inventory cleanup fences and sibling/extended child-first cleanup steps all succeeded.
+- Exact diff fa061f1..d7348fd: 2 commits, 5 files. New service (41 lines), repository (185), integration test (282), plan document (52), and 3 additive focused CI lines. No existing runtime producer/consumer, migration, dependency or gate configuration was changed.
+
+### Review and verification boundary
+
+The integration fixtures create the parent through the existing CampaignCreateService, independent approval service, signed gateway/client and real PostgreSQL. They then prepare the child through the existing AdgroupCreateService. Authority rows and Naver responses are synthetic. Per-subtest pools/schemas are closed and dropped; sequential table snapshots avoid retaining a growing fan-out of test connections. An independent transport-error accumulator checks assertions even if a service catches an injected transport error, and a global fetch trap rejects accidental external requests.
+
+Executed cases cover exact state preservation; unapproved/approved/already-expired plans; token expiry versus plan expiry; 1ms expiry boundary; default OFF and Admin/Customer/input guards; parent snapshot and child metadata provenance; used tokens, locks, returned IDs, foreign descendants and released child risk; a real committed child claim with zero child POST; a genuinely created child; both audit-insertion rollbacks; final identity/clock drift; copied input/actor during connection acquisition; independent-pool concurrency/reconstruction; both COMMIT-send and COMMIT-acknowledgement failure; tampered prior-retirement proof; suspension/read-write gates OFF; and continued parent-cleanup denial.
+
+Inline review checked the bounded write set, producer-order lock prefix, immutable child/parent bindings, parent-risk preservation and absence of transport/replanning hooks. No independent reviewer, real advertising canary evidence, operational readiness or warning-free execution is claimed. Existing action Node-version deprecation and SQLite experimental warnings remain.
+
+### Resume boundary
+
+This completes only the internal **adgroup plan retirement** unit. Adgroup **replanning is not supported yet**, as explicitly returned by the service. Historical child objects/events still block fresh child prepare and parent cleanup. A successor must introduce proof-validated retirement history/generation selection across the existing adgroup producer, dispatch, sibling and cleanup consumers before it can safely create and independently approve a replacement. Do not just filter out old planned objects or terminate the live hierarchy run.
+
+Keyword/creative sibling retirement and cleanup-plan retirement/replanning remain pending. Remote inventory still does not establish deletion-safe complete absence, and parent cleanup vetoes remain unchanged. No HTTP/bootstrap wiring, evidence issuer, live activation, production mutation or risk refund has been introduced.
+
+This ledger update is documentation-only above canonical d7348fd. The successor commit/run and tracker-comment IDs must be taken from the actual ensuing GitHub results, not inferred in advance. PR #24's recovery branch is separate and does not gain this PR #28 code merely by receiving a tracking comment.
