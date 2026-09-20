@@ -1,0 +1,25 @@
+name: SearchAd isolated development snapshot
+on:
+  push:
+    branches: [codex/searchad-extended-cleanup-20260914]
+    paths: [.github/workflows/searchad-dev-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive only tracked bridge sources from the approved checkpoint
+        run: |
+          git archive --format=tar.gz b57638c096fb520fa12e5c8ca3e0771bd05b718a smartstore-bridge .github > /tmp/searchad-development.tar.gz
+          sha256sum /tmp/searchad-development.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: searchad-development-b57638c
+          path: /tmp/searchad-development.tar.gz
+          retention-days: 1
+          if-no-files-found: error
