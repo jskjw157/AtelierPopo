@@ -22,7 +22,7 @@ function projection(s, changed) {
     parentObjectId: s.parentObjectId, hierarchyObjectId: s.hierarchyObjectId, planId: s.planId,
     planStatus: 'expired', runStatus: 'cleanup_pending', changed, targetRemoteDispatched: false,
     runTerminated: false, replacementCreated: false, requiresNewApproval: true,
-    replanningSupported: false, cleanupAuthority: false });
+    replanningSupported: true, cleanupAuthority: false });
 }
 function eventMatches(e, s, phase, status, lifecycle, details, at) {
   return e && e.customer_id === s.customerId && e.hierarchy_run_id === s.hierarchyRunId &&

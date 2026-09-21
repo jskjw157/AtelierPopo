@@ -46,8 +46,11 @@ export function creationProof(g, node, descriptor) {
   if (!plan || plan.customer_id !== g.run.customer_id || plan.status !== 'applied' || plan.mutation_operation_key !== OPS[node.object_type].create || !equal(plan.mutation_json,descriptor) || !equal(plan.expected_after_json,descriptor.body) || !equal(plan.applied_after_json,snapshot) || plan.applied_after_hash !== contentHash(snapshot) || !equal(plan.read_json,{}) || plan.rollback_json !== null || verified.details_json.planId !== plan.plan_id || result.details_json.returnedIdRecorded !== true || verified.details_json.returnedIdRecorded !== true) problem('PROVENANCE','Target must match the existing producer plan, response ID, snapshot hash and verification.');
   if (node.object_type === 'adgroup') {
     const planned = oneEvent(g,node,'adgroup_plan','planned',OPS.adgroup.create,'create');
-    const meta = { kind:'haar_adgroup_create_v1', customerId:g.run.customer_id, hierarchyRunId:g.run.hierarchy_run_id, hierarchyObjectId:node.hierarchy_object_id, parentObjectId:g.root.hierarchy_object_id, parentRemoteId:g.root.remote_id, parentCreatePlanId:g.rootCreate.plan_id, parentAfterHash:g.rootCreate.applied_after_hash, activationId:planned.details_json.activationId };
-    if (!equal(plan.before_json,meta) || plan.before_hash !== contentHash(meta) || planned.details_json.planId !== plan.plan_id || planned.details_json.beforeHash !== plan.before_hash || planned.details_json.requestFingerprint !== contentHash(descriptor) || result.details_json.returnedSnapshotHash !== plan.applied_after_hash) problem('PROVENANCE','Adgroup creation must retain its exact immutable parent binding.');
+    const generationBinding = g.adgroupGeneration?.activeBinding ?? g.generation?.activeBinding;
+    if (!generationBinding || generationBinding.plan.plan_id !== plan.plan_id || generationBinding.event.event_id !== planned.event_id ||
+        !equal(plan.before_json,generationBinding.meta) || plan.before_hash !== contentHash(generationBinding.meta) ||
+        planned.details_json.planId !== plan.plan_id || planned.details_json.beforeHash !== plan.before_hash ||
+        planned.details_json.requestFingerprint !== contentHash(descriptor) || result.details_json.returnedSnapshotHash !== plan.applied_after_hash) problem('PROVENANCE','Adgroup creation must retain its exact generation and immutable parent/predecessor binding.');
   } else if (!equal(plan.before_json,{}) || plan.before_hash !== contentHash({})) problem('PROVENANCE','Unexpected root creation metadata.');
   return plan;
 }
