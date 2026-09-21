@@ -7,8 +7,11 @@ import { runPostgresMigrations } from '../src/infrastructure/postgres/migrator.j
 import { CampaignCreateService } from '../src/naver/searchad/lifecycle/campaign-create-service.js';
 import { CampaignCleanupService } from '../src/naver/searchad/lifecycle/campaign-cleanup-service.js';
 import { AdgroupCreateService } from '../src/naver/searchad/lifecycle/adgroup-create-service.js';
+import { SiblingCreateService } from '../src/naver/searchad/lifecycle/sibling-create-service.js';
+import { ChildFirstCleanupService } from '../src/naver/searchad/lifecycle/child-first-cleanup-service.js';
 import { PostgresAdgroupCreateRepository } from '../src/naver/searchad/lifecycle/postgres-adgroup-create-repository.js';
 import { adgroupScope, ADGROUP_CREATE_FIELDS } from '../src/naver/searchad/lifecycle/adgroup-create-contract.js';
+import { KEYWORD_FIELDS } from '../src/naver/searchad/lifecycle/sibling-create-contract.js';
 import { PostgresSearchAdWriteRepository } from '../src/naver/searchad/write/postgres-repository.js';
 import { SearchAdApprovalService } from '../src/naver/searchad/write/approval-service.js';
 import { loadSearchAdSpecRegistry } from '../src/naver/searchad/spec-registry.js';
@@ -35,7 +38,7 @@ function intercepted(pool, hook) {
   } };
 }
 
-test('expired unused adgroup retirement preserves the live parent and never authorizes replacement or cleanup', { timeout: 180_000 }, async t => {
+test('expired unused adgroup retirement preserves the live parent and supports one proof-bound replacement generation', { timeout: 180_000 }, async t => {
   const { AdgroupPlanRetirementService: Service } = await feature('../src/naver/searchad/lifecycle/adgroup-plan-retirement-service.js');
   const { PostgresAdgroupPlanRetirementRepository: Repository } = await feature('../src/naver/searchad/lifecycle/postgres-adgroup-plan-retirement-repository.js');
   assert.equal(typeof Service, 'function', 'AdgroupPlanRetirementService must be implemented');
@@ -144,9 +147,60 @@ test('expired unused adgroup retirement preserves the live parent and never auth
     assert.equal(event.details_json.cleanupAuthority, false); assert.equal(event.details_json.parentObjectId, f.root.hierarchyObjectId);
     assert.equal(after.searchad_risk_reservations.length, 1); assert.equal(after.searchad_risk_reservations[0].state, 'consumed');
     await assert.rejects(f.rootCreator.prepare({ customerId: '1001', activationId: f.rootActivation }, context));
-    await assert.rejects(f.creator.prepare(f.prepareInput, context));
     assert.deepEqual(f.calls, []);
   });
+
+  await t.test('exact retirement proof permits one replacement plan with a new approval; the old token cannot authorize it', async st => {
+    const f = await fixture(st, { approved: true });
+    const oldToken = f.approval.executionToken, oldObject = (await f.rows('searchad_hierarchy_objects')).find(o => o.hierarchy_object_id === f.plan.hierarchyObjectId);
+    f.expire(); await f.service().retire(f.scope, context); f.calls.length = 0;
+    const replacement = await f.creator.prepare(f.prepareInput, context);
+    assert.notEqual(replacement.hierarchyObjectId, f.plan.hierarchyObjectId); assert.notEqual(replacement.planId, f.plan.planId);
+    const replacementPlan = (await f.rows('searchad_write_change_plans')).find(p => p.plan_id === replacement.planId);
+    const retiredEvent = (await f.rows('searchad_hierarchy_events')).find(e => e.phase === 'adgroup_plan_retired');
+    assert.deepEqual({ generation: replacementPlan.before_json.generation, predecessorObjectId: replacementPlan.before_json.predecessorObjectId, predecessorPlanId: replacementPlan.before_json.predecessorPlanId, predecessorRetirementEventId: replacementPlan.before_json.predecessorRetirementEventId }, { generation: 2, predecessorObjectId: f.plan.hierarchyObjectId, predecessorPlanId: f.plan.planId, predecessorRetirementEventId: retiredEvent.event_id });
+    assert.deepEqual((await f.rows('searchad_hierarchy_objects')).find(o => o.hierarchy_object_id === f.plan.hierarchyObjectId), oldObject);
+    await assert.rejects(f.creator.execute({ customerId:'1001', hierarchyRunId:replacement.hierarchyRunId, parentObjectId:f.root.hierarchyObjectId, hierarchyObjectId:replacement.hierarchyObjectId, planId:replacement.planId, executionToken:oldToken }, context));
+    assert.deepEqual(f.calls, []);
+    const approval = await f.approve(replacement.planId);
+    const owned = await f.creator.execute({ customerId:'1001', hierarchyRunId:replacement.hierarchyRunId, parentObjectId:f.root.hierarchyObjectId, hierarchyObjectId:replacement.hierarchyObjectId, planId:replacement.planId, executionToken:approval.executionToken }, context);
+    assert.equal(owned.state, 'owned'); assert.equal(owned.hierarchyObjectId, replacement.hierarchyObjectId);
+    assert.deepEqual(f.calls, [`GET /ncc/campaigns/${f.parentRemote.nccCampaignId}`, 'POST /ncc/adgroups', `GET /ncc/adgroups/${owned.remoteId}`]);
+    await assert.rejects(f.creator.prepare(f.prepareInput, context));
+  });
+
+  await t.test('verified replacement is the only adgroup eligible to parent a new sibling plan', async st => {
+    const f = await fixture(st); f.expire(); await f.service().retire(f.scope, context);
+    const replacement = await f.creator.prepare(f.prepareInput, context), approval = await f.approve(replacement.planId);
+    const owned = await f.creator.execute({ customerId:'1001', hierarchyRunId:replacement.hierarchyRunId, parentObjectId:f.root.hierarchyObjectId, hierarchyObjectId:replacement.hierarchyObjectId, planId:replacement.planId, executionToken:approval.executionToken }, context);
+    f.calls.length = 0;
+    const activationId = await f.authority(OPS.keyword.create, KEYWORD_FIELDS, 'batch_create');
+    const sibling = new SiblingCreateService({ ...f.args, keywordTexts:['haar-replan-keyword'] });
+    const plan = await sibling.prepareKeywords({ customerId:'1001', hierarchyRunId:owned.hierarchyRunId, parentObjectId:owned.hierarchyObjectId, activationId }, context);
+    assert.equal(plan.parentObjectId, owned.hierarchyObjectId); assert.equal(plan.state, 'planned'); assert.deepEqual(f.calls, []);
+  });
+
+  await t.test('verified replacement can be selected for cleanup while its retired never-dispatched predecessor stays historical', async st => {
+    const f = await fixture(st); f.expire(); await f.service().retire(f.scope, context);
+    const replacement = await f.creator.prepare(f.prepareInput, context), approval = await f.approve(replacement.planId);
+    const owned = await f.creator.execute({ customerId:'1001', hierarchyRunId:replacement.hierarchyRunId, parentObjectId:f.root.hierarchyObjectId, hierarchyObjectId:replacement.hierarchyObjectId, planId:replacement.planId, executionToken:approval.executionToken }, context);
+    f.calls.length = 0;
+    const activationId = await f.authority(OPS.adgroup.delete, [], 'delete');
+    const cleanup = new ChildFirstCleanupService(f.args);
+    const plan = await cleanup.prepare({ customerId:'1001', hierarchyRunId:owned.hierarchyRunId, hierarchyObjectId:owned.hierarchyObjectId, activationId }, context);
+    assert.equal(plan.hierarchyObjectId, owned.hierarchyObjectId); assert.equal(plan.state, 'planned'); assert.deepEqual(f.calls, []);
+  });
+
+  await t.test('sibling planning rejects an extra adgroup row that has no exact retirement provenance', async st => {
+    const f = await fixture(st); f.expire(); await f.service().retire(f.scope, context);
+    const replacement = await f.creator.prepare(f.prepareInput, context), approval = await f.approve(replacement.planId);
+    const owned = await f.creator.execute({ customerId:'1001', hierarchyRunId:replacement.hierarchyRunId, parentObjectId:f.root.hierarchyObjectId, hierarchyObjectId:replacement.hierarchyObjectId, planId:replacement.planId, executionToken:approval.executionToken }, context);
+    await f.pool.query(`INSERT INTO searchad_hierarchy_objects(hierarchy_object_id,hierarchy_run_id,customer_id,object_type,parent_object_id,create_operation_key,read_operation_key,delete_operation_key,state,created_at,updated_at) VALUES($1,$2,'1001','adgroup',$3,$4,$5,$6,'planned',$7,$7)`, [randomUUID(),owned.hierarchyRunId,f.root.hierarchyObjectId,OPS.adgroup.create,OPS.adgroup.read,OPS.adgroup.delete,new Date(f.now)]);
+    const activationId = await f.authority(OPS.keyword.create, KEYWORD_FIELDS, 'batch_create');
+    const sibling = new SiblingCreateService({ ...f.args, keywordTexts:['haar-replan-keyword'] });
+    const before = await f.state(); await assert.rejects(sibling.prepareKeywords({ customerId:'1001', hierarchyRunId:owned.hierarchyRunId, parentObjectId:owned.hierarchyObjectId, activationId }, context)); assert.deepEqual(await f.state(), before);
+  });
+
   await t.test('retains an unexpired old approval but old approval and execution cannot revive the expired child', async st => {
     const f = await fixture(st, { approved: true }); const old = await f.rows('searchad_write_approvals'); f.expire();
     await f.service().retire(f.scope, context);
