@@ -185,3 +185,107 @@ CREATE TABLE IF NOT EXISTS data_deletion_requests (
   requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS meta_ad_connections (
+  id TEXT PRIMARY KEY,
+  facebook_user_id TEXT,
+  access_token_encrypted TEXT NOT NULL,
+  scopes JSONB NOT NULL DEFAULT '[]'::jsonb,
+  token_expires_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'connected',
+  last_checked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS meta_ad_accounts (
+  id TEXT PRIMARY KEY,
+  external_account_id TEXT NOT NULL UNIQUE,
+  name TEXT,
+  currency TEXT NOT NULL,
+  timezone_name TEXT,
+  account_status INTEGER,
+  business_id TEXT,
+  selected BOOLEAN NOT NULL DEFAULT FALSE,
+  last_synced_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_meta_ad_accounts_one_selected
+  ON meta_ad_accounts ((selected)) WHERE selected = TRUE;
+
+CREATE TABLE IF NOT EXISTS meta_ad_drafts (
+  id TEXT PRIMARY KEY,
+  client_request_id TEXT NOT NULL UNIQUE,
+  source_type TEXT NOT NULL,
+  product_id TEXT REFERENCES products(id) ON DELETE SET NULL,
+  post_variant_id TEXT REFERENCES post_variants(id) ON DELETE SET NULL,
+  media_asset_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  campaign_name TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  landing_url TEXT,
+  call_to_action TEXT,
+  primary_text TEXT NOT NULL DEFAULT '',
+  headline TEXT NOT NULL DEFAULT '',
+  audience JSONB NOT NULL DEFAULT '{}'::jsonb,
+  placements JSONB NOT NULL DEFAULT '{}'::jsonb,
+  start_at TIMESTAMPTZ,
+  end_at TIMESTAMPTZ,
+  budget_type TEXT NOT NULL,
+  budget_amount_minor BIGINT NOT NULL,
+  currency TEXT NOT NULL,
+  tracking JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL DEFAULT 'draft',
+  external_campaign_id TEXT,
+  external_adset_id TEXT,
+  external_creative_id TEXT,
+  external_ad_id TEXT,
+  last_error TEXT,
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS meta_ad_action_requests (
+  id TEXT PRIMARY KEY,
+  action_type TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_local_id TEXT,
+  target_external_id TEXT,
+  canonical_payload JSONB NOT NULL,
+  payload_hash TEXT NOT NULL,
+  summary JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  requested_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  approved_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  approved_at TIMESTAMPTZ,
+  executed_at TIMESTAMPTZ,
+  external_response JSONB,
+  sanitized_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS meta_ad_insight_snapshots (
+  id TEXT PRIMARY KEY,
+  external_account_id TEXT NOT NULL,
+  level TEXT NOT NULL,
+  external_object_id TEXT,
+  date_start DATE NOT NULL,
+  date_stop DATE NOT NULL,
+  spend_minor BIGINT,
+  impressions BIGINT,
+  reach BIGINT,
+  clicks BIGINT,
+  ctr NUMERIC(18,6),
+  cpc_minor BIGINT,
+  cpm_minor BIGINT,
+  purchases NUMERIC(18,4),
+  purchase_value_minor BIGINT,
+  roas NUMERIC(18,6),
+  raw_supported_metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
+  sync_error TEXT,
+  captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
