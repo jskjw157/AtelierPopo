@@ -130,7 +130,7 @@ test('expired unused adgroup retirement preserves the live parent and supports o
   await t.test('retires only the child plan and appends non-authorizing audits without ending the parent run', async st => {
     const f = await fixture(st); f.expire(); const before = await f.state();
     const result = await f.service().retire(f.scope, context);
-    assert.deepEqual(result, { customerId: '1001', hierarchyRunId: f.plan.hierarchyRunId, parentObjectId: f.root.hierarchyObjectId, hierarchyObjectId: f.plan.hierarchyObjectId, planId: f.plan.planId, planStatus: 'expired', runStatus: 'cleanup_pending', changed: true, targetRemoteDispatched: false, runTerminated: false, replacementCreated: false, requiresNewApproval: true, replanningSupported: false, cleanupAuthority: false });
+    assert.deepEqual(result, { customerId: '1001', hierarchyRunId: f.plan.hierarchyRunId, parentObjectId: f.root.hierarchyObjectId, hierarchyObjectId: f.plan.hierarchyObjectId, planId: f.plan.planId, planStatus: 'expired', runStatus: 'cleanup_pending', changed: true, targetRemoteDispatched: false, runTerminated: false, replacementCreated: false, requiresNewApproval: true, replanningSupported: true, cleanupAuthority: false });
     const after = await f.state();
     for (const table of Object.keys(before).filter(k => !['searchad_write_change_plans','searchad_write_attempts','searchad_hierarchy_events'].includes(k))) assert.deepEqual(after[table], before[table], table);
     const oldPlan = before.searchad_write_change_plans.find(p => p.plan_id === f.plan.planId);
