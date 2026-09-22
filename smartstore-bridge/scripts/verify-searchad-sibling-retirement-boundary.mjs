@@ -52,7 +52,7 @@ try {
   const topLevel = [...negative.output.matchAll(/^not ok \d+ - (.+)$/gm)].map(m => m[1]);
   assert.deepEqual(nested, expectedFailures, negative.output);
   assert.deepEqual(topLevel, [wrapper], negative.output);
-  assert.equal((negative.output.match(/error: 'Missing expected rejection\.'/g) || []).length, expectedFailures.length, negative.output);
+  assert.equal((negative.output.match(/^\s*error: 'Missing expected rejection(?: \(retirementError\))?\.'\s*$/gm) || []).length, expectedFailures.length, negative.output);
 } finally {
   // Never leave the weakened production source in the checkout, including on
   // an assertion/timeout failure. Full regression runs only after restoration.
