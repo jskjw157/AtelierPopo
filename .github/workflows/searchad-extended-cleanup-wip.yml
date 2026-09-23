@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci
+      - name: PostgreSQL sibling replacement and cleanup
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-sibling-replan-cleanup.integration.test.js
       - name: Sibling plan retirement and atomic-batch veto sensitivity
         working-directory: smartstore-bridge
         run: node scripts/verify-searchad-sibling-retirement-boundary.mjs
