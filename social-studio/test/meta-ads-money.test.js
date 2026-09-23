@@ -12,3 +12,10 @@ describe('Meta ads money', () => {
     expect(fromMinorUnits(1999, 'USD')).toBe(19.99);
   });
 });
+
+it.each([['0.5','KRW'], ['1.001','USD'], ['1','ZZZ'], ['-1','USD'], [true,'USD'], ['', 'USD'], ['9007199254740992','KRW']])('rejects ambiguous or invalid budget %s %s', (amount,currency) => {
+  expect(() => toMinorUnits(amount,currency)).toThrow();
+});
+it.each([null, '', true, '1.1', '9007199254740992'])('rejects invalid stored minor units %s', value => {
+  expect(() => fromMinorUnits(value,'USD')).toThrow();
+});

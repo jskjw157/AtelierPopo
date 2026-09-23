@@ -112,12 +112,12 @@ export async function debugToken(inputToken) {
   });
 }
 
-export function buildMetaOAuthUrl(state) {
+export function buildMetaOAuthUrl(state, { scopes = config.meta.scopes } = {}) {
   const url = new URL(`https://www.facebook.com/${config.meta.graphVersion}/dialog/oauth`);
   url.searchParams.set('client_id', config.meta.appId);
   url.searchParams.set('redirect_uri', config.meta.redirectUri);
   url.searchParams.set('state', state);
-  url.searchParams.set('scope', config.meta.scopes.join(','));
+  url.searchParams.set('scope', scopes.join(','));
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('auth_type', 'rerequest');
   return url.toString();

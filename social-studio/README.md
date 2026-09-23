@@ -102,3 +102,7 @@ find server -name '*.js' -print0 | xargs -0 -n1 node --check
 
 - [Meta 개발자 연동](docs/META_SETUP_KO.md)
 - [Hostinger VPS 배포](docs/HOSTINGER_DEPLOY_KO.md)
+
+## Meta 광고 관리
+
+`/ads`에서 광고계정 연결, 성과 조회, 상품 링크 포함 초안, 승인된 상태/예산 변경을 관리합니다. 집행 기능은 `META_ADS_WRITES_ENABLED=false`가 기본이며, 별도 광고 OAuth와 활성 owner 역할이 필요합니다. 운영 경계·제한·MCP 인증·검증 절차는 [META_ADS_PHASE1.md](docs/META_ADS_PHASE1.md)를 확인하세요.

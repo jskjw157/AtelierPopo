@@ -43,6 +43,7 @@ import { publishVariant, runDuePosts } from './publish/service.js';
 import { listAnalytics, syncVariantAnalytics } from './analytics.js';
 
 const router = express.Router();
+const appVersion = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const httpUrl = z.string().url().refine((value) => ['http:', 'https:'].includes(new URL(value).protocol), 'HTTP 또는 HTTPS URL만 허용됩니다.');
 const nullableUrl = z.union([httpUrl, z.literal(''), z.null()]).optional();
@@ -130,7 +131,8 @@ router.get('/api/health', asyncRoute(async (_req, res) => {
     coreMissing: coreMissingConfig(),
     coreErrors: coreConfigErrors(),
     metaMissing: metaMissingConfig(),
-    version: process.env.npm_package_version || '0.1.0'
+    version: appVersion,
+    features: { metaAds: true, adsExecutionEnabled: config.ads.allowWrites }
   });
 }));
 
@@ -476,6 +478,7 @@ router.get('/api/meta/callback', asyncRoute(async (req, res) => {
     return res.redirect(`/accounts?meta_error=${message}`);
   }
   const pendingId = await finishMetaOAuth({ code: req.query.code, state: req.query.state });
+  if (pendingId?.adsConnected) return res.redirect('/ads?connected=1');
   return res.redirect(`/accounts?meta_pending=${encodeURIComponent(pendingId)}`);
 }));
 

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   Activity, BarChart3, CalendarDays, ChevronLeft, ChevronRight, FileImage,
-  LayoutDashboard, LogOut, Menu, Package, PenSquare, Plug, Settings, X
+  LayoutDashboard, LogOut, Menu, Package, PenSquare, Plug, Settings, X, Megaphone
 } from 'lucide-react';
 import { api, classNames } from '../lib/api.js';
 
@@ -14,6 +14,7 @@ const links = [
   ['/products', '상품', Package],
   ['/accounts', '계정 연동', Plug],
   ['/analytics', '성과', BarChart3],
+  ['/ads', '광고 관리', Megaphone],
   ['/activity', '활동 기록', Activity],
   ['/settings', '설정', Settings]
 ];

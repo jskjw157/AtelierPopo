@@ -7,7 +7,10 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { config, coreMissingConfig, coreConfigErrors } from './config.js';
 import { migrate, bootstrapAdmin, bootstrapBrandProfile, pool } from './db.js';
-import { optionalAuth } from './auth.js';
+import { optionalAuth, requireAuth, requireCsrf } from './auth.js';
+import { adsServices } from './meta/ads/instance.js';
+import { createAdsRouter } from './meta/ads/routes.js';
+import { createAdsMcpRouter } from './meta/ads/mcp.js';
 import passwordRoutes from './password-routes.js';
 import routes from './routes.js';
 import { errorHandler, notFound } from './http.js';
@@ -50,6 +53,8 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false, limit: '100kb' }));
 app.use(optionalAuth);
 app.use(passwordRoutes);
+app.use('/api/meta/ads', requireAuth, requireCsrf, createAdsRouter(adsServices));
+app.use('/mcp', createAdsMcpRouter({ ...config.tools, appBaseUrl: config.appBaseUrl, services: adsServices }));
 app.use(routes);
 
 const distPath = path.resolve('dist');
@@ -62,7 +67,7 @@ try {
   app.use((req, res, next) => {
     if (
       req.method !== 'GET' ||
-      req.path.startsWith('/api/') ||
+      req.path.startsWith('/api/') || req.path.startsWith('/mcp') ||
       req.path.startsWith('/public-media/')
     ) {
       return next();

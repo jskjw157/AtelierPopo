@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { adsServices } from './ads/instance.js';
 import { config, metaMissingConfig } from '../config.js';
 import { query, transaction, audit } from '../db.js';
 import { AppError } from '../http.js';
@@ -32,23 +33,29 @@ async function consumeOAuthState(state) {
      WHERE state_hash = $1
        AND consumed_at IS NULL
        AND expires_at > NOW()
-     RETURNING user_id`,
+     RETURNING user_id, purpose`,
     [sha256(state)]
   );
   if (!result.rowCount) {
     throw new AppError(400, 'OAUTH_STATE_INVALID', 'Meta 연결 요청이 만료되었거나 유효하지 않습니다.');
   }
-  return result.rows[0].user_id;
+  return result.rows[0];
 }
 
 export async function finishMetaOAuth({ code, state }) {
   if (!code || !state) {
     throw new AppError(400, 'OAUTH_CALLBACK_INVALID', 'Meta 인증 응답에 필요한 값이 없습니다.');
   }
-  const userId = await consumeOAuthState(state);
+  const authorization = await consumeOAuthState(state);
+  const userId = authorization.user_id;
   const shortToken = await exchangeCodeForToken(code);
   const longToken = await exchangeForLongLivedToken(shortToken.access_token);
   const userAccessToken = longToken.access_token;
+  if (authorization.purpose === 'ads') {
+    const tokenInfo = (await debugToken(userAccessToken)).data;
+    await adsServices.auth.saveCredential(userId, { accessToken: userAccessToken, tokenInfo });
+    return { adsConnected: true };
+  }
 
   const pagesResponse = await graphGet('/me/accounts', userAccessToken, {
     fields: 'id,name,access_token,tasks,instagram_business_account{id,username,name,profile_picture_url}',

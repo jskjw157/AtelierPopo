@@ -9,6 +9,7 @@ import CalendarPage from './pages/CalendarPage.jsx';
 import LibraryPage from './pages/LibraryPage.jsx';
 import ProductsPage from './pages/ProductsPage.jsx';
 import AccountsPage from './pages/AccountsPage.jsx';
+import AdsPage from './pages/AdsPage.jsx';
 import AnalyticsPage from './pages/AnalyticsPage.jsx';
 import ActivityPage from './pages/ActivityPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/accounts" element={<AccountsPage />} />
+          <Route path="/ads" element={<AdsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/settings" element={<SettingsPage />} />

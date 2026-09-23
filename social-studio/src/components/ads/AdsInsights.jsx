@@ -1,0 +1,10 @@
+import {amount,date} from './format.js';
+const columns=[['spend','광고비'],['impressions','노출'],['clicks','전체 클릭'],['ctr','CTR'],['cpc','CPC'],['cpm','CPM'],['purchases','구매'],['purchaseValue','구매액'],['roas','ROAS']];
+function metric(row,key){const v=row[key];if(v==null)return '데이터 없음';if(['spend','cpc','cpm','purchaseValue'].includes(key))return amount(v,row.currency);if(key==='roas')return Number(v).toFixed(2)+'×';return Number(v).toLocaleString('ko-KR',{maximumFractionDigits:4})+(key==='ctr'?'%':'');}
+export function AdsInsights({data,range,onRange,onSync,busy}){
+ return <section className="panel"><div className="ads-heading"><div><span className="eyebrow">PERFORMANCE</span><h2>광고 성과</h2><p>계정 시간대: {data?.timezone||'계정 선택 후 확인'} · 구매 데이터가 없으면 수익률을 추정하지 않습니다.</p></div></div>
+  <div className="ads-filters"><label>시작일<input type="date" value={range.since} onChange={e=>onRange({...range,since:e.target.value})}/></label><label>종료일<input type="date" value={range.until} onChange={e=>onRange({...range,until:e.target.value})}/></label><label>조회 단위<select value={range.level} onChange={e=>onRange({...range,level:e.target.value})}><option value="account">계정</option><option value="campaign">캠페인</option><option value="adset">광고세트</option><option value="ad">광고</option></select></label><button className="button button-primary" onClick={onSync} disabled={busy}>Meta 성과 동기화</button></div>
+  <p className="helper">마지막 동기화: {data?.capturedAt?date(data.capturedAt,data.timezone):'이 기간의 동기화 기록 없음'} · 최대 93일. 전체 클릭 기준, Meta의 광고세트 기여 설정을 사용합니다.</p>
+  {data?.rows?.length?<div className="ads-table-scroll"><table className="ads-table"><thead><tr><th>대상</th>{columns.map(([key,label])=><th key={key}>{label}</th>)}</tr></thead><tbody>{data.rows.map((row,i)=><tr key={row.adId||row.adsetId||row.campaignId||i}><th>{row.adName||row.adsetName||row.campaignName||'계정 전체'}{row.warnings?.length?<small className="text-warning">일부 전환 지표 확인 필요</small>:null}</th>{columns.map(([key])=><td key={key}>{metric(row,key)}</td>)}</tr>)}</tbody></table></div>:<p>{data?.capturedAt?'이 기간에 반환된 광고 성과가 없습니다.':'기간을 정하고 동기화해 주세요.'}</p>}
+ </section>;
+}

@@ -38,7 +38,8 @@ export async function transaction(callback) {
 
 export async function migrate() {
   const sql = await fs.readFile(new URL('./schema.sql', import.meta.url), 'utf8');
-  await pool.query(sql);
+  const adsSql = await fs.readFile(new URL('./meta/ads/schema.sql', import.meta.url), 'utf8');
+  await transaction(async client => { await client.query(sql); await client.query(adsSql); });
 }
 
 export async function bootstrapAdmin() {

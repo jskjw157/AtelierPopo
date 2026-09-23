@@ -1,8 +1,8 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
-COPY package.json ./
-RUN npm install --no-audit --no-fund
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build && npm prune --omit=dev
 

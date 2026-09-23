@@ -7,3 +7,10 @@ describe('approval payload canonicalization', () => {
     expect(canonicalize({ b: 2, a: 1 })).toBe('{"a":1,"b":2}');
   });
 });
+
+it.each([NaN,Infinity,undefined,{a:undefined},{a:NaN},new Date(),[undefined]])('rejects lossy non-JSON approval input %#', value => {
+  expect(() => canonicalize(value)).toThrow();
+});
+it('preserves array order and nested changes in the approval hash', () => {
+  expect(payloadHash({a:[1,2]})).not.toBe(payloadHash({a:[2,1]}));
+});

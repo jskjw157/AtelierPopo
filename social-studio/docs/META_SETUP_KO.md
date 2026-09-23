@@ -73,3 +73,7 @@ Meta 데이터 삭제 콜백은 `signed_request`의 HMAC-SHA256 서명을 검증
 - `permission_error`: 필요한 권한이 토큰 디버그 결과에 없음
 - `expired`: 토큰 만료 또는 Meta 오류 코드 190
 - `INSTAGRAM_NOT_CONNECTED`: 선택한 Page에 연결된 프로페셔널 계정이 없음
+
+## 9. 광고용 연결
+
+광고 관리는 게시 OAuth와 별도 목적의 연결을 사용합니다. `/ads`의 **Meta 광고 권한 연결**로 `ads_read,ads_management`를 승인한 후 계정을 조회·선택합니다. 동일한 `/api/meta/callback`을 사용하므로 별도의 콜백 URI를 임의로 만들지 않습니다. 광고 권한이 없더라도 기존 Page/Instagram 게시 권한은 별개로 유지합니다. 자세한 배포/집행 잠금/추적/ChatGPT 인증 경계는 `META_ADS_PHASE1.md`를 확인하세요.

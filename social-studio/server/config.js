@@ -45,6 +45,8 @@ export const config = {
   cronSecret: process.env.CRON_SECRET || '',
   uploadDir: path.resolve(process.env.UPLOAD_DIR || './data/uploads'),
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES || 100 * 1024 * 1024),
+  ads: { allowWrites: process.env.META_ADS_WRITES_ENABLED === 'true' },
+  tools: { bearerToken: process.env.HAAR_TOOL_BEARER_TOKEN || '', actorId: process.env.HAAR_TOOL_ACTOR_ID || '' },
   meta: {
     graphVersion: process.env.META_GRAPH_VERSION || 'v26.0',
     appId: process.env.META_APP_ID || '',
