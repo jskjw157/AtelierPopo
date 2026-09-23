@@ -1,0 +1,63 @@
+name: HAAR Meta Ads Hostinger Read-only Preflight
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/meta-ads-hostinger-preflight.yml']
+permissions:
+  contents: read
+concurrency:
+  group: haar-social-studio-hostinger
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/feat/haar-meta-ads-phase1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Check existing deployment without modifying it
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_PRIVATE_KEY"
+          mkdir -p ~/.ssh /tmp/haar-preflight
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/haar_hostinger
+          chmod 600 ~/.ssh/haar_hostinger
+          ssh -i ~/.ssh/haar_hostinger -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" 'if [ "$(id -u)" = 0 ]; then exec bash -s; else exec sudo -n bash -s; fi' <<'REMOTE' | tee /tmp/haar-preflight/report.json
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, shutil, subprocess, urllib.request
+          root=pathlib.Path('/opt/haar-social-studio/app')
+          assert root.is_dir() and (root/'.env').is_file(), 'Existing deployment required'
+          def out(*args): return subprocess.check_output(args,text=True).strip()
+          ids=out('docker','ps','-q','--filter','label=com.docker.compose.service=app').split()
+          matches=[]
+          for cid in ids:
+              c=json.loads(out('docker','inspect',cid))[0]
+              labels=c['Config'].get('Labels',{})
+              if labels.get('com.docker.compose.project.working_dir')==str(root): matches.append(c)
+          assert len(matches)==1, 'Expected exactly one current Social Studio app'
+          c=matches[0]; project=c['Config']['Labels']['com.docker.compose.project']
+          dbids=out('docker','ps','-q','--filter',f'label=com.docker.compose.project={project}','--filter','label=com.docker.compose.service=database').split()
+          assert len(dbids)==1, 'Expected one existing database'
+          db=json.loads(out('docker','inspect',dbids[0]))[0]
+          with urllib.request.urlopen('http://127.0.0.1:3100/api/health',timeout=15) as r: health=json.load(r)
+          assert health.get('status')=='ok' and health.get('database')=='ok', 'Existing health check must pass'
+          report={'operation':'read_only_preflight','project':project,'workingDirectory':str(root),'appContainer':c['Id'],'appImage':c['Image'],'appPorts':c['NetworkSettings']['Ports'],'appMounts':[{'type':m['Type'],'name':m.get('Name'),'destination':m['Destination']} for m in c['Mounts']],'databaseContainer':db['Id'],'databaseMounts':[{'type':m['Type'],'name':m.get('Name'),'destination':m['Destination']} for m in db['Mounts']],'health':health,'freeBytes':shutil.disk_usage(root).free,'composeVersion':out('docker','compose','version','--short'),'hasComposeOverride':any((root/p).exists() for p in ['compose.override.yml','compose.override.yaml','docker-compose.override.yml','docker-compose.override.yaml']),'existingPackageVersion':json.loads((root/'package.json').read_text()).get('version'),'modifiedProduction':False}
+          print(json.dumps(report,indent=2))
+          PY
+          REMOTE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: haar-meta-ads-hostinger-preflight
+          path: /tmp/haar-preflight
+          retention-days: 7
+      - name: Remove runner SSH material
+        if: always()
+        run: rm -f ~/.ssh/haar_hostinger
