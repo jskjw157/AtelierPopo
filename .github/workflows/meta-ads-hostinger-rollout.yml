@@ -1,0 +1,87 @@
+name: HAAR Meta Ads Guarded Hostinger Rollout
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/meta-ads-hostinger-rollout.yml']
+permissions:
+  contents: read
+concurrency:
+  group: haar-social-studio-hostinger
+  cancel-in-progress: false
+jobs:
+  rollout:
+    if: github.ref == 'refs/heads/feat/haar-meta-ads-phase1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SOURCE_SHA: d59bc2bc10f7588b012a228d389c1dd3737c55e1
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify deployment gates and pinned release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/feat/haar-meta-ads-phase1
+          git merge-base --is-ancestor "$SOURCE_SHA" HEAD
+          python3 .github/ops/test_meta_ads_rollout.py
+          python3 -m py_compile .github/ops/meta_ads_rollout.py
+          mkdir -p /tmp/haar-rollout-report
+          git archive "$SOURCE_SHA" social-studio | gzip -n > "/tmp/haar-meta-ads-${GITHUB_RUN_ID}.tar.gz"
+          cp .github/ops/meta_ads_rollout.py "/tmp/haar-meta-ads-${GITHUB_RUN_ID}.py"
+          sha256sum "/tmp/haar-meta-ads-${GITHUB_RUN_ID}.tar.gz" > /tmp/haar-rollout-report/source.sha256
+      - name: Transfer code only using existing SSH deployment connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_PRIVATE_KEY"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/haar_hostinger
+          chmod 600 ~/.ssh/haar_hostinger
+          scp -i ~/.ssh/haar_hostinger -P "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new "/tmp/haar-meta-ads-${GITHUB_RUN_ID}.tar.gz" "/tmp/haar-meta-ads-${GITHUB_RUN_ID}.py" "$SSH_USER@$SSH_HOST:/tmp/"
+      - name: Build and switch application with rollback; preserve Caddy and existing volumes
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIGEST=$(sha256sum "/tmp/haar-meta-ads-${GITHUB_RUN_ID}.tar.gz" | cut -d' ' -f1)
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]] && [[ "$DIGEST" =~ ^[a-f0-9]{64}$ ]]
+          ssh -i ~/.ssh/haar_hostinger -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=20 -o ServerAliveCountMax=6 -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" "if [ \"\$(id -u)\" = 0 ]; then python3 /tmp/haar-meta-ads-${GITHUB_RUN_ID}.py '${GITHUB_RUN_ID}' '${DIGEST}'; else sudo -n python3 /tmp/haar-meta-ads-${GITHUB_RUN_ID}.py '${GITHUB_RUN_ID}' '${DIGEST}'; fi" 2>&1 | tee /tmp/haar-rollout-report/deployment.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path('/tmp/haar-rollout-report')
+          lines=(path/'deployment.log').read_text().splitlines()
+          reports=[json.loads(line.split('=',1)[1]) for line in lines if line.startswith('HAAR_ROLLOUT_REPORT=')]
+          if len(reports)!=1 or reports[0].get('result')!='deployed' or reports[0].get('adsExecutionEnabled') is not False:
+              raise SystemExit('Missing verified deployment report')
+          (path/'verified-deployment.json').write_text(json.dumps(reports[0],indent=2)+'\n')
+          PY
+      - name: Public endpoint verification from a separate network
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 -H 'Cache-Control: no-cache' https://social.haarapp.tech/api/health > /tmp/haar-rollout-report/public-health.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          h=json.loads(Path('/tmp/haar-rollout-report/public-health.json').read_text())
+          assert h['status']=='ok' and h['database']=='ok' and h['version']=='0.2.0'
+          assert h['features']['metaAds'] is True and h['features']['adsExecutionEnabled'] is False
+          print('Public HAAR 0.2.0 verified; paid-delivery gate closed.')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: haar-meta-ads-hostinger-rollout
+          path: /tmp/haar-rollout-report
+          retention-days: 14
+      - name: Remove runner SSH material
+        if: always()
+        run: rm -f ~/.ssh/haar_hostinger
