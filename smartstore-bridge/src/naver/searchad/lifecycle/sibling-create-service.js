@@ -5,6 +5,7 @@ import { credentialFingerprintForCustomer } from '../canary/credential-fingerpri
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
 import { PostgresSiblingCreateRepository } from './postgres-sibling-create-repository.js';
 import { siblingScope } from './sibling-create-contract.js';
+import { siblingReplanScope } from './sibling-replan-scope.js';
 
 const ORIGIN='https://api.searchad.naver.com';
 const fail=(code,message,status=409)=>{const e=new Error(message);e.code=`SEARCHAD_SIBLING_${code}`;e.status=status;throw e;};
@@ -28,6 +29,8 @@ export class SiblingCreateService {
   #gate(descriptor){this.#identity(descriptor.customerId);const op=this.#registry.get(descriptor.operationKey);this.#gateway.canaryExecutionCheck(op,{...descriptor,confirmation:op.confirmation});for(const key of [OPS.campaign.read,OPS.adgroup.read,OPS.keyword.read,OPS.creative.read])this.#gateway.executionCheck(this.#registry.get(key),{customerId:descriptor.customerId});}
   async prepareKeywords(input={},context={}){this.#on();return this.#store.prepare(siblingScope(input,context,'prepare'),'keywords');}
   async prepareCreative(input={},context={}){this.#on();return this.#store.prepare(siblingScope(input,context,'prepare'),'creative');}
+  async replanKeywords(input={},context={}){this.#on();return this.#store.prepareReplacement(siblingReplanScope(input,context,'keywords'),'keywords');}
+  async replanCreative(input={},context={}){this.#on();return this.#store.prepareReplacement(siblingReplanScope(input,context,'creative'),'creative');}
   async execute(input={},context={}){
     this.#on();const scope=siblingScope(input,context,'execute'),kind=scope.kind;const snapshot=await this.#store.executionSnapshot(scope,kind);const observations=[];
     try{for(const descriptor of snapshot.reads)observations.push(await this.#gateway.execute(descriptor.operationKey,descriptor));}catch{fail('PREFLIGHT','Stopped ancestor/adgroup observation unavailable; no token/risk consumed.');}
