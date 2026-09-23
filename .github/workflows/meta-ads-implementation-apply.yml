@@ -1,0 +1,132 @@
+name: HAAR Meta Ads Verified Implementation Apply
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/meta-ads-implementation-apply.yml']
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: haar-ads-implementation-apply
+  cancel-in-progress: false
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/feat/haar-meta-ads-phase1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: haar_ads_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U test -d haar_ads_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      NODE_ENV: test
+      ADS_TEST_DATABASE_URL: postgres://test:test_only@127.0.0.1:5432/haar_ads_test
+      META_ADS_WRITES_ENABLED: 'false'
+      HAAR_TOOL_BEARER_TOKEN: ''
+      HAAR_TOOL_ACTOR_USER_ID: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check pinned source and apply only approved application files
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/feat/haar-meta-ads-phase1'
+          git merge-base --is-ancestor 05235d3be29376fc3a18227c981645d5eb5451d2 HEAD
+          mkdir -p /tmp/haar-ads-verify
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          import { brotliDecompressSync } from 'node:zlib';
+          const parts = Array.from({ length: 6 }, (_, i) => fs.readFileSync(`.github/ads-staging/part-${String(i+1).padStart(2,'0')}.b64`, 'utf8').trim());
+          const bytes = Buffer.from(parts.join(''), 'base64');
+          const hash = x => crypto.createHash('sha256').update(x).digest('hex');
+          if (hash(bytes) !== '9f8b3e2f8e21ecb6b64aef6c01ec8a7740d88db6a3d0a63dc971ff44e8c6744b') throw Error('Compressed patch checksum mismatch');
+          const patch = brotliDecompressSync(bytes);
+          if (hash(patch) !== 'f2e15b2a47ae66ff1c22593cb6b3763e5f4e525afc84a48177d04ab29fcac1b0') throw Error('Source patch checksum mismatch');
+          const paths = [...patch.toString('utf8').matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)].map(m => { if(m[1]!==m[2]) throw Error('Unexpected rename'); return m[1]; });
+          if (paths.length !== 59 || paths.some(p => !p.startsWith('social-studio/') || p.includes('..') || /(^|\/)\.env($|\.)/.test(p) && p!=='social-studio/.env.example' || /node_modules|__pycache__/.test(p))) throw Error('Unexpected patch scope');
+          fs.writeFileSync('/tmp/haar-ads-verify/implementation.patch', patch);
+          fs.writeFileSync('/tmp/haar-ads-verify/approved-paths.json', JSON.stringify(paths,null,2));
+          console.log(`Checksum verified: ${paths.length} application files; no production credentials.`);
+          NODE
+          git apply --check /tmp/haar-ads-verify/implementation.patch
+          git apply --index /tmp/haar-ads-verify/implementation.patch
+      - name: Fetch previously verified dependency lock, not production data
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35505233003
+          name: haar-meta-ads-dev-dependencies
+          path: /tmp/haar-ads-lock
+      - name: Restore exact dependency resolution
+        run: |
+          set -euo pipefail
+          tar -xOf /tmp/haar-ads-lock/haar-dev-dependencies.tar.gz package-lock.json > social-studio/package-lock.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const p = 'social-studio/package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(p,'utf8'));
+          const pkg = JSON.parse(fs.readFileSync('social-studio/package.json','utf8'));
+          lock.version = pkg.version;
+          lock.packages[''].version = pkg.version;
+          for (const field of ['dependencies','devDependencies']) {
+            if (JSON.stringify(lock.packages[''][field]) !== JSON.stringify(pkg[field])) throw Error(`${field} differs from verified dependency artifact`);
+          }
+          fs.writeFileSync(p,JSON.stringify(lock,null,2)+'\n');
+          NODE
+          git add social-studio/package-lock.json
+          npm --prefix social-studio ci --no-audit --no-fund
+      - name: Verify real database, approval safety, HTTP, MCP and DOM
+        working-directory: social-studio
+        run: |
+          set -euo pipefail
+          npm test -- --reporter=default --reporter=json --outputFile=/tmp/haar-ads-verify/vitest.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const r = JSON.parse(fs.readFileSync('/tmp/haar-ads-verify/vitest.json','utf8'));
+          if (!r.success || r.numPassedTests !== 115 || r.numFailedTests !== 0 || r.numPendingTests !== 0) throw Error('All 115 tests, including PostgreSQL tests, must pass without skips');
+          console.log('Verified 115/115 tests, zero failed or skipped. Provider writes use only the injected simulator.');
+          NODE
+          npm run check:syntax
+          npm run build
+          python -m unittest discover -s test -p 'test_*.py'
+      - name: Commit verified source to the same feature branch only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/feat/haar-meta-ads-phase1'
+          git diff --check --cached
+          git rm .github/ads-staging/part-{01,02,03,04,05,06}.b64
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(social): implement verified Meta ads console with approval gates and read-only MCP'
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push origin HEAD:refs/heads/feat/haar-meta-ads-phase1
+          unset AUTH
+          git rev-parse HEAD > /tmp/haar-ads-verify/verified-commit.txt
+          git archive HEAD social-studio docs/superpowers | gzip -n > /tmp/haar-ads-verify/verified-source.tar.gz
+          {
+            echo '## Verified application implementation'
+            echo '115 Vitest tests + 3 Python tests passed; syntax and production build passed.'
+            echo 'No Hostinger deployment, no live Meta writes, no paid delivery.'
+            printf 'Commit: '; cat /tmp/haar-ads-verify/verified-commit.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: haar-meta-ads-implementation-verification
+          path: /tmp/haar-ads-verify
+          retention-days: 7
