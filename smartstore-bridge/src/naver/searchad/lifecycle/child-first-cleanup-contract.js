@@ -55,7 +55,7 @@ export function creationProof(g, node, descriptor) {
   return plan;
 }
 
-/** Verify one actual bounded sibling producer result. */
+/** Verify one actual bounded sibling producer result, after complete generation selection. */
 export function siblingCreationProof(g) {
   const leaves = g.leaves || [];
   if (!leaves.length) return null;
@@ -63,11 +63,12 @@ export function siblingCreationProof(g) {
   if (types.length !== 1 || !['keyword','creative'].includes(types[0]) || (types[0] === 'creative' && leaves.length !== 1)) problem('PROVENANCE','Only one verified sibling producer result is supported.');
   const type = types[0], kind = type === 'keyword' ? 'keywords' : 'creative';
   const lifecycle = type === 'keyword' ? 'batch_create' : 'create', operation = OPS[type].create;
-  const planned = g.events.filter(event => event.phase === 'sibling_plan' && event.status === 'planned' && event.operation_key === operation && event.lifecycle_kind === lifecycle && record(event.details_json));
+  const generation = g.siblingGeneration?.active;
+  const planned = g.events.filter(event => event.phase === 'sibling_plan' && event.status === 'planned' && event.operation_key === operation && event.lifecycle_kind === lifecycle && record(event.details_json) && (!generation || event.details_json.planId === generation.planId));
   if (planned.length !== 1 || planned[0].details_json.kind !== kind || !UUID.test(String(planned[0].details_json.planId || ''))) problem('PROVENANCE','One exact sibling producer plan event is required.');
   const event = planned[0], plan = g.plans.find(item => item.plan_id === event.details_json.planId);
   const objectIds = leaves.map(node => node.hierarchy_object_id);
-  if (!plan || plan.customer_id !== g.run.customer_id || plan.status !== 'applied' || !sameSet(event.details_json.objectIds,objectIds)) problem('PROVENANCE','Sibling producer plan and owned leaves must agree.');
+  if (!plan || plan.customer_id !== g.run.customer_id || plan.status !== 'applied' || !sameSet(event.details_json.objectIds,objectIds) || (generation && (!equal(generation.objectIds,objectIds) || generation.generation !== 2))) problem('PROVENANCE','Sibling producer plan and ordered current leaves must agree.');
   const parent = { customerId:g.run.customer_id, hierarchyRunId:g.run.hierarchy_run_id, objectType:'adgroup', state:'owned', remoteId:g.child.remote_id };
   let recipe, descriptor;
   if (type === 'keyword') {
@@ -80,7 +81,7 @@ export function siblingCreationProof(g) {
     recipe = createHierarchyChildRecipe({creative:{type:'TEXT_45',headline:body.ad.headline,description:body.ad.description,pcFinal:body.ad.pc.final,mobileFinal:body.ad.mobile.final}});
     descriptor = recipe.createCreative({customerId:g.run.customer_id,hierarchyRunId:g.run.hierarchy_run_id,parent});
   }
-  const meta = { kind:`haar_${kind}_create_v1`, customerId:g.run.customer_id, hierarchyRunId:g.run.hierarchy_run_id, parentObjectId:g.child.hierarchy_object_id, parentRemoteId:g.child.remote_id, rootObjectId:g.root.hierarchy_object_id, rootRemoteId:g.root.remote_id, activationId:event.details_json.activationId, objectIds:event.details_json.objectIds };
+  const meta = generation ? generation.metadata : { kind:`haar_${kind}_create_v1`, customerId:g.run.customer_id, hierarchyRunId:g.run.hierarchy_run_id, parentObjectId:g.child.hierarchy_object_id, parentRemoteId:g.child.remote_id, rootObjectId:g.root.hierarchy_object_id, rootRemoteId:g.root.remote_id, activationId:event.details_json.activationId, objectIds:event.details_json.objectIds };
   const applied = leaves.map(node => ({objectType:node.object_type,remoteId:node.remote_id,parentObjectId:g.child.hierarchy_object_id}));
   const result = g.events.filter(item => item.phase === 'sibling_create_result' && item.details_json?.planId === plan.plan_id);
   const verified = g.events.filter(item => item.phase === 'sibling_create_verification' && item.details_json?.planId === plan.plan_id);
@@ -94,20 +95,21 @@ export function siblingQuarantineProof(g) {
   const leaves=g.leaves||[];
   if(leaves.length<2||leaves.some(node=>node.object_type!=='keyword'))problem('PROVENANCE','Partial quarantine cleanup supports keyword batches only.');
   const operation=OPS.keyword.create,lifecycle='batch_create',kind='keywords';
-  const planned=g.events.filter(event=>event.phase==='sibling_plan'&&event.status==='planned'&&event.operation_key===operation&&event.lifecycle_kind===lifecycle&&record(event.details_json));
+  const generation=g.siblingGeneration?.active;
+  const planned=g.events.filter(event=>event.phase==='sibling_plan'&&event.status==='planned'&&event.operation_key===operation&&event.lifecycle_kind===lifecycle&&record(event.details_json)&&(!generation||event.details_json.planId===generation.planId));
   if(planned.length!==1||planned[0].details_json.kind!==kind||!UUID.test(String(planned[0].details_json.planId||''))||!Array.isArray(planned[0].details_json.objectIds)||planned[0].details_json.objectIds.length!==leaves.length)problem('PROVENANCE','One exact partial sibling producer plan is required.');
   const event=planned[0],plan=g.plans.find(item=>item.plan_id===event.details_json.planId),objectIds=leaves.map(node=>node.hierarchy_object_id);
-  if(!plan||plan.customer_id!==g.run.customer_id||plan.status!=='manual_review'||!sameSet(event.details_json.objectIds,objectIds))problem('PROVENANCE','Partial producer plan and local leaves must agree.');
+  if(!plan||plan.customer_id!==g.run.customer_id||plan.status!=='manual_review'||!sameSet(event.details_json.objectIds,objectIds)||(generation&&(!equal(generation.objectIds,objectIds)||generation.generation!==2)))problem('PROVENANCE','Partial producer plan and ordered current leaves must agree.');
   if(!Array.isArray(plan.mutation_json?.body)||plan.mutation_json.body.length!==leaves.length||plan.mutation_json.body.some(item=>!record(item)||Object.keys(item).length!==1||typeof item.keyword!=='string'||!item.keyword.trim()))problem('PROVENANCE','Partial keyword producer request shape is invalid.');
   const parent={customerId:g.run.customer_id,hierarchyRunId:g.run.hierarchy_run_id,objectType:'adgroup',state:'owned',remoteId:g.child.remote_id};
   const recipe=createHierarchyChildRecipe({keywordTexts:plan.mutation_json.body.map(item=>item.keyword)}),descriptor=recipe.createKeywords({customerId:g.run.customer_id,hierarchyRunId:g.run.hierarchy_run_id,parent});
-  const meta={kind:'haar_keywords_create_v1',customerId:g.run.customer_id,hierarchyRunId:g.run.hierarchy_run_id,parentObjectId:g.child.hierarchy_object_id,parentRemoteId:g.child.remote_id,rootObjectId:g.root.hierarchy_object_id,rootRemoteId:g.root.remote_id,activationId:event.details_json.activationId,objectIds:event.details_json.objectIds};
+  const meta=generation?generation.metadata:{kind:'haar_keywords_create_v1',customerId:g.run.customer_id,hierarchyRunId:g.run.hierarchy_run_id,parentObjectId:g.child.hierarchy_object_id,parentRemoteId:g.child.remote_id,rootObjectId:g.root.hierarchy_object_id,rootRemoteId:g.root.remote_id,activationId:event.details_json.activationId,objectIds:event.details_json.objectIds};
   const results=g.events.filter(item=>item.phase==='sibling_create_result'&&item.details_json?.planId===plan.plan_id),verified=g.events.filter(item=>item.phase==='sibling_create_verification'&&item.details_json?.planId===plan.plan_id);
   const result=results[0],quarantined=result?.details_json?.quarantined;
   if(plan.mutation_operation_key!==operation||!equal(plan.mutation_json,descriptor)||!equal(plan.expected_after_json,descriptor.body)||!equal(plan.before_json,meta)||plan.before_hash!==contentHash(meta)||plan.rollback_json!==null||plan.applied_at!==null||plan.applied_after_json!==null||plan.applied_after_hash!==null||event.details_json.beforeHash!==plan.before_hash||event.details_json.requestFingerprint!==contentHash(descriptor)||results.length!==1||verified.length!==0||result.hierarchy_object_id!==event.details_json.objectIds[0]||result.customer_id!==g.run.customer_id||result.status!=='partial_ids_recorded'||result.operation_key!==operation||result.lifecycle_kind!==lifecycle||result.details_json?.kind!==kind||result.details_json?.returnedIdsRecorded!==true||result.details_json?.partial!==true||!Array.isArray(quarantined)||quarantined.length<1||quarantined.length>=leaves.length||result.details_json.count!==quarantined.length)problem('PROVENANCE','Partial result must remain manual-review and bind only explicit returned IDs.');
   const indexes=new Set(),localIds=new Set(),remoteIds=new Set(),known=new Map();
   for(const item of quarantined){
-    if(!record(item)||Object.keys(item).length!==3||!Number.isInteger(item.index)||item.index<0||item.index>=descriptor.body.length||typeof item.objectId!=='string'||!UUID.test(item.objectId)||typeof item.remoteId!=='string'||!REMOTE.test(item.remoteId)||indexes.has(item.index)||localIds.has(item.objectId)||remoteIds.has(item.remoteId)||!event.details_json.objectIds.includes(item.objectId))problem('PROVENANCE','Partial quarantine mapping is malformed or ambiguous.');
+    if(!record(item)||Object.keys(item).length!==3||!Number.isInteger(item.index)||item.index<0||item.index>=descriptor.body.length||typeof item.objectId!=='string'||!UUID.test(item.objectId)||typeof item.remoteId!=='string'||!REMOTE.test(item.remoteId)||indexes.has(item.index)||localIds.has(item.objectId)||remoteIds.has(item.remoteId)||!event.details_json.objectIds.includes(item.objectId)||(generation&&event.details_json.objectIds[item.index]!==item.objectId))problem('PROVENANCE','Partial quarantine mapping is malformed or ambiguous.');
     const leaf=leaves.find(node=>node.hierarchy_object_id===item.objectId),hold=g.holds.find(h=>h.hierarchy_object_id===item.objectId);
     const allowed=(leaf?.state==='manual_review'&&hold?.state==='manual_review')||(leaf?.state==='delete_pending'&&hold?.state==='delete_unknown')||(leaf?.state==='delete_unknown'&&hold?.state==='delete_unknown')||(leaf?.state==='deleted'&&hold?.state==='deleted');
     if(!leaf||leaf.remote_id!==item.remoteId||leaf.parent_object_id!==g.child.hierarchy_object_id||!hold||hold.customer_id!==g.run.customer_id||hold.object_type!=='keyword'||hold.remote_id!==item.remoteId||hold.owner_kind!=='hierarchy_canary'||hold.owner_run_id!==g.run.hierarchy_run_id||hold.hierarchy_object_id!==item.objectId||hold.parent_hierarchy_object_id!==g.child.hierarchy_object_id||hold.created_operation_key!==operation||!allowed||(leaf.state==='deleted')!==Number.isFinite(epoch(leaf.deleted_at)))problem('PROVENANCE','Known partial leaf must match its immutable quarantine mapping and hold.');
