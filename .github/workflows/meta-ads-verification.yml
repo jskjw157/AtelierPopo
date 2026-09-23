@@ -28,6 +28,7 @@ jobs:
     env:
       NODE_ENV: test
       DATABASE_URL: postgres://test:test_only@127.0.0.1:5432/haar_ads_test
+      ADS_TEST_DATABASE_URL: postgres://test:test_only@127.0.0.1:5432/haar_ads_test
       META_ADS_WRITES_ENABLED: 'false'
       HAAR_MCP_WRITE_TOOLS: 'false'
     steps:
