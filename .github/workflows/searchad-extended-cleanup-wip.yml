@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci
+      - name: Expired unused cleanup plan retirement and replacement
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-cleanup-plan-replanning.integration.test.js
       - name: PostgreSQL sibling replacement and cleanup
         working-directory: smartstore-bridge
         run: node --test test/postgres-searchad-sibling-replan-cleanup.integration.test.js
