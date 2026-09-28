@@ -9,9 +9,10 @@ import { adgroupResponse } from './adgroup-create-contract.js';
 import { keywordReadResponse, creativeResponse } from './sibling-create-contract.js';
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
 import { hasUnprovenInventory } from './inventory-cleanup-fence.js';
-import { problem, IDENTITY, UUID, REMOTE, epoch, active, creationProof, siblingCreationProof, siblingQuarantineProof, cleanupMetadata, targetDescriptor, fullTarget, cleanupBinding, claimedProof, deletedProof } from './child-first-cleanup-contract.js';
+import { problem, IDENTITY, UUID, REMOTE, epoch, active, creationProof, siblingCreationProof, siblingQuarantineProof, cleanupMetadata, targetDescriptor, fullTarget, claimedProof } from './child-first-cleanup-contract.js';
 import { resolveAdgroupGenerationHistory } from './adgroup-generation-contract.js';
 import { selectSiblingCleanupGeneration } from './sibling-cleanup-generation.js';
+import { cleanupBinding, deletedProof, assertUnusedCleanupPlan, assertCleanupTargetUntouched, cleanupRetirementProof, cleanupRetirementDetails, cleanupReplacementProof, replacementCleanupMetadata, CLEANUP_RETIREMENT_REASON } from './cleanup-plan-lifecycle.js';
 
 function presentNode(g,node,observation){
   if(observation?.kind!=='present')return false;
@@ -104,6 +105,7 @@ export class PostgresChildFirstCleanupRepository {
     g.target=objects.find(o=>o.hierarchy_object_id===s.hierarchyObjectId);
     if(!g.target||g.target===predecessor||retiredSiblingIds.includes(s.hierarchyObjectId))problem('NOT_FOUND','A historical never-dispatched object cannot be selected for cleanup.',404);
     g.hold=holds.find(h=>h.hierarchy_object_id===g.target.hierarchy_object_id);
+    g.cleanupNow=this.#now();
     this.#identity(run);return g;
   }
   #available(g) {
@@ -156,6 +158,41 @@ export class PostgresChildFirstCleanupRepository {
     await this.#authority(c,g,s.activationId,this.#now());if(this.#now()>=Date.parse(expiresAt))problem('EXPIRED','Planning authority expired before commit.');
     return {...this.#view(g,scope),state:'planned',expiresAt,requiredConfirmation:this.#confirm(g.target.object_type),requiredSecondConfirmation:fullTarget(s.customerId,g.target)};
   });}
+  async retirePlan(input){
+    const s=Object.freeze({...input});
+    return this.#tx(async c=>{
+      const g=await this.#graph(c,s),now=this.#now(),b=cleanupBinding(g,g.target,s.planId,{allowRetired:true});
+      assertCleanupTargetUntouched(g,g.target);assertUnusedCleanupPlan(g,g.target,b,now);
+      const previous=cleanupRetirementProof(g,g.target,b,now);
+      const result=changed=>({...this.#view(g,s),planStatus:'expired',changed,targetRemoteDispatched:false,replacementCreated:false,requiresNewApproval:true,cleanupAuthority:false});
+      if(previous){this.#identity(g.run);if(this.#now()<now)problem('CLOCK','Server clock moved backwards.');return result(false);}
+      const details=cleanupRetirementDetails(b,g.target,s.actorPrincipalId,b.plan.status),at=new Date(now).toISOString();
+      await c.query("UPDATE searchad_write_change_plans SET status='expired',last_error_json=$2::jsonb WHERE plan_id=$1",[s.planId,JSON.stringify(CLEANUP_RETIREMENT_REASON)]);
+      await c.query(`INSERT INTO searchad_hierarchy_events(event_id,hierarchy_run_id,hierarchy_object_id,customer_id,phase,status,operation_key,lifecycle_kind,details_json,created_at) VALUES($1,$2,$3,$4,'tree_cleanup_plan_retired','expired_unused',$5,NULL,$6::jsonb,$7)`,[randomUUID(),s.hierarchyRunId,s.hierarchyObjectId,s.customerId,b.mutation.operationKey,JSON.stringify(details),at]);
+      await c.query(`INSERT INTO searchad_write_attempts(attempt_id,plan_id,phase,status,response_json,created_at) VALUES($1,$2,'tree_cleanup_plan_retired','expired_unused',$3::jsonb,$4)`,[randomUUID(),s.planId,JSON.stringify(details),at]);
+      const after=await this.#graph(c,s),finalNow=this.#now();
+      if(finalNow<now)problem('CLOCK','Server clock moved backwards during retirement.');
+      const settled=cleanupBinding(after,after.target,s.planId,{allowRetired:true});
+      if(!cleanupRetirementProof(after,after.target,settled,finalNow))problem('RETIREMENT_PROVENANCE','Retirement did not retain its exact audit proof.');
+      this.#identity(after.run);return result(true);
+    });
+  }
+  async replan(input){
+    const s=Object.freeze({...input});
+    return this.#tx(async c=>{
+      const g=await this.#graph(c,s);this.#available(g);
+      const now=this.#now(),proof=cleanupReplacementProof(g,g.target,s.predecessorPlanId,now);
+      const until=await this.#authority(c,g,s.activationId,now);
+      const scope={...s,planId:randomUUID()},meta=replacementCleanupMetadata(g,g.target,s.activationId,proof),d=targetDescriptor(s.customerId,g.target,'delete'),read=targetDescriptor(s.customerId,g.target,'read');
+      const at=new Date(now).toISOString(),expiresAt=new Date(Math.min(until,now+this.#ttl*1000)).toISOString();
+      await c.query(`INSERT INTO searchad_write_change_plans(plan_id,customer_id,mutation_operation_key,mutation_json,read_json,before_json,before_hash,expected_after_json,rollback_json,reason,status,created_by,created_at,expires_at) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7,$8::jsonb,NULL,$9,'planned',$10,$11,$12)`,[scope.planId,s.customerId,d.operationKey,JSON.stringify(d),JSON.stringify(read),JSON.stringify(meta),contentHash(meta),JSON.stringify({absent:true,remoteId:g.target.remote_id}),'Explicit replacement of one retired unused cleanup plan; new approval required.',s.actorPrincipalId,at,expiresAt]);
+      await this.#audit(c,g,scope,'tree_cleanup_plan','planned',{activationId:s.activationId,beforeHash:contentHash(meta),requestFingerprint:contentHash(d),actorPrincipalId:s.actorPrincipalId},at);
+      const after=await this.#graph(c,scope);this.#available(after);cleanupBinding(after,after.target,scope.planId);
+      await this.#authority(c,after,s.activationId,this.#now());
+      const end=this.#now();if(end<now||end>=Date.parse(expiresAt))problem('EXPIRED','Replacement context or authority expired before commit.');
+      return {...this.#view(after,scope),state:'planned',expiresAt,requiredConfirmation:this.#confirm(g.target.object_type),requiredSecondConfirmation:fullTarget(s.customerId,g.target)};
+    });
+  }
   async #approved(c,g,s,b){
     this.#available(g);
     if(s.confirmation!==this.#confirm(g.target.object_type)||s.secondConfirmation!==fullTarget(s.customerId,g.target))problem('CONFIRMATION','Exact operation and full target confirmations are required.',400);

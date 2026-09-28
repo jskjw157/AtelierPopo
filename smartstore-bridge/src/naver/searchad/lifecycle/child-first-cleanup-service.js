@@ -6,6 +6,7 @@ import { credentialFingerprintForCustomer } from '../canary/credential-fingerpri
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
 import { PostgresChildFirstCleanupRepository } from './postgres-child-first-cleanup-repository.js';
 import { cleanupScope, problem } from './child-first-cleanup-contract.js';
+import { cleanupMaintenanceScope } from './cleanup-plan-lifecycle.js';
 
 const ORIGIN='https://api.searchad.naver.com';
 /** Bounded, default-OFF, internal deletion only. Not an HTTP route or evidence issuer. */
@@ -46,6 +47,8 @@ export class ChildFirstCleanupService {
     return observation;
   }
   async prepare(input={},context={}){this.#on();return this.#store.prepare(cleanupScope(input,context,'prepare'));}
+  async retirePlan(input={},context={}){this.#on();return this.#store.retirePlan(cleanupMaintenanceScope(input,context,'retire'));}
+  async replan(input={},context={}){this.#on();return this.#store.replan(cleanupMaintenanceScope(input,context,'replan'));}
   async execute(input={},context={}){
     this.#on();const scope=cleanupScope(input,context,'execute');const snapshot=await this.#store.executionSnapshot(scope);
     const observations=[];for(const d of snapshot.reads)observations.push(await this.#read(d,snapshot.identity));
