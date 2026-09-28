@@ -142,7 +142,10 @@ test('replacement generations retain their owning recovery coordinator and read-
       f.unavailableAfterDelete = false; f.calls.length = 0;
       return { old, plan };
     };
-    const client = new NaverSearchAdClient({ baseUrl: f.config.baseUrl, credentialsRegistry: f.credentials, fetchImpl: f.fetchImpl, maxRetries: 0, clock: () => f.now, logger });
+    // The generic consumer accepts an explicit read adapter, not the cleanup
+    // service's private transport wrapper. Apply the same no-redirect policy here.
+    const readFetch = (value, init) => f.fetchImpl(value, { ...init, redirect: 'error' });
+    const client = new NaverSearchAdClient({ baseUrl: f.config.baseUrl, credentialsRegistry: f.credentials, fetchImpl: readFetch, maxRetries: 0, clock: () => f.now, logger });
     f.gateway = new SearchAdOperationGateway({ client, registry: f.registry, credentialsRegistry: f.credentials, config: f.config, logger });
     f.read = descriptor => f.gateway.execute(descriptor.operationKey, descriptor);
     f.generic = (read = f.read, pool = f.pool) => new HierarchyReconcileService({ repository: new PostgresHierarchyReconcileRepository({ pool }), remote: { read }, contextResolver: () => f.identity, clock: () => f.now });
