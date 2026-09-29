@@ -64,7 +64,7 @@ test('account suspension and lifecycle transport initiation share one PostgreSQL
         assert.equal(headers.get('X-Signature'),createHmac('sha256',credentials.resolve('1001').secretKey).update(`${headers.get('X-Timestamp')}.${init.method}.${u.pathname}`).digest('base64'));
         if(init.method==='POST'){
           const body=JSON.parse(init.body),segment=u.pathname.split('/').at(-1),idKey={campaigns:'nccCampaignId',adgroups:'nccAdgroupId',keywords:'nccKeywordId',ads:'nccAdId'}[segment];assert.ok(idKey);
-          const make=x=>{const row={...x,customerId:'1001',[idKey]:`remote-${randomUUID()}`};f.remote.set(`${u.pathname}/${row[idKey]}`,row);return row;};
+          const make=x=>{const row={...x,customerId:'1001',[idKey]:`remote-${randomUUID()}`};if(segment==='keywords')row.nccAdgroupId=u.searchParams.get('nccAdgroupId');f.remote.set(`${u.pathname}/${row[idKey]}`,row);return row;};
           return response(Array.isArray(body)?body.map(make):make(body));
         }
         if(init.method==='DELETE'){f.remote.delete(u.pathname);return response(null,204);}
@@ -99,7 +99,7 @@ test('account suspension and lifecycle transport initiation share one PostgreSQL
       if(type==='keyword'||type==='creative')request.kind=type==='keyword'?'keywords':'creative';
       return {service,plan,request,approval};
     }
-    async function create(type,parent){const r=await readyCreate(type,parent);const owned=await r.service.execute(r.request,context);assert.equal(owned.state,'owned');return owned;}
+    async function create(type,parent){const r=await readyCreate(type,parent);const owned=await r.service.execute(r.request,context);assert.equal(owned.state,'owned');return {...owned,objectIds:r.plan.objectIds};}
     async function target(type,kind){
       if(kind==='create'&&type==='campaign')return readyCreate('campaign');
       const root=await create('campaign');
@@ -109,7 +109,7 @@ test('account suspension and lifecycle transport initiation share one PostgreSQL
         const group=await create('adgroup',root);node=group;
         if(type!=='adgroup'){
           if(kind==='create')return readyCreate(type,group);
-          const leaf=await create(type,group);node={...leaf,hierarchyObjectId:leaf.hierarchyObjectIds[0]};
+          const leaf=await create(type,group);node={...leaf,hierarchyObjectId:leaf.objectIds[0]};
         }
       }
       const service=type==='campaign'?new CampaignCleanupService(args):new ChildFirstCleanupService(args);
@@ -153,7 +153,7 @@ test('account suspension and lifecycle transport initiation share one PostgreSQL
       await assert.rejects(()=>execute(fence,{...init(),headers:{'X-Customer':'1002'}}),code);
       await f.account.suspend('1001',context);await assert.rejects(()=>execute(fence),code);assert.equal(calls,0);
       await fence.fetch(url,{...init(),method:'GET',body:undefined});assert.equal(calls,1);
-      await f.pool.query("DELETE FROM searchad_canary_accounts WHERE customer_id='1001'");await assert.rejects(()=>execute(fence),code);
+      await assert.rejects(()=>fence.run('1003',()=>{},()=>fence.fetch(url,{...init(),headers:{'X-Customer':'1003'}})),code);
       await f.account.resume('1001',context);
     });
     await st.test('a send-first lock blocks suspension until fetch entry, but never waits for its response',async()=>{

@@ -1,5 +1,6 @@
 import { isDeepStrictEqual as equal } from 'node:util';
 import { NaverSearchAdClient } from '../client.js';
+import { PostgresAccountSendFence } from './postgres-account-send-fence.js';
 import { SearchAdOperationGateway } from '../gateway.js';
 import { credentialFingerprintForCustomer } from '../canary/credential-fingerprint.js';
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
@@ -9,16 +10,17 @@ import { adgroupScope, problem } from './adgroup-create-contract.js';
 const ORIGIN = 'https://api.searchad.naver.com';
 /** One internal stopped adgroup under a verified root. Deliberately no HTTP wiring. */
 export class AdgroupCreateService {
-  #enabled; #config; #registry; #credentials; #clock; #gateway; #store;
+  #enabled; #config; #registry; #credentials; #clock; #gateway; #store; #sendFence;
   constructor({ pool, registry, credentialsRegistry, config, enabled = false, dailyBudget, riskUnits, dailyCapacityUnits, planTtlSeconds = 300, preflightMaxAgeMs = 5000, clock = Date.now, fetchImpl = globalThis.fetch, logger = console } = {}) {
     if (typeof pool?.connect !== 'function' || typeof pool?.query !== 'function' || typeof registry?.get !== 'function' || typeof registry?.status !== 'function' || typeof credentialsRegistry?.resolve !== 'function') throw new TypeError('PostgreSQL, pinned registry and current credentials are required');
     if (typeof enabled !== 'boolean' || typeof clock !== 'function' || typeof fetchImpl !== 'function' || config?.baseUrl !== ORIGIN) throw new TypeError('Explicit gate, clock, transport and official origin required');
     for (const value of [dailyBudget, riskUnits, dailyCapacityUnits]) if (!Number.isSafeInteger(value) || value <= 0 || value > 2147483647) throw new TypeError('Positive bounded server policy required');
     if (riskUnits > dailyCapacityUnits || !Number.isSafeInteger(planTtlSeconds) || planTtlSeconds < 60 || planTtlSeconds > 3600 || !Number.isSafeInteger(preflightMaxAgeMs) || preflightMaxAgeMs < 100 || preflightMaxAgeMs > 30000) throw new TypeError('Invalid TTL, observation age or risk policy');
     this.#enabled = enabled; this.#config = config; this.#registry = registry; this.#credentials = credentialsRegistry; this.#clock = clock;
+    this.#sendFence = new PostgresAccountSendFence({pool,fetchImpl});
     const safeFetch = async (url, init) => {
       if (new URL(url).origin !== ORIGIN) throw new Error('Unexpected adgroup origin');
-      const response = await fetchImpl(url, { ...init, redirect: 'error' });
+      const response = await this.#sendFence.fetch(url, { ...init, redirect: 'error' });
       if (response.redirected || (response.status >= 300 && response.status < 400)) throw new Error('Adgroup redirects forbidden');
       return response;
     };
@@ -36,7 +38,7 @@ export class AdgroupCreateService {
       }
       const specSha = this.#registry.status().specRef;
       if (typeof specSha !== 'string' || !specSha) throw new Error();
-      return { specSha, credentialFingerprint: credentialFingerprintForCustomer(this.#credentials,customerId), upstreamBaseUrl: ORIGIN };
+      return { specSha, credentialFingerprint:credentialFingerprintForCustomer(this.#credentials,customerId), upstreamBaseUrl:ORIGIN };
     } catch { problem('CONTEXT', 'Current pinned operations or credential identity are unavailable.', 503); }
   }
   #gate(descriptor) {
@@ -54,11 +56,10 @@ export class AdgroupCreateService {
     const handoff = await this.#store.claim(preflight.ticket,parent);
     let result, unavailable = false;
     try {
-      this.#gate(handoff.descriptor);
-      // No await here, but a different process can still suspend after COMMIT.
-      // This is an at-most-one attempt, not an external exactly-once guarantee.
-      if (!equal(this.#identity(s.customerId),handoff.identity) || this.#clock() >= handoff.validUntil || new Date(this.#clock()).toISOString().slice(0,10) !== handoff.riskDate) throw new Error('Handoff context changed');
-      result = await this.#gateway.executeCanary(OPS.adgroup.create, { ...handoff.descriptor, confirmation: this.#registry.get(OPS.adgroup.create).confirmation });
+      result = await this.#sendFence.run(s.customerId, () => {
+        this.#gate(handoff.descriptor);
+        if (!equal(this.#identity(s.customerId),handoff.identity) || this.#clock() >= handoff.validUntil || new Date(this.#clock()).toISOString().slice(0,10) !== handoff.riskDate) throw new Error('Handoff context changed');
+      }, () => this.#gateway.executeCanary(OPS.adgroup.create, { ...handoff.descriptor, confirmation:this.#registry.get(OPS.adgroup.create).confirmation }));
     } catch { unavailable = true; }
     const captured = await this.#store.capture(handoff.ticket,result,unavailable);
     if (!captured.ticket) return captured.projection;

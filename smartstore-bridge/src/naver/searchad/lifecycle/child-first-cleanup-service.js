@@ -1,5 +1,6 @@
 import { isDeepStrictEqual as equal } from 'node:util';
 import { NaverSearchAdClient } from '../client.js';
+import { PostgresAccountSendFence } from './postgres-account-send-fence.js';
 import { SearchAdOperationGateway } from '../gateway.js';
 import { SearchAdError } from '../errors.js';
 import { credentialFingerprintForCustomer } from '../canary/credential-fingerprint.js';
@@ -11,14 +12,15 @@ import { cleanupMaintenanceScope } from './cleanup-plan-lifecycle.js';
 const ORIGIN='https://api.searchad.naver.com';
 /** Bounded, default-OFF, internal deletion only. Not an HTTP route or evidence issuer. */
 export class ChildFirstCleanupService {
-  #enabled;#registry;#credentials;#config;#clock;#gateway;#store;
+  #enabled;#registry;#credentials;#config;#clock;#gateway;#store;#sendFence;
   constructor({pool,registry,credentialsRegistry,config,enabled=false,dailyBudget,riskUnits,dailyCapacityUnits,planTtlSeconds=300,preflightMaxAgeMs=5000,clock=Date.now,fetchImpl=globalThis.fetch,logger=console}={}){
     if(typeof pool?.connect!=='function'||typeof pool?.query!=='function'||typeof registry?.get!=='function'||typeof registry?.status!=='function'||typeof credentialsRegistry?.resolve!=='function')throw new TypeError('Actual PostgreSQL, pinned registry and current credentials required');
     if(typeof enabled!=='boolean'||typeof clock!=='function'||typeof fetchImpl!=='function'||config?.baseUrl!==ORIGIN)throw new TypeError('Explicit gate, clock, transport and fixed official origin required');
     for(const value of [dailyBudget,riskUnits,dailyCapacityUnits])if(!Number.isSafeInteger(value)||value<=0||value>2147483647)throw new TypeError('Positive bounded server policy required');
     if(riskUnits>dailyCapacityUnits||!Number.isSafeInteger(planTtlSeconds)||planTtlSeconds<60||planTtlSeconds>3600||!Number.isSafeInteger(preflightMaxAgeMs)||preflightMaxAgeMs<100||preflightMaxAgeMs>30000)throw new TypeError('Invalid server TTL, risk or freshness policy');
     this.#enabled=enabled;this.#registry=registry;this.#credentials=credentialsRegistry;this.#config=config;this.#clock=clock;
-    const safeFetch=async(url,init)=>{if(new URL(url).origin!==ORIGIN)throw new Error('Unexpected cleanup origin');const r=await fetchImpl(url,{...init,redirect:'error'});if(r.redirected||(r.status>=300&&r.status<400))throw new Error('Cleanup redirects forbidden');return r;};
+    this.#sendFence=new PostgresAccountSendFence({pool,fetchImpl});
+    const safeFetch=async(url,init)=>{if(new URL(url).origin!==ORIGIN)throw new Error('Unexpected cleanup origin');const r=await this.#sendFence.fetch(url,{...init,redirect:'error'});if(r.redirected||(r.status>=300&&r.status<400))throw new Error('Cleanup redirects forbidden');return r;};
     const client=new NaverSearchAdClient({baseUrl:ORIGIN,credentialsRegistry,fetchImpl:safeFetch,maxRetries:0,clock,logger});
     this.#gateway=new SearchAdOperationGateway({client,registry,credentialsRegistry,config,logger});
     this.#store=new PostgresChildFirstCleanupRepository({pool,dailyBudget,riskUnits,dailyCapacityUnits,planTtlSeconds,preflightMaxAgeMs,clock,current:id=>this.#identity(id),gate:d=>this.#gate(d),confirmation:type=>registry.get(OPS[type].delete).confirmation});
@@ -54,9 +56,11 @@ export class ChildFirstCleanupService {
     const observations=[];for(const d of snapshot.reads)observations.push(await this.#read(d,snapshot.identity));
     const handoff=await this.#store.claim(snapshot.ticket,observations);let status=null;
     try{
-      this.#gate(handoff.descriptor);
-      if(!equal(this.#identity(scope.customerId),handoff.identity)||this.#clock()>=handoff.validUntil||new Date(this.#clock()).toISOString().slice(0,10)!==handoff.riskDate)throw new Error('Dispatch context changed');
-      const response=await this.#gateway.executeCanary(handoff.descriptor.operationKey,this.#transport(handoff.descriptor));status=response.upstream?.status??null;
+      const response=await this.#sendFence.run(scope.customerId,()=>{
+        this.#gate(handoff.descriptor);
+        if(!equal(this.#identity(scope.customerId),handoff.identity)||this.#clock()>=handoff.validUntil||new Date(this.#clock()).toISOString().slice(0,10)!==handoff.riskDate)throw new Error('Dispatch context changed');
+      },()=>this.#gateway.executeCanary(handoff.descriptor.operationKey,this.#transport(handoff.descriptor)));
+      status=response.upstream?.status??null;
     }catch{/* Unknown outcome is read back, never blindly replayed. */}
     await this.#store.recordSend(handoff.ticket,status);
     return this.#observe(scope);
