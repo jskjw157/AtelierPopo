@@ -43,7 +43,9 @@ jobs:
         run: npm ci
       - name: Remaining PostgreSQL writer and Canary suspension fence
         working-directory: smartstore-bridge
-        run: node --test test/postgres-searchad-remaining-send-fence.integration.test.js
+        run: |
+          node --test test/searchad-send-fence-*.test.js test/searchad-postgres-mutation-gateway.test.js
+          node --test test/postgres-searchad-remaining-send-fence.integration.test.js
       - name: Account suspension to lifecycle transport initiation fence
         working-directory: smartstore-bridge
         run: node --test test/postgres-searchad-suspend-send-fence.integration.test.js
