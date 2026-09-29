@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci
+      - name: Account suspension to lifecycle transport initiation fence
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-suspend-send-fence.integration.test.js
       - name: Root-only expired unused DELETE plan retirement and replacement
         working-directory: smartstore-bridge
         run: node --test test/postgres-searchad-root-cleanup-replanning.integration.test.js
