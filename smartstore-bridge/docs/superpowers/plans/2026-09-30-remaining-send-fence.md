@@ -17,7 +17,15 @@
 - Ordinary SQLite runtime and common-risk adoption are outside this change; do not claim all-writer closure.
 
 ## Tasks
-- [ ] Add six real-PostgreSQL regressions: update, rollback, Canary create/update/restore/cleanup. Commit tests first and inspect behavioral RED.
-- [ ] Add explicit method-bound fence scope and private gateway facade; wire only the two PostgreSQL runtime adapters. Fail closed without a supported final transport; never fall back to an unfenced mutation.
-- [ ] Verify no shared-client mutation, wrong-scope/transport/identity rejection, original read recovery, no replay, and prior lifecycle regressions.
-- [ ] Run focused and full CI, inspect exact SHA and counts, review diff, record final evidence on PR without a documentation-only CI loop.
+- [x] Add six real-PostgreSQL regressions: update, rollback, Canary create/update/restore/cleanup. Commit tests first and inspect behavioral RED (c667280, run 36623870145, six expected assertion failures).
+- [x] Add explicit method-bound fence scope and private gateway facade; wire only the two PostgreSQL runtime adapters. Fail closed without a supported final transport; never fall back to an unfenced mutation.
+- [x] Verify no shared-client mutation, wrong-scope/transport/identity rejection, original read recovery, no replay, and prior lifecycle regressions. Initial candidate a522a307 passed the new PG focused step; method tests have local RED/GREEN evidence on exact baseline blob 948e0298.
+- [x] Add distinct account-store composition regression. c5df792 / run 36625161038: 12 adapter/method tests passed, only the wrong-account-store case failed (one unexpected send).
+- [ ] Run final focused and full CI, inspect exact SHA and counts, review diff, record final evidence on PR without a documentation-only CI loop.
+
+## Rulings and limits
+- Native activation repository.pool, not a potentially different write-plan database, is the authority for ordinary runtime account suspension. Repository-free injected guards retain the explicitly supplied pool as their account store; an existing repository without a usable pool fails closed at mutation.
+- Initial Canary uses its own account repository pool; deployment must compose Canary and account-control on the same authoritative store. Cross-database distributed account control is not introduced.
+- No activation-grant expiry redesign, common daily-risk adoption, SQLite fencing, live acceptance, or whole-app restart claim is included.
+- Gateway protocol doubles are replaced with real signing/client transport in the existing successful PG write test. Unsupported abstract mutation transports are rejected, never used as an unfenced fallback.
+- No independent reviewer tool is available; inline review and CI evidence are recorded separately from independent review.

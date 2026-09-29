@@ -43,8 +43,12 @@ export function createProductionSearchAdWriteRuntime({
     repository = new SearchAdWriteRepository({ databasePath: config.databasePath, database });
   }
 
+  // Native activation owns the authoritative account row, even when write plans
+  // use another database. Never substitute a mirror for an existing repository.
+  // Repository-free injected guards retain the supplied pool as their account store.
+  const accountPool = activationGuard?.repository ? activationGuard.repository.pool : mutationPool;
   const remote = new SafeSearchAdGatewayRemoteAdapter({
-    gateway: mutationPool ? createPostgresMutationGateway({ gateway, pool: mutationPool }) : gateway
+    gateway: mutationPool ? createPostgresMutationGateway({ gateway, pool: accountPool }) : gateway
   });
   const approvalService = new SearchAdApprovalService({ repository, config, clock });
   const planService = new SearchAdChangePlanService({ repository, remote, config, clock });
