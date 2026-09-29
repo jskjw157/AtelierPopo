@@ -6,6 +6,7 @@ import { campaignResponse, fail, record } from './postgres-campaign-create-repos
 import { _internal as observations } from './hierarchy-reconcile-service.js';
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
 import { PostgresCampaignCleanupRepository, cleanupScope } from './postgres-campaign-cleanup-repository.js';
+import { rootCleanupMaintenanceScope } from './campaign-cleanup-plan-lifecycle.js';
 
 const ORIGIN='https://api.searchad.naver.com';
 /** Internal campaign-only cleanup. It intentionally does not expose live HTTP/bootstrap routes. */
@@ -53,6 +54,9 @@ export class CampaignCleanupService {
     if(!equal(this.#identity(customerId),snapshot.identity))fail('SEARCHAD_CAMPAIGN_CLEANUP_CONTEXT','Identity changed during cleanup.');
   }
   async prepare(input={},context={}) {this.#on();const s=cleanupScope(input,context,'prepare');return this.#store.prepare(s);}
+  // Local maintenance never dispatches, approves or guesses a remote target.
+  async retire(input={},context={}) {this.#on();return this.#store.retire(rootCleanupMaintenanceScope(input,context,'retire'));}
+  async replan(input={},context={}) {this.#on();return this.#store.replan(rootCleanupMaintenanceScope(input,context,'replan'));}
   async execute(input={},context={}) {
     this.#on();const s=cleanupScope(input,context,'execute');
     const snapshot=await this.#store.executionSnapshot(s);
