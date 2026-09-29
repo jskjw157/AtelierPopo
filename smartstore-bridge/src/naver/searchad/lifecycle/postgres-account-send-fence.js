@@ -33,12 +33,14 @@ export class PostgresAccountSendFence {
     this.#pool = pool; this.#fetch = fetchImpl;
   }
 
-  async run(customerId, validate, task) {
-    if (typeof customerId !== 'string' || !CUSTOMER.test(customerId) || typeof validate !== 'function' || typeof task !== 'function') {
+  async run(customerId, validate, task, method = null) {
+    if (typeof customerId !== 'string' || !CUSTOMER.test(customerId) || typeof validate !== 'function' || typeof task !== 'function' ||
+        (method !== null && !['POST', 'PUT', 'DELETE'].includes(method))) {
       throw fault('INPUT', 'An internal Customer scope and synchronous validator are required.', 400);
     }
     check(validate);
-    const scope = { customerId, validate, open: true, attempted: false };
+    // Legacy callers remain POST/DELETE-only. PUT requires an exact binding.
+    const scope = { customerId, validate, method, open: true, attempted: false };
     return this.#contexts.run(scope, async () => {
       try {
         const result = await task();
@@ -60,7 +62,7 @@ export class PostgresAccountSendFence {
     const scope = this.#contexts.getStore();
     const customerId = new Headers(headers).get('X-Customer');
     if (!scope?.open || scope.attempted || customerId !== scope.customerId ||
-        !['POST', 'DELETE'].includes(method) ||
+        (scope.method ? method !== scope.method : !['POST', 'DELETE'].includes(method)) ||
         (request.body !== undefined && typeof request.body !== 'string')) {
       throw fault('SCOPE', 'A matching unused internal mutation scope is required.');
     }

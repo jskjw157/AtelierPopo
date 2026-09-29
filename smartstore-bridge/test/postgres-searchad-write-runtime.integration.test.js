@@ -6,6 +6,9 @@ import { createPostgresPool, closePostgresPool } from '../src/infrastructure/pos
 import { runPostgresMigrations } from '../src/infrastructure/postgres/migrator.js';
 import { PostgresSearchAdWriteRepository } from '../src/naver/searchad/write/postgres-repository.js';
 import { createProductionSearchAdWriteRuntime } from '../src/naver/searchad/write/runtime-production.js';
+import { SearchAdCredentialsRegistry } from '../src/naver/searchad/auth.js';
+import { NaverSearchAdClient } from '../src/naver/searchad/client.js';
+import { SearchAdOperationGateway } from '../src/naver/searchad/gateway.js';
 
 async function resetSearchAdWriteTables(pool) {
   await pool.query(`
@@ -52,23 +55,27 @@ function gatewayFixture() {
 }
 
 function statefulGatewayFixture() {
-  const operations = new Map([
-    ['fixture.read', { operationKey: 'fixture.read', sideEffect: false }],
-    ['fixture.write', { operationKey: 'fixture.write', sideEffect: true }]
-  ]);
+  // Exercise the real final signed transport, not an unfenceable execute stub.
+  const customerId = BigInt(`0x${randomUUID().replaceAll('-', '').slice(0, 20)}`).toString();
   const state = { id: 'fixture-1', userLock: false };
-  return {
-    state,
-    get(operationKey) { return operations.get(operationKey); },
-    async execute(operationKey, input = {}) {
-      if (operationKey === 'fixture.read') return { body: structuredClone(state) };
-      if (operationKey === 'fixture.write') {
-        Object.assign(state, input.body || {});
-        return { body: structuredClone(state), requestId: 'fixture-write-request' };
-      }
-      throw new Error(`Unexpected fixture operation: ${operationKey}`);
+  const credentialsRegistry = new SearchAdCredentialsRegistry({
+    principals: [{ principalId: 'fixture', accessLicense: 'fixture-license', secretKey: 'fixture-secret', status: 'active' }],
+    customers: [{ customerId, status: 'active' }],
+    grants: [{ principalId: 'fixture', customerId, role: 'admin' }]
+  });
+  const operations = new Map([
+    ['fixture.read', { operationKey: 'fixture.read', method: 'GET', path: '/ncc/campaigns/fixture-1', sideEffect: false, requiredGate: 'reads', runtimeAllowlisted: true, tier: 'B' }],
+    ['fixture.write', { operationKey: 'fixture.write', method: 'PUT', path: '/ncc/campaigns/fixture-1', sideEffect: true, requiredGate: 'writes', runtimeAllowlisted: true, tier: 'B' }]
+  ]);
+  const registry = { get: key => operations.get(key), publicOperation: op => structuredClone(op), status: () => ({ specRef: 'fixture-spec' }) };
+  const config = { enabled: true, configured: true, baseUrl: 'https://api.searchad.naver.com', allowReads: true, allowWrites: true };
+  const client = new NaverSearchAdClient({ baseUrl: config.baseUrl, credentialsRegistry, maxRetries: 0,
+    fetchImpl: async (_url, init) => {
+      if (init.method === 'PUT') Object.assign(state, JSON.parse(init.body));
+      return new Response(JSON.stringify(state), { headers: { 'content-type': 'application/json', 'x-request-id': 'fixture-write-request' } });
     }
-  };
+  });
+  return Object.assign(new SearchAdOperationGateway({ client, config, registry, credentialsRegistry }), { state, customerId });
 }
 
 test('PostgreSQL SearchAd write repository durably persists plans approvals and attempts', async t => {
@@ -187,10 +194,13 @@ test('PostgreSQL production runtime approves and executes a verified one-time-to
   if (!url) return t.skip('TEST_DATABASE_URL is required');
 
   const pool = createPostgresPool({ connectionString: url, sslMode: 'disable' });
+  let customerId;
   try {
     await runPostgresMigrations({ pool, migrationsDir: path.resolve('migrations/postgres') });
     await resetSearchAdWriteTables(pool);
     const gateway = statefulGatewayFixture();
+    customerId = gateway.customerId;
+    await pool.query('INSERT INTO searchad_canary_accounts(customer_id,suspended,updated_at) VALUES($1,false,now())', [customerId]);
     const runtime = createProductionSearchAdWriteRuntime({
       // Authorization is a fixture here; real activation is covered by PostgreSQL composition.
       activationGuard: { async assertMutationAllowed() { return { allowed: true }; } },
@@ -205,7 +215,7 @@ test('PostgreSQL production runtime approves and executes a verified one-time-to
     });
 
     const plan = await runtime.planService.create({
-      customerId: 'customer-postgres-runtime',
+      customerId,
       reason: 'verified PostgreSQL execute path',
       createdBy: 'integration-test',
       mutation: { operationKey: 'fixture.write', body: { userLock: true } },
@@ -219,7 +229,7 @@ test('PostgreSQL production runtime approves and executes a verified one-time-to
       confirmation: 'APPROVE_SEARCHAD_CHANGE'
     });
     const applied = await runtime.executionService.execute(plan.plan_id, {
-      customerId: 'customer-postgres-runtime',
+      customerId,
       executionToken: approval.executionToken,
       idempotencyKey: 'postgres-execute-1'
     });
@@ -232,6 +242,7 @@ test('PostgreSQL production runtime approves and executes a verified one-time-to
     assert.ok(durable.attempts.some(attempt => attempt.phase === 'verify' && attempt.status === 'succeeded'));
   } finally {
     await resetSearchAdWriteTables(pool).catch(() => {});
+    if (customerId) await pool.query('DELETE FROM searchad_canary_accounts WHERE customer_id=$1', [customerId]);
     await closePostgresPool(pool);
   }
 });

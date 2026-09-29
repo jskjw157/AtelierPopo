@@ -1,5 +1,6 @@
 import { createPostgresPool, closePostgresPool } from '../../../infrastructure/postgres/pool.js';
 import { SearchAdWriteError } from '../write/errors.js';
+import { createPostgresMutationGateway } from '../lifecycle/postgres-mutation-gateway.js';
 import { ActiveCanaryService } from './active-canary-service.js';
 import { loadActiveCanaryConfig } from './config.js';
 import { credentialFingerprintForCustomer } from './credential-fingerprint.js';
@@ -130,7 +131,7 @@ export async function createProductionActiveCanaryRuntime({
     await ensureCustomerRows(postgresPool, credentialsRegistry);
     const { specSha, upstreamBaseUrl } = gatewayContext(gateway);
     const repository = new PostgresActiveCanaryRepository({ pool: postgresPool });
-    const remote = new ActiveCanaryGatewayRemoteAdapter({ gateway });
+    const remote = new ActiveCanaryGatewayRemoteAdapter({ gateway: createPostgresMutationGateway({ gateway, pool: postgresPool }) });
     const recipe = createStoppedWebSiteCampaignRecipe({
       dailyBudget: config.dailyBudgetKrw,
       budgetDelta: config.budgetDeltaKrw,

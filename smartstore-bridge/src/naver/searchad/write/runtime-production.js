@@ -6,6 +6,7 @@ import { SearchAdChangePlanService } from './plan-service.js';
 import { SearchAdApprovalService } from './approval-service.js';
 import { ProductionSearchAdExecutionService } from './production-execution-service.js';
 import { SearchAdWriteError } from './errors.js';
+import { createPostgresMutationGateway } from '../lifecycle/postgres-mutation-gateway.js';
 import { createPostgresPool, closePostgresPool } from '../../../infrastructure/postgres/pool.js';
 
 export function createProductionSearchAdWriteRuntime({
@@ -19,6 +20,7 @@ export function createProductionSearchAdWriteRuntime({
 } = {}) {
   const config = loadSearchAdWriteConfig(env, { baseDir });
   let ownedPostgresPool = null;
+  let mutationPool = null;
   let repository;
 
   if (config.storageBackend === 'postgres') {
@@ -35,12 +37,15 @@ export function createProductionSearchAdWriteRuntime({
       sslMode: config.postgresSslMode
     });
     if (!postgresPool) ownedPostgresPool = pool;
+    mutationPool = pool;
     repository = new PostgresSearchAdWriteRepository({ pool });
   } else {
     repository = new SearchAdWriteRepository({ databasePath: config.databasePath, database });
   }
 
-  const remote = new SafeSearchAdGatewayRemoteAdapter({ gateway });
+  const remote = new SafeSearchAdGatewayRemoteAdapter({
+    gateway: mutationPool ? createPostgresMutationGateway({ gateway, pool: mutationPool }) : gateway
+  });
   const approvalService = new SearchAdApprovalService({ repository, config, clock });
   const planService = new SearchAdChangePlanService({ repository, remote, config, clock });
   const executionService = new ProductionSearchAdExecutionService({
