@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci
+      - name: Application account-store binding and restart send fence
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-application-send-fence.integration.test.js
       - name: Remaining PostgreSQL writer and Canary suspension fence
         working-directory: smartstore-bridge
         run: |
