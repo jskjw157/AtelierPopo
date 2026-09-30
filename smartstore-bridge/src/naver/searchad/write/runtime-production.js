@@ -47,8 +47,11 @@ export function createProductionSearchAdWriteRuntime({
   // use another database. Never substitute a mirror for an existing repository.
   // Repository-free injected guards retain the supplied pool as their account store.
   const accountPool = activationGuard?.repository ? activationGuard.repository.pool : mutationPool;
+  // Plan storage is not the account-control authority. SQLite plans using native
+  // activation must use its fence too; a missing native pool must not fall back.
+  const requiresAccountFence = Boolean(mutationPool || activationGuard?.repository);
   const remote = new SafeSearchAdGatewayRemoteAdapter({
-    gateway: mutationPool ? createPostgresMutationGateway({ gateway, pool: accountPool }) : gateway
+    gateway: requiresAccountFence ? createPostgresMutationGateway({ gateway, pool: accountPool }) : gateway
   });
   const approvalService = new SearchAdApprovalService({ repository, config, clock });
   const planService = new SearchAdChangePlanService({ repository, remote, config, clock });
