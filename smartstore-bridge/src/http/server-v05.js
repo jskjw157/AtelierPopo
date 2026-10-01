@@ -29,6 +29,7 @@ import { createSearchAdRoutes } from './routes-searchad.js';
 import { createSearchAdWriteRoutesV3 } from './routes-searchad-write-v3.js';
 import { createSearchAdCanaryRoutes } from './routes-searchad-canary.js';
 import { createSearchAdActivationRoutes } from './routes-searchad-activation.js';
+import { createSearchAdHierarchyRoutes } from './routes-searchad-hierarchy.js';
 import { createMultiSourceCatalogRoutes } from './routes-multi-source-catalog.js';
 import { HttpError } from './errors.js';
 
@@ -80,7 +81,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
   const routes = [
     // Override only v0.5 readiness; legacy servers keep their existing contract.
     route('GET', /^\/health\/ready$/, async ({ req, res }) => {
-      const { ready, searchAdActivation } = api.readiness();
+      const { ready, searchAdActivation, searchAdHierarchy } = api.readiness();
       sendJson(req, res, ready ? 200 : 503, {
         ok: ready,
         status: ready ? 'ready' : 'not_ready',
@@ -90,6 +91,11 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
           required: searchAdActivation.required,
           initialized: searchAdActivation.initialized,
           ready: searchAdActivation.ready
+        },
+        searchAdHierarchy: {
+          required: searchAdHierarchy.required,
+          initialized: searchAdHierarchy.initialized,
+          ready: searchAdHierarchy.ready
         }
       });
     }, { auth: false }),
@@ -102,6 +108,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createSearchAdWriteRoutesV3(routeContext),
     ...createSearchAdCanaryRoutes(routeContext),
     ...createSearchAdActivationRoutes(routeContext),
+    ...createSearchAdHierarchyRoutes(routeContext),
     ...createMultiSourceCatalogRoutes(routeContext)
   ];
 
@@ -227,7 +234,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       const errors = [];
       const resources = new Set([
         app.searchAdWriteRuntime, app.searchAdActiveCanaryRuntime,
-        app.searchAdActivationRuntime, app.ledger
+        app.searchAdHierarchyRuntime, app.searchAdActivationRuntime, app.ledger
       ]);
       for (const resource of resources) {
         try { await resource?.close?.(); } catch (error) { errors.push(error); }
@@ -254,11 +261,16 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       const activationStatus = app.searchAdActivationRuntime?.status?.() || null;
       const activationRequired = Boolean(app.searchAdConfig?.configured);
       const activationReady = activationStatus?.ready === true;
+      const hierarchyStatus = app.searchAdHierarchyRuntime?.status?.() || null;
+      const hierarchyRequired = app.searchAdConfig?.allowActiveCanary === true;
+      const hierarchyReady = hierarchyStatus?.ready === true;
       // Infrastructure readiness is not permission to mutate any Customer.
       // This projection performs no upstream probe or lazy write initialization.
       return {
       ...base,
-      ready: base.readyForRead === true && (!activationRequired || activationReady),
+      ready: base.readyForRead === true &&
+        (!activationRequired || activationReady) &&
+        (!hierarchyRequired || hierarchyReady),
       searchAd: {
         configured: Boolean(app.searchAdConfig?.configured),
         ready: Boolean(app.searchAdGateway),
@@ -295,6 +307,18 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
         status: activationStatus || {
           ready: false, storage: { runtime: 'postgres', schemaReady: false },
           targetOperationCount: 0, targetFieldCount: 0
+        }
+      },
+      searchAdHierarchy: {
+        required: hierarchyRequired,
+        initialized: Boolean(app.searchAdHierarchyRuntime),
+        ready: hierarchyReady,
+        startupError: app.searchAdHierarchyStartupError || null,
+        status: hierarchyStatus || {
+          enabled: false,
+          ready: false,
+          storage: { runtime: 'postgres', schemaReady: false },
+          scope: { campaignCreate: false }
         }
       },
       multiSourceCatalog: {
