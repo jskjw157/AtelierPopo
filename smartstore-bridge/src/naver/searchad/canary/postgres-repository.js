@@ -31,6 +31,7 @@ function evidenceRow(row) {
     upstreamBaseUrl: row.upstream_base_url,
     operationKeys: cloneJson(row.operation_keys_json || []),
     fieldScope: cloneJson(row.field_scope_json || []),
+    lifecycleKinds: cloneJson(row.lifecycle_kinds_json || []),
     result: row.result,
     sourceRunId: row.source_run_id,
     recipeId: row.recipe_id,
@@ -116,9 +117,9 @@ export class PostgresActiveCanaryRepository {
     const result = await this.pool.query(
       `INSERT INTO searchad_verification_evidence (
          evidence_id, evidence_type, customer_id, spec_sha, credential_fingerprint,
-         upstream_base_url, operation_keys_json, field_scope_json, result,
+         upstream_base_url, operation_keys_json, field_scope_json, lifecycle_kinds_json, result,
          source_run_id, recipe_id, created_at, expires_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,$13)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
         String(evidence.evidenceId),
@@ -129,6 +130,7 @@ export class PostgresActiveCanaryRepository {
         String(evidence.upstreamBaseUrl),
         JSON.stringify(evidence.operationKeys || []),
         JSON.stringify(evidence.fieldScope || []),
+        JSON.stringify(evidence.lifecycleKinds || []),
         String(evidence.result),
         evidence.sourceRunId == null ? null : String(evidence.sourceRunId),
         evidence.recipeId == null ? null : String(evidence.recipeId),

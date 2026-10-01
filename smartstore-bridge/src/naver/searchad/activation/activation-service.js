@@ -60,6 +60,7 @@ function grantMatchesEvidence(grant, evidence) {
     normalizeBaseUrl(grant.upstreamBaseUrl) === normalizeBaseUrl(evidence.upstreamBaseUrl) &&
     sameStringArray(grant.operationKeys, evidence.operationKeys) &&
     sameStringArray(grant.fieldScope, evidence.fieldScope) &&
+    sameStringArray(grant.lifecycleKinds, evidence.lifecycleKinds) &&
     String(grant.expiresAt) === String(evidence.expiresAt)
   );
 }
@@ -166,6 +167,7 @@ export class SearchAdActivationService {
       upstreamBaseUrl: normalizeBaseUrl(evidence.upstreamBaseUrl),
       operationKeys: structuredClone(evidence.operationKeys),
       fieldScope: structuredClone(evidence.fieldScope),
+      lifecycleKinds: structuredClone(evidence.lifecycleKinds || []),
       activatedByPrincipalId: principal.principalId,
       activatedAt,
       expiresAt: evidence.expiresAt
