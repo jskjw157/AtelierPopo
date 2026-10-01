@@ -181,11 +181,10 @@ test('public hierarchy root lifecycle composes bootstrap, activation, approval, 
     await start();
     assert.equal(current.app.searchAdActivationRuntime?.status().ready, true);
     assert.equal(current.app.searchAdHierarchyRuntime?.status().ready, true);
-    assert.deepEqual(current.api.readiness().searchAdHierarchy, {
-      required: true,
-      initialized: true,
-      ready: true
-    });
+    const hierarchyReadiness = current.api.readiness().searchAdHierarchy;
+    assert.equal(hierarchyReadiness.required, true);
+    assert.equal(hierarchyReadiness.initialized, true);
+    assert.equal(hierarchyReadiness.ready, true);
 
     const activationRuntime = current.app.searchAdActivationRuntime;
     const evidenceId = randomUUID();
