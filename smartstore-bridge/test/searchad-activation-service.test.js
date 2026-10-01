@@ -23,6 +23,7 @@ function evidence(overrides = {}) {
     upstreamBaseUrl: 'https://api.searchad.naver.com',
     operationKeys: [CANARY_OPERATION_KEYS.updateCampaign],
     fieldScope: ['campaign.dailyBudget', 'campaign.userLock'],
+    lifecycleKinds: ['create', 'delete'],
     result: 'verified',
     createdAt: new Date(NOW - 60_000).toISOString(),
     expiresAt: FUTURE,
@@ -158,6 +159,7 @@ test('activation copies immutable evidence scope and returns a public projection
   assert.equal(f.stored[0].credentialFingerprint, 'credential-100');
   assert.deepEqual(f.stored[0].operationKeys, [CANARY_OPERATION_KEYS.updateCampaign]);
   assert.deepEqual(f.stored[0].fieldScope, ['campaign.dailyBudget', 'campaign.userLock']);
+  assert.deepEqual(f.stored[0].lifecycleKinds, ['create', 'delete']);
   assert.equal(f.stored[0].activatedByPrincipalId, 'admin-100');
   assert.equal(f.stored[0].expiresAt, FUTURE);
   assert.equal(Object.hasOwn(grant, 'credentialFingerprint'), false);
@@ -176,6 +178,7 @@ test('activation is idempotent for one evidence id and does not create a second 
     upstreamBaseUrl: 'https://api.searchad.naver.com',
     operationKeys: [CANARY_OPERATION_KEYS.updateCampaign],
     fieldScope: ['campaign.dailyBudget', 'campaign.userLock'],
+    lifecycleKinds: ['create', 'delete'],
     activatedByPrincipalId: 'admin-100',
     activatedAt: new Date(NOW - 30_000).toISOString(),
     expiresAt: FUTURE

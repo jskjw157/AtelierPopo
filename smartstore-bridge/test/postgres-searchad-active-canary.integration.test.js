@@ -27,11 +27,12 @@ test('PostgreSQL Active Canary schema is idempotent, immutable where required, a
     await repo.createEvidence({
       evidenceId, evidenceType: 'passive_capability', customerId,
       specSha: 'spec-pg', credentialFingerprint: 'cred-pg', upstreamBaseUrl: 'https://api.searchad.naver.com',
-      operationKeys: ['campaign.create'], fieldScope: ['campaign.userLock'], result: 'verified',
+      operationKeys: ['campaign.create'], fieldScope: ['campaign.userLock'], lifecycleKinds: ['create', 'delete'], result: 'verified',
       sourceRunId: 'probe-pg', createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString()
     });
     const evidence = await repo.getEvidence(evidenceId);
     assert.equal(evidence.customerId, customerId);
+    assert.deepEqual(evidence.lifecycleKinds, ['create', 'delete']);
 
     const runId = randomUUID();
     await repo.createRun({
