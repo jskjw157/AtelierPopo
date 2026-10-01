@@ -28,6 +28,7 @@ test('production Canary recipe pins only official campaign/stat operation keys',
   });
 
   assert.deepEqual(recipe().requiredOperationKeys, Object.values(CANARY_OPERATION_KEYS));
+  assert.deepEqual(recipe().verifiedOperationScope.lifecycleKinds, ['create', 'delete']);
 });
 
 test('production recipe creates a stopped WEB_SITE campaign and never accepts an existing campaign id', () => {

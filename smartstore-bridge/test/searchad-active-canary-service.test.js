@@ -89,6 +89,7 @@ function recipe() {
     verifiedOperationScope: {
       operationKeys: ['campaign.create', 'campaign.read', 'campaign.update', 'campaign.delete'],
       fieldScope: ['campaign.userLock', 'campaign.budget'],
+      lifecycleKinds: ['create', 'delete'],
       campaignType: 'WEB_SITE'
     },
     beforeSpendRead({ customerId, remoteId }) {
