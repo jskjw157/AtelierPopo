@@ -41,6 +41,13 @@ jobs:
       - name: Install dependencies
         working-directory: smartstore-bridge
         run: npm ci
+      - name: Public root hierarchy lifecycle wiring
+        working-directory: smartstore-bridge
+        run: |
+          node --check src/naver/searchad/lifecycle/runtime-production.js
+          node --check src/naver/searchad/lifecycle/bootstrap.js
+          node --check src/http/routes-searchad-hierarchy.js
+          node --test test/postgres-searchad-hierarchy-http.integration.test.js
       - name: Application account-store binding and restart send fence
         working-directory: smartstore-bridge
         run: node --test test/postgres-searchad-application-send-fence.integration.test.js
