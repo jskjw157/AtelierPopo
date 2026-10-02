@@ -2,15 +2,24 @@ import { HttpError } from './errors.js';
 import { sendJson } from './runtime.js';
 import { requireSearchAdHttpWrites } from './searchad-write-runtime.js';
 
-const PREPARE_KEYS = new Set(['customerId', 'activationId']);
+const CAMPAIGN_PREPARE_KEYS = new Set(['customerId', 'activationId']);
+const ADGROUP_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'activationId']);
 const EXECUTE_KEYS = new Set(['customerId', 'executionToken']);
 
 function runtimeFor(context) {
   const runtime = context?.app?.searchAdHierarchyRuntime;
-  if (!runtime || runtime.status?.().ready !== true || !runtime.campaignCreateService) {
+  if (!runtime || runtime.status?.().ready !== true) {
     throw new HttpError(503, 'SEARCHAD_HIERARCHY_NOT_READY', 'SearchAd hierarchy lifecycle runtime is not ready.');
   }
   return runtime;
+}
+
+function serviceFor(context, name) {
+  const service = runtimeFor(context)[name];
+  if (!service) {
+    throw new HttpError(503, 'SEARCHAD_HIERARCHY_NOT_READY', 'SearchAd hierarchy lifecycle runtime is not ready.');
+  }
+  return service;
 }
 
 function exactBody(body, allowed) {
@@ -34,8 +43,8 @@ export function createSearchAdHierarchyRoutes(context) {
       write: true,
       searchAdRole: 'admin',
       handler: async ({ req, res, body, principal, requestId }) => {
-        exactBody(body, PREPARE_KEYS);
-        const result = await runtimeFor(context).campaignCreateService.prepare(body, { principal, requestId });
+        exactBody(body, CAMPAIGN_PREPARE_KEYS);
+        const result = await serviceFor(context, 'campaignCreateService').prepare(body, { principal, requestId });
         sendJson(req, res, 201, result);
       }
     },
@@ -48,9 +57,41 @@ export function createSearchAdHierarchyRoutes(context) {
       handler: async ({ req, res, match, body, principal, requestId }) => {
         requireSearchAdHttpWrites(context);
         exactBody(body, EXECUTE_KEYS);
-        const result = await runtimeFor(context).campaignCreateService.execute({
+        const result = await serviceFor(context, 'campaignCreateService').execute({
           customerId: body.customerId,
           hierarchyRunId: localId(match, 'hierarchyRunId'),
+          hierarchyObjectId: localId(match, 'hierarchyObjectId'),
+          planId: localId(match, 'planId'),
+          executionToken: body.executionToken
+        }, { principal, requestId });
+        sendJson(req, res, 200, result);
+      }
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/v1\/searchad\/hierarchy\/adgroups\/prepare$/,
+      auth: true,
+      write: true,
+      searchAdRole: 'admin',
+      handler: async ({ req, res, body, principal, requestId }) => {
+        exactBody(body, ADGROUP_PREPARE_KEYS);
+        const result = await serviceFor(context, 'adgroupCreateService').prepare(body, { principal, requestId });
+        sendJson(req, res, 201, result);
+      }
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/v1\/searchad\/hierarchy\/adgroups\/(?<hierarchyRunId>[^/]+)\/(?<parentObjectId>[^/]+)\/(?<hierarchyObjectId>[^/]+)\/(?<planId>[^/]+)\/execute$/,
+      auth: true,
+      write: true,
+      searchAdRole: 'admin',
+      handler: async ({ req, res, match, body, principal, requestId }) => {
+        requireSearchAdHttpWrites(context);
+        exactBody(body, EXECUTE_KEYS);
+        const result = await serviceFor(context, 'adgroupCreateService').execute({
+          customerId: body.customerId,
+          hierarchyRunId: localId(match, 'hierarchyRunId'),
+          parentObjectId: localId(match, 'parentObjectId'),
           hierarchyObjectId: localId(match, 'hierarchyObjectId'),
           planId: localId(match, 'planId'),
           executionToken: body.executionToken
@@ -61,4 +102,4 @@ export function createSearchAdHierarchyRoutes(context) {
   ];
 }
 
-export const _internal = { runtimeFor, exactBody, localId };
+export const _internal = { runtimeFor, serviceFor, exactBody, localId };

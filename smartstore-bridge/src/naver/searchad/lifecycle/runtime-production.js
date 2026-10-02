@@ -1,7 +1,9 @@
 import { SearchAdWriteError } from '../write/errors.js';
 import { CampaignCreateService } from './campaign-create-service.js';
+import { AdgroupCreateService } from './adgroup-create-service.js';
 
 const ROOT_CREATE_RISK_UNITS = 2;
+const ADGROUP_CREATE_RISK_UNITS = 1;
 const DAILY_RISK_CAPACITY_UNITS = 5;
 const REQUIRED_SCHEMA = Object.freeze([
   'runs', 'objects', 'events', 'ownership', 'plans',
@@ -39,12 +41,13 @@ async function assertSchemaReady(pool) {
 function disabledRuntime() {
   return {
     campaignCreateService: null,
+    adgroupCreateService: null,
     status() {
       return {
         enabled: false,
         ready: false,
         storage: { runtime: 'postgres', schemaReady: false },
-        scope: { campaignCreate: false }
+        scope: { campaignCreate: false, adgroupCreate: false, siblingCreate: false, cleanup: false }
       };
     },
     async close() {}
@@ -52,7 +55,7 @@ function disabledRuntime() {
 }
 
 /**
- * Public wiring for the already verified bounded root campaign lifecycle.
+ * Public wiring for the already verified bounded root + one-adgroup lifecycle.
  * The activation runtime owns the authoritative PostgreSQL pool/account row;
  * this runtime borrows it and never creates a second account authority.
  */
@@ -88,23 +91,31 @@ export async function createProductionSearchAdHierarchyRuntime({
   }
 
   await assertSchemaReady(pool);
-  const campaignCreateService = new CampaignCreateService({
+  const common = {
     pool,
     registry,
     credentialsRegistry,
     config: searchAdConfig,
     enabled: true,
     dailyBudget,
-    riskUnits: ROOT_CREATE_RISK_UNITS,
     dailyCapacityUnits: DAILY_RISK_CAPACITY_UNITS,
     planTtlSeconds: 300,
     clock,
     fetchImpl,
     logger
+  };
+  const campaignCreateService = new CampaignCreateService({
+    ...common,
+    riskUnits: ROOT_CREATE_RISK_UNITS
+  });
+  const adgroupCreateService = new AdgroupCreateService({
+    ...common,
+    riskUnits: ADGROUP_CREATE_RISK_UNITS
   });
 
   return {
     campaignCreateService,
+    adgroupCreateService,
     status() {
       return {
         enabled: true,
@@ -112,12 +123,13 @@ export async function createProductionSearchAdHierarchyRuntime({
         storage: { runtime: 'postgres', schemaReady: true },
         scope: {
           campaignCreate: true,
-          adgroupCreate: false,
+          adgroupCreate: true,
           siblingCreate: false,
           cleanup: false
         },
         risk: {
           rootCreateUnits: ROOT_CREATE_RISK_UNITS,
+          adgroupCreateUnits: ADGROUP_CREATE_RISK_UNITS,
           dailyCapacityUnits: DAILY_RISK_CAPACITY_UNITS
         }
       };
@@ -131,5 +143,6 @@ export const _internal = {
   assertSchemaReady,
   disabledRuntime,
   ROOT_CREATE_RISK_UNITS,
+  ADGROUP_CREATE_RISK_UNITS,
   DAILY_RISK_CAPACITY_UNITS
 };
