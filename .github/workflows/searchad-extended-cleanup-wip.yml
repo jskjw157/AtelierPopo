@@ -50,6 +50,7 @@ jobs:
           node --test test/postgres-searchad-hierarchy-http.integration.test.js
           node --test test/postgres-searchad-adgroup-http.integration.test.js
           node --test test/postgres-searchad-sibling-http.integration.test.js
+          node --test test/postgres-searchad-leaf-cleanup-http.integration.test.js
       - name: Application account-store binding and restart send fence
         working-directory: smartstore-bridge
         run: node --test test/postgres-searchad-application-send-fence.integration.test.js
