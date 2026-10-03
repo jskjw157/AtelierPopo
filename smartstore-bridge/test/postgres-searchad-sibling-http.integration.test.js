@@ -30,7 +30,7 @@ test('public hierarchy sibling creation exposes only server-owned keyword/creati
       const dir=fs.mkdtempSync(path.join(os.tmpdir(),`haar-hierarchy-sibling-${kind}-`));
       const nativeFetch=globalThis.fetch,savedEnv=new Map();
       const keys={generic:`sibling-${kind}-generic-`.repeat(4),reader:`sibling-${kind}-reader-`.repeat(4),admin:`sibling-${kind}-admin-`.repeat(4)};
-      let pool,current,createdSchema=false,forbiddenCalls=0,rootBody=null,adgroupBody=null,keywordRows=[],creativeRow=null;
+      let pool,current,env,createdSchema=false,forbiddenCalls=0,rootBody=null,adgroupBody=null,keywordRows=[],creativeRow=null;
       const upstreamCalls=[];
       const setEnv=(key,value)=>{if(!savedEnv.has(key))savedEnv.set(key,process.env[key]);process.env[key]=value;};
       const scopedUrl=()=>{const url=new URL(databaseUrl);url.searchParams.set('options',`-csearch_path=${schema} -ctimezone=UTC`);return url.toString();};
