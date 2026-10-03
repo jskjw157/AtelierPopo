@@ -2,10 +2,12 @@ import { SearchAdWriteError } from '../write/errors.js';
 import { CampaignCreateService } from './campaign-create-service.js';
 import { AdgroupCreateService } from './adgroup-create-service.js';
 import { SiblingCreateService } from './sibling-create-service.js';
+import { ChildFirstCleanupService } from './child-first-cleanup-service.js';
 
 const ROOT_CREATE_RISK_UNITS = 2;
 const ADGROUP_CREATE_RISK_UNITS = 1;
 const SIBLING_CREATE_RISK_UNITS = 1;
+const LEAF_CLEANUP_RISK_UNITS = 1;
 const DAILY_RISK_CAPACITY_UNITS = 5;
 const REQUIRED_SCHEMA = Object.freeze([
   'runs', 'objects', 'events', 'ownership', 'plans',
@@ -45,6 +47,7 @@ function disabledRuntime() {
     campaignCreateService: null,
     adgroupCreateService: null,
     siblingCreateService: null,
+    leafCleanupService: null,
     status() {
       return {
         enabled: false,
@@ -119,11 +122,17 @@ export async function createProductionSearchAdHierarchyRuntime({
     ...common,
     riskUnits: SIBLING_CREATE_RISK_UNITS
   });
+  const leafCleanupService = new ChildFirstCleanupService({
+    ...common,
+    riskUnits: LEAF_CLEANUP_RISK_UNITS,
+    allowedObjectTypes: ['keyword','creative']
+  });
 
   return {
     campaignCreateService,
     adgroupCreateService,
     siblingCreateService,
+    leafCleanupService,
     status() {
       return {
         enabled: true,
@@ -133,12 +142,14 @@ export async function createProductionSearchAdHierarchyRuntime({
           campaignCreate: true,
           adgroupCreate: true,
           siblingCreate: true,
+          leafCleanup: true,
           cleanup: false
         },
         risk: {
           rootCreateUnits: ROOT_CREATE_RISK_UNITS,
           adgroupCreateUnits: ADGROUP_CREATE_RISK_UNITS,
           siblingCreateUnits: SIBLING_CREATE_RISK_UNITS,
+          leafCleanupUnits: LEAF_CLEANUP_RISK_UNITS,
           dailyCapacityUnits: DAILY_RISK_CAPACITY_UNITS
         }
       };
@@ -154,5 +165,6 @@ export const _internal = {
   ROOT_CREATE_RISK_UNITS,
   ADGROUP_CREATE_RISK_UNITS,
   SIBLING_CREATE_RISK_UNITS,
+  LEAF_CLEANUP_RISK_UNITS,
   DAILY_RISK_CAPACITY_UNITS
 };

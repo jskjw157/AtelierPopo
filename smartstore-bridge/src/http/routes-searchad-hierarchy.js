@@ -5,6 +5,9 @@ import { requireSearchAdHttpWrites } from './searchad-write-runtime.js';
 const CAMPAIGN_PREPARE_KEYS = new Set(['customerId', 'activationId']);
 const ADGROUP_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'activationId']);
 const SIBLING_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'activationId']);
+const LEAF_CLEANUP_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'hierarchyObjectId', 'activationId']);
+const LEAF_CLEANUP_EXECUTE_KEYS = new Set(['customerId', 'executionToken', 'confirmation', 'secondConfirmation']);
+const LEAF_RECONCILE_KEYS = new Set(['customerId']);
 const EXECUTE_KEYS = new Set(['customerId', 'executionToken']);
 
 function runtimeFor(context) {
@@ -160,6 +163,56 @@ export function createSearchAdHierarchyRoutes(context) {
           planId: localId(match, 'planId'),
           executionToken: body.executionToken,
           kind: 'creative'
+        }, { principal, requestId });
+        sendJson(req, res, 200, result);
+      }
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/v1\/searchad\/hierarchy\/leaves\/cleanup\/prepare$/,
+      auth: true,
+      write: true,
+      searchAdRole: 'admin',
+      handler: async ({ req, res, body, principal, requestId }) => {
+        exactBody(body, LEAF_CLEANUP_PREPARE_KEYS);
+        const result = await serviceFor(context, 'leafCleanupService').prepare(body, { principal, requestId });
+        sendJson(req, res, 201, result);
+      }
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/v1\/searchad\/hierarchy\/leaves\/cleanup\/(?<hierarchyRunId>[^/]+)\/(?<hierarchyObjectId>[^/]+)\/(?<planId>[^/]+)\/execute$/,
+      auth: true,
+      write: true,
+      searchAdRole: 'admin',
+      handler: async ({ req, res, match, body, principal, requestId }) => {
+        requireSearchAdHttpWrites(context);
+        exactBody(body, LEAF_CLEANUP_EXECUTE_KEYS);
+        const result = await serviceFor(context, 'leafCleanupService').execute({
+          customerId: body.customerId,
+          hierarchyRunId: localId(match, 'hierarchyRunId'),
+          hierarchyObjectId: localId(match, 'hierarchyObjectId'),
+          planId: localId(match, 'planId'),
+          executionToken: body.executionToken,
+          confirmation: body.confirmation,
+          secondConfirmation: body.secondConfirmation
+        }, { principal, requestId });
+        sendJson(req, res, 200, result);
+      }
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/v1\/searchad\/hierarchy\/leaves\/cleanup\/(?<hierarchyRunId>[^/]+)\/(?<hierarchyObjectId>[^/]+)\/(?<planId>[^/]+)\/reconcile$/,
+      auth: true,
+      write: true,
+      searchAdRole: 'admin',
+      handler: async ({ req, res, match, body, principal, requestId }) => {
+        exactBody(body, LEAF_RECONCILE_KEYS);
+        const result = await serviceFor(context, 'leafCleanupService').reconcile({
+          customerId: body.customerId,
+          hierarchyRunId: localId(match, 'hierarchyRunId'),
+          hierarchyObjectId: localId(match, 'hierarchyObjectId'),
+          planId: localId(match, 'planId')
         }, { principal, requestId });
         sendJson(req, res, 200, result);
       }

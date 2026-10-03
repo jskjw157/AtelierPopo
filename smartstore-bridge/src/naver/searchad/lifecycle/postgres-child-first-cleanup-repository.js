@@ -29,9 +29,9 @@ function presentNode(g,node,observation){
 
 /** Internal bounded hierarchy coordinator. Never issues tokens or performs network I/O. */
 export class PostgresChildFirstCleanupRepository {
-  #pool; #rootRecipe; #childRecipe=createHierarchyChildRecipe(); #current; #gate; #confirm; #clock; #ttl; #age; #units; #capacity; #tickets=new WeakMap();
-  constructor({pool,dailyBudget,current,gate,confirmation,clock,planTtlSeconds,preflightMaxAgeMs,riskUnits,dailyCapacityUnits}) {
-    this.#pool=pool;this.#rootRecipe=createHierarchyCampaignRecipe({dailyBudget});this.#current=current;this.#gate=gate;this.#confirm=confirmation;this.#clock=clock;this.#ttl=planTtlSeconds;this.#age=preflightMaxAgeMs;this.#units=riskUnits;this.#capacity=dailyCapacityUnits;
+  #pool; #rootRecipe; #childRecipe=createHierarchyChildRecipe(); #current; #gate; #confirm; #clock; #ttl; #age; #units; #capacity; #allowedTypes; #tickets=new WeakMap();
+  constructor({pool,dailyBudget,current,gate,confirmation,clock,planTtlSeconds,preflightMaxAgeMs,riskUnits,dailyCapacityUnits,allowedObjectTypes=null}) {
+    this.#pool=pool;this.#rootRecipe=createHierarchyCampaignRecipe({dailyBudget});this.#current=current;this.#gate=gate;this.#confirm=confirmation;this.#clock=clock;this.#ttl=planTtlSeconds;this.#age=preflightMaxAgeMs;this.#units=riskUnits;this.#capacity=dailyCapacityUnits;this.#allowedTypes=allowedObjectTypes===null?null:new Set(allowedObjectTypes);
   }
   #now() {const n=this.#clock();if(!Number.isSafeInteger(n)||!Number.isFinite(new Date(n).getTime()))problem('CLOCK','Invalid server time.',503);return n;}
   #identity(run) {const v=this.#current(run.customer_id);if(!v||typeof v.then==='function'||Object.entries(IDENTITY).some(([k,col])=>!v[k]||v[k]!==run[col]))problem('CONTEXT','Current identity no longer matches the recorded run.');return v;}
@@ -104,6 +104,7 @@ export class PostgresChildFirstCleanupRepository {
     }
     g.target=objects.find(o=>o.hierarchy_object_id===s.hierarchyObjectId);
     if(!g.target||g.target===predecessor||retiredSiblingIds.includes(s.hierarchyObjectId))problem('NOT_FOUND','A historical never-dispatched object cannot be selected for cleanup.',404);
+    if(this.#allowedTypes&&!this.#allowedTypes.has(g.target.object_type))problem('TARGET_SCOPE','This runtime is restricted to explicitly allowed cleanup object types.',400);
     g.hold=holds.find(h=>h.hierarchy_object_id===g.target.hierarchy_object_id);
     g.cleanupNow=this.#now();
     this.#identity(run);return g;

@@ -13,17 +13,18 @@ const ORIGIN='https://api.searchad.naver.com';
 /** Bounded, default-OFF, internal deletion only. Not an HTTP route or evidence issuer. */
 export class ChildFirstCleanupService {
   #enabled;#registry;#credentials;#config;#clock;#gateway;#store;#sendFence;
-  constructor({pool,registry,credentialsRegistry,config,enabled=false,dailyBudget,riskUnits,dailyCapacityUnits,planTtlSeconds=300,preflightMaxAgeMs=5000,clock=Date.now,fetchImpl=globalThis.fetch,logger=console}={}){
+  constructor({pool,registry,credentialsRegistry,config,enabled=false,dailyBudget,riskUnits,dailyCapacityUnits,allowedObjectTypes=null,planTtlSeconds=300,preflightMaxAgeMs=5000,clock=Date.now,fetchImpl=globalThis.fetch,logger=console}={}){
     if(typeof pool?.connect!=='function'||typeof pool?.query!=='function'||typeof registry?.get!=='function'||typeof registry?.status!=='function'||typeof credentialsRegistry?.resolve!=='function')throw new TypeError('Actual PostgreSQL, pinned registry and current credentials required');
     if(typeof enabled!=='boolean'||typeof clock!=='function'||typeof fetchImpl!=='function'||config?.baseUrl!==ORIGIN)throw new TypeError('Explicit gate, clock, transport and fixed official origin required');
     for(const value of [dailyBudget,riskUnits,dailyCapacityUnits])if(!Number.isSafeInteger(value)||value<=0||value>2147483647)throw new TypeError('Positive bounded server policy required');
     if(riskUnits>dailyCapacityUnits||!Number.isSafeInteger(planTtlSeconds)||planTtlSeconds<60||planTtlSeconds>3600||!Number.isSafeInteger(preflightMaxAgeMs)||preflightMaxAgeMs<100||preflightMaxAgeMs>30000)throw new TypeError('Invalid server TTL, risk or freshness policy');
+    if(allowedObjectTypes!==null&&(!Array.isArray(allowedObjectTypes)||allowedObjectTypes.length===0||new Set(allowedObjectTypes).size!==allowedObjectTypes.length||allowedObjectTypes.some(type=>!['campaign','adgroup','keyword','creative'].includes(type))))throw new TypeError('Invalid cleanup target allowlist');
     this.#enabled=enabled;this.#registry=registry;this.#credentials=credentialsRegistry;this.#config=config;this.#clock=clock;
     this.#sendFence=new PostgresAccountSendFence({pool,fetchImpl});
     const safeFetch=async(url,init)=>{if(new URL(url).origin!==ORIGIN)throw new Error('Unexpected cleanup origin');const r=await this.#sendFence.fetch(url,{...init,redirect:'error'});if(r.redirected||(r.status>=300&&r.status<400))throw new Error('Cleanup redirects forbidden');return r;};
     const client=new NaverSearchAdClient({baseUrl:ORIGIN,credentialsRegistry,fetchImpl:safeFetch,maxRetries:0,clock,logger});
     this.#gateway=new SearchAdOperationGateway({client,registry,credentialsRegistry,config,logger});
-    this.#store=new PostgresChildFirstCleanupRepository({pool,dailyBudget,riskUnits,dailyCapacityUnits,planTtlSeconds,preflightMaxAgeMs,clock,current:id=>this.#identity(id),gate:d=>this.#gate(d),confirmation:type=>registry.get(OPS[type].delete).confirmation});
+    this.#store=new PostgresChildFirstCleanupRepository({pool,dailyBudget,riskUnits,dailyCapacityUnits,allowedObjectTypes,planTtlSeconds,preflightMaxAgeMs,clock,current:id=>this.#identity(id),gate:d=>this.#gate(d),confirmation:type=>registry.get(OPS[type].delete).confirmation});
   }
   #on(){if(!this.#enabled)problem('DISABLED','Child-first deletion is disabled.',403);}
   #identity(customerId){
