@@ -4,6 +4,7 @@ import { requireSearchAdHttpWrites } from './searchad-write-runtime.js';
 
 const CAMPAIGN_PREPARE_KEYS = new Set(['customerId', 'activationId']);
 const ADGROUP_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'activationId']);
+const SIBLING_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'activationId']);
 const EXECUTE_KEYS = new Set(['customerId', 'executionToken']);
 
 function runtimeFor(context) {
@@ -95,6 +96,70 @@ export function createSearchAdHierarchyRoutes(context) {
           hierarchyObjectId: localId(match, 'hierarchyObjectId'),
           planId: localId(match, 'planId'),
           executionToken: body.executionToken
+        }, { principal, requestId });
+        sendJson(req, res, 200, result);
+      }
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/v1\/searchad\/hierarchy\/keywords\/prepare$/,
+      auth: true,
+      write: true,
+      searchAdRole: 'admin',
+      handler: async ({ req, res, body, principal, requestId }) => {
+        exactBody(body, SIBLING_PREPARE_KEYS);
+        const result = await serviceFor(context, 'siblingCreateService').prepareKeywords(body, { principal, requestId });
+        sendJson(req, res, 201, result);
+      }
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/v1\/searchad\/hierarchy\/keywords\/(?<hierarchyRunId>[^/]+)\/(?<parentObjectId>[^/]+)\/(?<planId>[^/]+)\/execute$/,
+      auth: true,
+      write: true,
+      searchAdRole: 'admin',
+      handler: async ({ req, res, match, body, principal, requestId }) => {
+        requireSearchAdHttpWrites(context);
+        exactBody(body, EXECUTE_KEYS);
+        const result = await serviceFor(context, 'siblingCreateService').execute({
+          customerId: body.customerId,
+          hierarchyRunId: localId(match, 'hierarchyRunId'),
+          parentObjectId: localId(match, 'parentObjectId'),
+          planId: localId(match, 'planId'),
+          executionToken: body.executionToken,
+          kind: 'keywords'
+        }, { principal, requestId });
+        sendJson(req, res, 200, result);
+      }
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/v1\/searchad\/hierarchy\/creatives\/prepare$/,
+      auth: true,
+      write: true,
+      searchAdRole: 'admin',
+      handler: async ({ req, res, body, principal, requestId }) => {
+        exactBody(body, SIBLING_PREPARE_KEYS);
+        const result = await serviceFor(context, 'siblingCreateService').prepareCreative(body, { principal, requestId });
+        sendJson(req, res, 201, result);
+      }
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/v1\/searchad\/hierarchy\/creatives\/(?<hierarchyRunId>[^/]+)\/(?<parentObjectId>[^/]+)\/(?<planId>[^/]+)\/execute$/,
+      auth: true,
+      write: true,
+      searchAdRole: 'admin',
+      handler: async ({ req, res, match, body, principal, requestId }) => {
+        requireSearchAdHttpWrites(context);
+        exactBody(body, EXECUTE_KEYS);
+        const result = await serviceFor(context, 'siblingCreateService').execute({
+          customerId: body.customerId,
+          hierarchyRunId: localId(match, 'hierarchyRunId'),
+          parentObjectId: localId(match, 'parentObjectId'),
+          planId: localId(match, 'planId'),
+          executionToken: body.executionToken,
+          kind: 'creative'
         }, { principal, requestId });
         sendJson(req, res, 200, result);
       }

@@ -1,9 +1,11 @@
 import { SearchAdWriteError } from '../write/errors.js';
 import { CampaignCreateService } from './campaign-create-service.js';
 import { AdgroupCreateService } from './adgroup-create-service.js';
+import { SiblingCreateService } from './sibling-create-service.js';
 
 const ROOT_CREATE_RISK_UNITS = 2;
 const ADGROUP_CREATE_RISK_UNITS = 1;
+const SIBLING_CREATE_RISK_UNITS = 1;
 const DAILY_RISK_CAPACITY_UNITS = 5;
 const REQUIRED_SCHEMA = Object.freeze([
   'runs', 'objects', 'events', 'ownership', 'plans',
@@ -42,6 +44,7 @@ function disabledRuntime() {
   return {
     campaignCreateService: null,
     adgroupCreateService: null,
+    siblingCreateService: null,
     status() {
       return {
         enabled: false,
@@ -112,10 +115,15 @@ export async function createProductionSearchAdHierarchyRuntime({
     ...common,
     riskUnits: ADGROUP_CREATE_RISK_UNITS
   });
+  const siblingCreateService = new SiblingCreateService({
+    ...common,
+    riskUnits: SIBLING_CREATE_RISK_UNITS
+  });
 
   return {
     campaignCreateService,
     adgroupCreateService,
+    siblingCreateService,
     status() {
       return {
         enabled: true,
@@ -124,12 +132,13 @@ export async function createProductionSearchAdHierarchyRuntime({
         scope: {
           campaignCreate: true,
           adgroupCreate: true,
-          siblingCreate: false,
+          siblingCreate: true,
           cleanup: false
         },
         risk: {
           rootCreateUnits: ROOT_CREATE_RISK_UNITS,
           adgroupCreateUnits: ADGROUP_CREATE_RISK_UNITS,
+          siblingCreateUnits: SIBLING_CREATE_RISK_UNITS,
           dailyCapacityUnits: DAILY_RISK_CAPACITY_UNITS
         }
       };
@@ -144,5 +153,6 @@ export const _internal = {
   disabledRuntime,
   ROOT_CREATE_RISK_UNITS,
   ADGROUP_CREATE_RISK_UNITS,
+  SIBLING_CREATE_RISK_UNITS,
   DAILY_RISK_CAPACITY_UNITS
 };
