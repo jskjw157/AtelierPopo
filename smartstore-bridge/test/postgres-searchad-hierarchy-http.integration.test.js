@@ -186,6 +186,15 @@ test('public hierarchy root lifecycle composes bootstrap, activation, approval, 
     await start();
     assert.equal(current.app.searchAdActivationRuntime?.status().ready, true);
     assert.equal(current.app.searchAdHierarchyRuntime?.status().ready, true);
+    assert.deepEqual(current.app.searchAdHierarchyRuntime.status().scope, {
+      campaignCreate: true,
+      adgroupCreate: true,
+      siblingCreate: true,
+      leafCleanup: true,
+      inventoryScan: true,
+      reconcile: true,
+      cleanup: false
+    });
     const hierarchyReadiness = current.api.readiness().searchAdHierarchy;
     assert.equal(hierarchyReadiness.required, true);
     assert.equal(hierarchyReadiness.initialized, true);
@@ -209,6 +218,23 @@ test('public hierarchy root lifecycle composes bootstrap, activation, approval, 
     const hierarchyPathList = Object.keys(adminHierarchyDoc.body.paths).join('\n');
     assert.equal(hierarchyPathList.includes('/campaigns/cleanup'), false);
     assert.equal(hierarchyPathList.includes('/adgroups/cleanup'), false);
+
+    const beforeForbiddenParentCleanup = upstreamCalls.length;
+    const campaignCleanupUnavailable = await call(
+      'admin',
+      'POST',
+      '/api/v1/searchad/hierarchy/campaigns/00000000-0000-4000-8000-000000000001/cleanup',
+      { customerId: CUSTOMER }
+    );
+    assert.equal(campaignCleanupUnavailable.status, 404);
+    const adgroupCleanupUnavailable = await call(
+      'admin',
+      'POST',
+      '/api/v1/searchad/hierarchy/adgroups/00000000-0000-4000-8000-000000000002/cleanup',
+      { customerId: CUSTOMER }
+    );
+    assert.equal(adgroupCleanupUnavailable.status, 404);
+    assert.equal(upstreamCalls.length, beforeForbiddenParentCleanup);
 
     const activationRuntime = current.app.searchAdActivationRuntime;
     const evidenceId = randomUUID();
@@ -253,6 +279,7 @@ test('public hierarchy root lifecycle composes bootstrap, activation, approval, 
     current = null;
     await start();
     assert.equal(current.app.searchAdHierarchyRuntime?.status().ready, true);
+    assert.equal(current.app.searchAdHierarchyRuntime.status().scope.cleanup, false);
     const restartedReady = await getJson('/health/ready');
     assert.equal(restartedReady.status, 200);
     assert.equal(restartedReady.body.searchAdHierarchy.ready, true);
