@@ -23,8 +23,8 @@ export function createPostgresMutationGateway({ gateway: source, pool } = {}) {
     const credentials = source?.credentialsRegistry;
     const config = source?.config;
     const fetchImpl = client?.fetchImpl;
-    const execute = canary ? 'executeCanary' : 'execute';
-    const check = canary ? 'canaryExecutionCheck' : 'executionCheck';
+    const execute = canary === 'report' ? 'executeReportJob' : canary ? 'executeCanary' : 'execute';
+    const check = canary === 'report' ? 'reportExecutionCheck' : canary ? 'canaryExecutionCheck' : 'executionCheck';
     if (!(source instanceof SearchAdOperationGateway) || !(client instanceof NaverSearchAdClient) ||
         source[execute] !== SearchAdOperationGateway.prototype[execute] ||
         source[check] !== SearchAdOperationGateway.prototype[check] ||
@@ -55,10 +55,14 @@ export function createPostgresMutationGateway({ gateway: source, pool } = {}) {
         source[check](operation, input);
       } catch { unavailable(); }
     };
-    const fence = new PostgresAccountSendFence({ pool, fetchImpl: (url, init) => Reflect.apply(fetchImpl, client, [url, init]) });
+    let initiatedAt = null;
+    const fence = new PostgresAccountSendFence({ pool, fetchImpl: (url, init) => {
+      if (canary === 'report') initiatedAt = new Date(client.clock()).toISOString();
+      return Reflect.apply(fetchImpl, client, [url, init]);
+    } });
     const privateClient = new NaverSearchAdClient({
       baseUrl: ORIGIN, credentialsRegistry: credentials, clock: client.clock,
-      requestTimeoutMs: client.requestTimeoutMs, maxRetries: 0, logger: client.logger,
+      requestTimeoutMs: client.requestTimeoutMs, maxRetries: 0, logger: client.logger, redirectPolicy: 'error',
       fetchImpl: async (url, init) => {
         const response = await fence.fetch(url, init);
         if (response.redirected || (response.status >= 300 && response.status < 400)) unavailable();
@@ -66,7 +70,8 @@ export function createPostgresMutationGateway({ gateway: source, pool } = {}) {
       }
     });
     const gateway = new SearchAdOperationGateway({ client: privateClient, registry, credentialsRegistry: credentials, config, logger: source.logger });
-    return fence.run(input.customerId, validate, () => gateway[execute](operationKey, input), operation.method);
+    const result = await fence.run(input.customerId, validate, () => gateway[execute](operationKey, input), operation.method);
+    return canary === 'report' ? { ...result, upstream: { ...result.upstream, initiatedAt } } : result;
   }
 
   return Object.freeze({
@@ -75,6 +80,7 @@ export function createPostgresMutationGateway({ gateway: source, pool } = {}) {
     execute(key, input = {}) {
       return source.get(key)?.sideEffect === false ? source.execute(key, input) : mutate(key, input, false);
     },
-    executeCanary: (key, input = {}) => mutate(key, input, true)
+    executeCanary: (key, input = {}) => mutate(key, input, true),
+    executeReportJob: (key, input = {}) => mutate(key, input, 'report')
   });
 }

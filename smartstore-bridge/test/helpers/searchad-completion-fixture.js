@@ -16,7 +16,7 @@ export function reportingFixture({ repository, response = responseFixture(), aft
   const credentialsRegistry = new SearchAdCredentialsRegistry({ principals: [{ principalId: 'fixture', accessLicense: 'fixture-license', secretKey: 'fixture-secret', status: 'active' }], customers: [{ customerId: '1001', status: 'active' }], grants: [{ principalId: 'fixture', customerId: '1001', role: 'operator' }] });
   const config = { enabled: true, configured: true, allowReads: true, allowWrites: false, allowUnverifiedOperations: false, baseUrl: 'https://api.searchad.naver.com' };
   const client = new NaverSearchAdClient({ credentialsRegistry, clock: () => now, maxRetries: 0, logger: { info() {}, warn() {}, error() {} }, fetchImpl: async (url, init) => {
-    calls.push({ url: String(url), method: init.method });
+    calls.push({ url: String(url), method: init.method, body: init.body });
     await afterRequest();
     if (response instanceof Error) throw response;
     return new Response(JSON.stringify(response), { status: 200, headers: { 'content-type': 'application/json', 'x-request-id': 'fixture-upstream-request' } });

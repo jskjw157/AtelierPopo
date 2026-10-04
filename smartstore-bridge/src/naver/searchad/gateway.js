@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { assertReportOperation, REPORT_TYPES } from './reporting/operations.js';
+import { exactKeys, validDate, utcTimestamp } from './reporting/contracts.js';
 import { redactSearchAdObject, SearchAdError } from './errors.js';
 
 function canonicalize(value) {
@@ -81,6 +83,7 @@ export class SearchAdOperationGateway {
         rollbacks: this.config.allowRollbacks,
         deletes: this.config.allowDeletes,
         activeCanary: this.config.allowActiveCanary,
+        reportingJobs: this.config.allowReportingJobs,
         unverifiedOperations: this.config.allowUnverifiedOperations
       },
       automationMode: this.config.automationMode,
@@ -176,6 +179,32 @@ export class SearchAdOperationGateway {
       }
     }
     return { ok: true };
+  }
+
+  reportExecutionCheck(operation, input) {
+    assertReportOperation(operation, this.registry, { registration: true });
+    exactKeys(input, ['customerId','body'], 'SEARCHAD_REPORT_INPUT_INVALID');
+    if (typeof input.customerId !== 'string' || !/^\d{1,30}$/.test(input.customerId)) throw new SearchAdGatewayError('SEARCHAD_CUSTOMER_ID_REQUIRED', 'A Customer scope is required.', { status: 400 });
+    if (!this.config.enabled || !this.config.configured || !this.config.allowReportingJobs) throw new SearchAdGatewayError('SEARCHAD_REPORT_GATE_DISABLED', 'Report registration is unavailable.', { status: 503 });
+    if (!operation.runtimeAllowlisted) throw new SearchAdGatewayError('SEARCHAD_OPERATION_NOT_ALLOWLISTED', 'Report operation is not allowlisted.', { status: 403 });
+    if (!['A','B'].includes(operation.tier) && !this.config.allowUnverifiedOperations) throw new SearchAdGatewayError('SEARCHAD_OPERATION_UNVERIFIED', 'Report operation requires verification.', { status: 403 });
+    const contract = assertReportOperation(operation, this.registry, { registration: true });
+    exactKeys(input.body, contract.kind === 'stat' ? ['reportTp','statDt'] : ['item','fromTime'], 'SEARCHAD_REPORT_INPUT_INVALID');
+    const type = contract.kind === 'stat' ? input.body.reportTp : input.body.item;
+    if (!REPORT_TYPES[contract.kind].includes(type)) throw new SearchAdGatewayError('SEARCHAD_REPORT_INPUT_INVALID', 'Report type is invalid.', { status: 400 });
+    if (contract.kind === 'stat') {
+      const date = input.body.statDt;
+      if (typeof date !== 'string' || !/^\d{8}$/.test(date) || !validDate(`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`)) throw new SearchAdGatewayError('SEARCHAD_REPORT_INPUT_INVALID', 'Report date is invalid.', { status: 400 });
+    } else if (input.body.fromTime !== undefined) utcTimestamp(input.body.fromTime);
+    this.credentialsRegistry.resolve(input.customerId);
+    return { ok: true };
+  }
+
+  async executeReportJob(operationKey, input = {}) {
+    const operation = this.get(operationKey);
+    this.reportExecutionCheck(operation, input);
+    const result = await this.client.request({ customerId: input.customerId, method: 'POST', path: operation.path, json: input.body, responseType: 'json', retrySafe: false });
+    return { operation: this.registry.publicOperation(operation), upstream: { status: result.status, requestId: result.requestId, attempts: result.attempts }, data: redactSearchAdObject(result.data) };
   }
 
   async execute(operationKey, input = {}) {

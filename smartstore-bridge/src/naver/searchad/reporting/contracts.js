@@ -58,3 +58,12 @@ export function publicObservation(row) {
   const { observationId, customerId, entityType, entityId, since, until, observedAt, cycleBaseTm, cycleAt, quality, metrics, missingMetrics, rangeBasis, entityTypeBasis, responseSha } = row;
   return { observationId, customerId, entityType, entityId, since, until, observedAt, cycleBaseTm, cycleAt, quality, metrics, missingMetrics, rangeBasis, entityTypeBasis, responseSha };
 }
+export function utcTimestamp(value, code = 'SEARCHAD_REPORT_INPUT_INVALID', status = 400) {
+  if (typeof value !== 'string' || !/^[1-9]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value) || !validDate(value.slice(0,10)) || Number(value.slice(11,13)) > 23 || Number(value.slice(14,16)) > 59 || Number(value.slice(17,19)) > 59 || !Number.isFinite(Date.parse(value))) throw reportingError(code, status);
+  return new Date(value).toISOString();
+}
+export function publicReportJob(row) {
+  if (!row) return null;
+  const { reportJobId, customerId, kind, reportType, statDate, fromTime, intentKey, remoteJobId, processingState, quality, reportCreatedAt, createdAt, updatedAt, lastErrorCode, remoteUpdatedAt, registrationAttemptedAt, registrationInitiatedAt, registrationAcknowledgedAt, firstBuiltObservedAt, generationTimeBasis } = row;
+  return { reportJobId, customerId, kind, reportType, statDate, fromTime, intentKey, remoteJobId, processingState, quality, reportCreatedAt, createdAt, updatedAt, lastErrorCode, remoteUpdatedAt, registrationAttemptedAt, registrationInitiatedAt, registrationAcknowledgedAt, firstBuiltObservedAt, generationTimeBasis };
+}

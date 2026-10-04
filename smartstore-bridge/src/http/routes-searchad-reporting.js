@@ -1,7 +1,7 @@
 import { HttpError } from './errors.js';
 import { sendJson } from './runtime.js';
 import { searchAdCompletionOpenApi } from './openapi-searchad-completion.js';
-import { ENTITY_TYPES, publicObservation, validateStatsInput } from '../naver/searchad/reporting/contracts.js';
+import { ENTITY_TYPES, publicObservation, publicReportJob, exactKeys, validateStatsInput } from '../naver/searchad/reporting/contracts.js';
 function customerScope(principal, value) {
   if (typeof value !== 'string' || !/^\d{1,30}$/.test(value) || !principal?.customerIds?.includes(value)) throw new HttpError(403, 'SEARCHAD_CUSTOMER_FORBIDDEN', 'This principal cannot access the requested SearchAd Customer.');
   return value;
@@ -22,6 +22,25 @@ function queryInput(url, allowed) {
 export function createSearchAdReportingRoutes(context) {
   return [
     ...['reader','operator','executor','admin'].map(role => ({ method: 'GET', pattern: new RegExp(`^/openapi-searchad-completion-${role}\\.json$`), auth: false, write: false, handler: async ({ req, res }) => sendJson(req, res, 200, searchAdCompletionOpenApi({ role })) })),
+    { method: 'POST', pattern: /^\/api\/v1\/searchad\/reporting\/jobs$/, auth: true, write: true, searchAdRole: 'operator', handler: async ({ req, res, body, url, principal, requestId }) => {
+      customerScope(principal, body?.customerId); queryInput(url, []);
+      const runtime = runtimeFor(context);
+      if (!runtime.jobService) throw new HttpError(503, 'SEARCHAD_REPORTING_NOT_READY', 'SearchAd reporting is unavailable.');
+      sendJson(req,res,201,publicReportJob(await runtime.jobService.register(body, { principal, requestId })));
+    } },
+    { method: 'GET', pattern: /^\/api\/v1\/searchad\/reporting\/jobs\/(?<reportJobId>[^/]+)$/, auth: true, write: false, searchAdRole: 'reader', handler: async ({ req,res,url,match,principal }) => {
+      const query = queryInput(url,['customerId']); const customerId = customerScope(principal,query.customerId);
+      const row = await runtimeFor(context).repository.getReportJob({ customerId,reportJobId: match.groups.reportJobId });
+      if (!row) throw new HttpError(404,'SEARCHAD_REPORT_JOB_NOT_FOUND','SearchAd report job was not found.');
+      sendJson(req,res,200,publicReportJob(row));
+    } },
+    ...['poll','reconcile'].map(action => ({ method: 'POST', pattern: new RegExp(`^/api/v1/searchad/reporting/jobs/(?<reportJobId>[^/]+)/${action}$`), auth: true, write: true, searchAdRole: 'operator', handler: async ({ req,res,url,match,body,principal,requestId }) => {
+      const customerId = customerScope(principal,body?.customerId); exactKeys(body,['customerId'],'SEARCHAD_REPORT_INPUT_INVALID'); queryInput(url,[]);
+      const runtime = runtimeFor(context);
+      if (!runtime.jobService) throw new HttpError(503,'SEARCHAD_REPORTING_NOT_READY','SearchAd reporting is unavailable.');
+      const row = await runtime.jobService[action]({ customerId,reportJobId: match.groups.reportJobId }, { principal,requestId });
+      sendJson(req,res,200,{ ...publicReportJob(row), ...(row.diagnostics ? { diagnostics: row.diagnostics } : {}) });
+    } })),
     { method: 'POST', pattern: /^\/api\/v1\/searchad\/reporting\/stats$/, auth: true, write: true, searchAdRole: 'operator', handler: async ({ req, res, body, principal, requestId }) => {
       customerScope(principal, body?.customerId);
       validateStatsInput(body);

@@ -1,3 +1,6 @@
+import { createPostgresMutationGateway } from '../lifecycle/postgres-mutation-gateway.js';
+import { ReportRemoteAdapter } from './remote-adapter.js';
+import { ReportJobService } from './job-service.js';
 import { NaverSearchAdClient } from '../client.js';
 import { SearchAdOperationGateway } from '../gateway.js';
 import { PostgresReportingRepository } from './postgres-repository.js';
@@ -14,6 +17,14 @@ export async function createReportingRuntime({ pool, repository = null, gateway,
     client: new NaverSearchAdClient({ baseUrl: 'https://api.searchad.naver.com', credentialsRegistry, fetchImpl: gateway.client.fetchImpl, clock, requestTimeoutMs: gateway.client.requestTimeoutMs, maxRetries: 0, redirectPolicy: 'error', logger: gateway.client.logger })
   });
   const collector = enabled && new StatsObservationService({ repository: reportingRepository, gateway: reportingGateway, identityResolver, clock });
+  const reportJobsAvailable = enabled && typeof pool?.connect === 'function' && typeof reportingRepository?.createReportIntent === 'function';
+  if (enabled && reportingConfig.allowReportingJobs && !reportJobsAvailable) throw reportingError('SEARCHAD_REPORTING_DEPENDENCIES_REQUIRED', 503);
+  const jobService = reportJobsAvailable && new ReportJobService({ repository: reportingRepository, remote: new ReportRemoteAdapter({ gateway: createPostgresMutationGateway({ gateway: reportingGateway, pool }), registry }), identityResolver, clock, config: reportingConfig });
+  function track(task) {
+    if (closing) return Promise.reject(reportingError('SEARCHAD_REPORTING_NOT_READY', 503));
+    const promise = task(); active.add(promise);
+    promise.then(() => active.delete(promise), () => active.delete(promise)); return promise;
+  }
   const runtime = {
     config: reportingConfig,
     repository: enabled ? reportingRepository : null,
@@ -23,7 +34,8 @@ export async function createReportingRuntime({ pool, repository = null, gateway,
       promise.then(() => active.delete(promise), () => active.delete(promise));
       return promise;
     } } : null,
-    status() { return { enabled, ready: enabled && !closing, storage: { runtime: 'postgres', schemaReady: enabled }, reporting: { stats: enabled, metrics: 'unavailable', reportJobs: false } }; },
+    jobService: jobService ? Object.fromEntries(['register','poll','reconcile'].map(method => [method, (input, context) => track(() => jobService[method](input, context))])) : null,
+    status() { return { enabled, ready: enabled && !closing, storage: { runtime: 'postgres', schemaReady: enabled }, reporting: { stats: enabled, metrics: 'unavailable', reportJobs: Boolean(reportJobsAvailable) } }; },
     close() {
       if (!closePromise) { closing = true; closePromise = (async () => { await Promise.allSettled([...active]); await closeOwnedResources(); })(); }
       return closePromise;

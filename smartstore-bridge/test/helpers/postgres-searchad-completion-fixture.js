@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { bootstrapV05 } from '../../src/bootstrap-v05.js';
 import { createHttpApiV05 } from '../../src/http/server-v05.js';
 import { createPostgresPool, closePostgresPool } from '../../src/infrastructure/postgres/pool.js';
@@ -36,11 +36,13 @@ export async function postgresCompletionFixture(t) {
   for (const [key, value] of Object.entries(settings)) { saved.set(key, process.env[key]); process.env[key] = value; }
   const env = { ...settings, ATELIER_API_KEY: 'completion-pg-generic-'.repeat(4), ATELIER_SEARCHAD_READER_API_KEY: completionReaderKey, ATELIER_SEARCHAD_READER_CUSTOMERS: '1001', ATELIER_SEARCHAD_READER_PRINCIPAL_ID: 'completion-reader', ATELIER_SEARCHAD_OPERATOR_API_KEY: completionOperatorKey, ATELIER_SEARCHAD_OPERATOR_CUSTOMERS: '1001', ATELIER_SEARCHAD_OPERATOR_PRINCIPAL_ID: 'completion-operator', NAVER_SEARCHAD_ACCESS_LICENSE: 'completion-license', NAVER_SEARCHAD_SECRET_KEY: 'completion-secret', NAVER_SEARCHAD_CUSTOMER_ID: '1001', ATELIER_CATALOG_PROVIDER: 'local', ATELIER_POSTGRES_SSL_MODE: 'disable', ATELIER_HTTP_ALLOW_WRITES: 'false', ATELIER_SEARCHAD_ALLOW_WRITES: 'false', ATELIER_SEARCHAD_ALLOW_CREATES: 'false', ATELIER_SEARCHAD_ALLOW_DELETES: 'false', ATELIER_SEARCHAD_ALLOW_ACTIVE_CANARY: 'false', DATABASE_URL: url.toString() };
   const calls = [];
-  async function start({ response = responseFixture(), appEnv = {} } = {}) {
+  async function start({ response = responseFixture(), appEnv = {}, allowedPaths = ['/stats'], beforeResponse = async () => {} } = {}) {
     const effectiveEnv = { ...env, ...appEnv };
     const app = await bootstrapV05(configPath, { env: effectiveEnv, clock: () => now, fetchImpl: async (requestUrl, init) => {
-      const target = new URL(requestUrl); assert.equal(target.origin, 'https://api.searchad.naver.com'); assert.equal(target.pathname, '/stats'); assert.equal(init.method, 'GET'); assert.equal(init.redirect, 'error'); assert.equal(init.headers['X-Customer'], '1001'); assert.equal(init.headers['X-Timestamp'], String(now));
-      calls.push({ path: target.pathname, query: target.searchParams.toString() });
+      const target = new URL(requestUrl); assert.equal(target.origin, 'https://api.searchad.naver.com'); assert.ok(allowedPaths.includes(target.pathname), 'closed fixture rejects unlisted paths'); assert.ok((['/stat-reports','/master-reports'].includes(target.pathname) ? ['GET','POST'] : ['GET']).includes(init.method), 'closed fixture rejects unlisted methods'); assert.equal(init.redirect, 'error'); assert.equal(init.headers['X-Customer'], '1001'); assert.equal(init.headers['X-Timestamp'], String(now)); assert.equal(init.headers['X-Signature'], createHmac('sha256', 'completion-secret').update(`${now}.${init.method}.${target.pathname}`).digest('base64'));
+      calls.push({ path: target.pathname, method: init.method, query: target.searchParams.toString(), body: init.body });
+      await beforeResponse({ target, init });
+      if (response instanceof Error) throw response;
       return new Response(JSON.stringify(response), { status: 200, headers: { 'content-type': 'application/json', 'x-request-id': 'completion-pg-upstream' } });
     } });
     const api = createHttpApiV05({ app, env: effectiveEnv, logger }); apps.add(api); await api.listen({ host: '127.0.0.1', port: 0 });
