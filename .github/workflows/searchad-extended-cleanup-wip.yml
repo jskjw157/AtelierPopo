@@ -90,8 +90,8 @@ jobs:
         working-directory: smartstore-bridge
         run: |
           test -n "$TEST_DATABASE_URL"
-          node --test --test-reporter=tap test/postgres-searchad-report-ingestion.integration.test.js > /tmp/searchad-report-ingestion-pg.tap
-          cat /tmp/searchad-report-ingestion-pg.tap
+          set -o pipefail
+          node --test --test-reporter=tap test/postgres-searchad-report-ingestion.integration.test.js | tee /tmp/searchad-report-ingestion-pg.tap
           node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-report-ingestion-pg.tap','utf8'), /^# skipped 0$/m, 'Report ingestion PostgreSQL acceptance requires zero skips');"
       - name: Public campaign and adgroup hierarchy lifecycle wiring
         working-directory: smartstore-bridge
