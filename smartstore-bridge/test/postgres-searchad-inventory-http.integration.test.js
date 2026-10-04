@@ -42,6 +42,7 @@ test('public hierarchy descendant inventory is GET-only, Customer-scoped, saniti
   const upstreamCalls = [];
   let rootBody = null;
   let adgroupBody = null;
+  let adgroupMissing = false;
 
   const setEnv = (key, value) => {
     if (!savedEnv.has(key)) savedEnv.set(key, process.env[key]);
@@ -109,6 +110,9 @@ test('public hierarchy descendant inventory is GET-only, Customer-scoped, saniti
     }
     if (init.method === 'GET' && parsed.pathname === '/ncc/adgroups/grp-hierarchy-inventory-http') {
       upstreamCalls.push({ method: 'GET', pathname: parsed.pathname });
+      if (adgroupMissing) {
+        return new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404, headers: { 'content-type': 'application/json' } });
+      }
       return new Response(JSON.stringify({
         ...adgroupBody,
         customerId: Number(CUSTOMER),
@@ -338,6 +342,7 @@ test('public hierarchy descendant inventory is GET-only, Customer-scoped, saniti
     env.ATELIER_HTTP_ALLOW_WRITES = 'false';
     await start();
     assert.equal(current.app.searchAdHierarchyRuntime?.status().scope.inventoryScan, true);
+    assert.equal(current.app.searchAdHierarchyRuntime?.status().scope.reconcile, true);
 
     const suspended = await call('admin', 'POST', `/api/v1/searchad/accounts/${CUSTOMER}/suspend`, {});
     assert.equal(suspended.status, 200, JSON.stringify(suspended));
@@ -430,6 +435,59 @@ test('public hierarchy descendant inventory is GET-only, Customer-scoped, saniti
     assert.equal(upstreamCalls.at(-1).method, 'GET');
     assert.equal(upstreamCalls.at(-1).pathname, '/ncc/ads');
     assert.equal(upstreamCalls.slice(beforeInventoryReads).some(item => item.method !== 'GET'), false);
+
+    // Generic reconciliation is limited to targets without a dedicated cleanup
+    // plan. Model a legacy unknown DELETE outcome locally, then prove the public
+    // recovery performs one GET only and never retries DELETE.
+    await pool.query(
+      "UPDATE searchad_hierarchy_objects SET state='delete_unknown',updated_at=now() WHERE hierarchy_object_id=$1",
+      [childPrepared.body.hierarchyObjectId]
+    );
+    await pool.query(
+      "UPDATE searchad_remote_object_ownership SET state='delete_unknown',updated_at=now() WHERE hierarchy_object_id=$1",
+      [childPrepared.body.hierarchyObjectId]
+    );
+    adgroupMissing = true;
+    const reconcileBody = {
+      customerId: CUSTOMER,
+      hierarchyRunId: rootPrepared.body.hierarchyRunId,
+      hierarchyObjectId: childPrepared.body.hierarchyObjectId
+    };
+    const beforeReconcile = upstreamCalls.length;
+    const reconcileReaderDenied = await call('reader', 'POST', '/api/v1/searchad/hierarchy/reconcile', reconcileBody);
+    assert.equal(reconcileReaderDenied.status, 403);
+    assert.equal(upstreamCalls.length, beforeReconcile);
+
+    const reconcileOverrideDenied = await call('admin', 'POST', '/api/v1/searchad/hierarchy/reconcile', {
+      ...reconcileBody,
+      planId: randomUUID()
+    });
+    assert.equal(reconcileOverrideDenied.status, 400);
+    assert.equal(upstreamCalls.length, beforeReconcile);
+
+    const reconciled = await call('admin', 'POST', '/api/v1/searchad/hierarchy/reconcile', reconcileBody);
+    assert.equal(reconciled.status, 200, JSON.stringify(reconciled));
+    assert.deepEqual(reconciled.body, {
+      hierarchyRunId: rootPrepared.body.hierarchyRunId,
+      hierarchyObjectId: childPrepared.body.hierarchyObjectId,
+      kind: 'absent',
+      state: 'deleted',
+      previousState: 'delete_unknown',
+      runStatus: 'cleanup_pending',
+      changed: true
+    });
+    assert.deepEqual(upstreamCalls.slice(beforeReconcile).map(item => `${item.method} ${item.pathname}`), [
+      'GET /ncc/adgroups/grp-hierarchy-inventory-http'
+    ]);
+    assert.equal(upstreamCalls.slice(beforeReconcile).some(item => item.method === 'DELETE'), false);
+    assert.equal((await pool.query(
+      'SELECT state FROM searchad_hierarchy_objects WHERE hierarchy_object_id=$1',
+      [childPrepared.body.hierarchyObjectId]
+    )).rows[0].state, 'deleted');
+    assert.equal((await pool.query(
+      'SELECT state FROM searchad_remote_object_ownership WHERE hierarchy_object_id=$1',
+      [childPrepared.body.hierarchyObjectId]
+    )).rows[0].state, 'deleted');
     assert.equal(forbiddenCalls, 0);
   } finally {
     try { await current?.api.close(); } catch {}
