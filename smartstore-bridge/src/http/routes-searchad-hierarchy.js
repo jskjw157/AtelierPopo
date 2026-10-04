@@ -8,6 +8,7 @@ const SIBLING_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObj
 const LEAF_CLEANUP_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'hierarchyObjectId', 'activationId']);
 const LEAF_CLEANUP_EXECUTE_KEYS = new Set(['customerId', 'executionToken', 'confirmation', 'secondConfirmation']);
 const LEAF_RECONCILE_KEYS = new Set(['customerId']);
+const INVENTORY_SCAN_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'childType']);
 const EXECUTE_KEYS = new Set(['customerId', 'executionToken']);
 
 function runtimeFor(context) {
@@ -36,6 +37,21 @@ function exactBody(body, allowed) {
 
 function localId(match, name) {
   return decodeURIComponent(String(match?.groups?.[name] || ''));
+}
+
+function publicInventoryObservation(result) {
+  if (!result || typeof result !== 'object') return result;
+  return {
+    hierarchyRunId: result.hierarchyRunId,
+    parentObjectId: result.parentObjectId,
+    parentType: result.parentType,
+    childType: result.childType,
+    kind: result.kind,
+    count: result.count,
+    completeAbsence: result.completeAbsence,
+    changed: result.changed,
+    ...(result.scan ? { scan: structuredClone(result.scan) } : {})
+  };
 }
 
 export function createSearchAdHierarchyRoutes(context) {
@@ -216,8 +232,20 @@ export function createSearchAdHierarchyRoutes(context) {
         }, { principal, requestId });
         sendJson(req, res, 200, result);
       }
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/v1\/searchad\/hierarchy\/inventory\/scan$/,
+      auth: true,
+      write: false,
+      searchAdRole: 'admin',
+      handler: async ({ req, res, body, principal, requestId }) => {
+        exactBody(body, INVENTORY_SCAN_KEYS);
+        const result = await serviceFor(context, 'descendantInventoryService').scan(body, { principal, requestId });
+        sendJson(req, res, 200, publicInventoryObservation(result));
+      }
     }
   ];
 }
 
-export const _internal = { runtimeFor, serviceFor, exactBody, localId };
+export const _internal = { runtimeFor, serviceFor, exactBody, localId, publicInventoryObservation };

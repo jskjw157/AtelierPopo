@@ -1,9 +1,15 @@
 import { SearchAdWriteError } from '../write/errors.js';
+import { NaverSearchAdClient } from '../client.js';
+import { SearchAdOperationGateway } from '../gateway.js';
+import { credentialFingerprintForCustomer } from '../canary/credential-fingerprint.js';
 import { CampaignCreateService } from './campaign-create-service.js';
 import { AdgroupCreateService } from './adgroup-create-service.js';
 import { SiblingCreateService } from './sibling-create-service.js';
 import { ChildFirstCleanupService } from './child-first-cleanup-service.js';
+import { DescendantInventoryService } from './descendant-inventory-service.js';
+import { PostgresDescendantInventoryRepository } from './postgres-descendant-inventory-repository.js';
 
+const ORIGIN = 'https://api.searchad.naver.com';
 const ROOT_CREATE_RISK_UNITS = 2;
 const ADGROUP_CREATE_RISK_UNITS = 1;
 const SIBLING_CREATE_RISK_UNITS = 1;
@@ -48,12 +54,13 @@ function disabledRuntime() {
     adgroupCreateService: null,
     siblingCreateService: null,
     leafCleanupService: null,
+    descendantInventoryService: null,
     status() {
       return {
         enabled: false,
         ready: false,
         storage: { runtime: 'postgres', schemaReady: false },
-        scope: { campaignCreate: false, adgroupCreate: false, siblingCreate: false, cleanup: false }
+        scope: { campaignCreate: false, adgroupCreate: false, siblingCreate: false, leafCleanup: false, inventoryScan: false, cleanup: false }
       };
     },
     async close() {}
@@ -128,11 +135,71 @@ export async function createProductionSearchAdHierarchyRuntime({
     allowedObjectTypes: ['keyword','creative']
   });
 
+  // Observation is deliberately separate from the mutation services. It uses
+  // the same pinned registry/current credentials but only executes operations
+  // whose manifest classification is read-only. The HTTP projection below
+  // never exposes the discovered remote IDs as local mapping authority.
+  const inventoryFetch = async (url, init = {}) => {
+    const target = new URL(url);
+    if (target.origin !== ORIGIN || target.username || target.password) {
+      fail('SEARCHAD_HIERARCHY_INVENTORY_ORIGIN_INVALID', 'Inventory reads require the fixed official SearchAd origin.');
+    }
+    const response = await fetchImpl(url, { ...init, redirect: 'error' });
+    if (response.redirected || (response.status >= 300 && response.status < 400)) {
+      fail('SEARCHAD_HIERARCHY_INVENTORY_REDIRECT_FORBIDDEN', 'Inventory redirects are forbidden.');
+    }
+    return response;
+  };
+  const inventoryClient = new NaverSearchAdClient({
+    baseUrl: ORIGIN,
+    credentialsRegistry,
+    fetchImpl: inventoryFetch,
+    clock,
+    maxRetries: 0,
+    logger
+  });
+  const inventoryGateway = new SearchAdOperationGateway({
+    client: inventoryClient,
+    config: searchAdConfig,
+    registry,
+    credentialsRegistry,
+    logger
+  });
+  const inventoryRepository = new PostgresDescendantInventoryRepository({ pool });
+  const inventoryContext = customerId => {
+    if (searchAdConfig?.baseUrl !== ORIGIN) {
+      fail('SEARCHAD_HIERARCHY_INVENTORY_CONTEXT_INVALID', 'Inventory requires the fixed official SearchAd origin.');
+    }
+    const specSha = registry.status().specRef;
+    const credentialFingerprint = credentialFingerprintForCustomer(credentialsRegistry, customerId);
+    if (typeof specSha !== 'string' || !specSha ||
+        typeof credentialFingerprint !== 'string' || !credentialFingerprint) {
+      fail('SEARCHAD_HIERARCHY_INVENTORY_CONTEXT_INVALID', 'Current pinned SearchAd identity is unavailable.');
+    }
+    return { specSha, credentialFingerprint, upstreamBaseUrl: ORIGIN };
+  };
+  const descendantInventoryService = new DescendantInventoryService({
+    repository: inventoryRepository,
+    remote: {
+      read(descriptor) {
+        return inventoryGateway.execute(descriptor.operationKey, {
+          customerId: descriptor.customerId,
+          pathParams: descriptor.pathParams || {},
+          query: descriptor.query || {},
+          ...(descriptor.body === undefined ? {} : { body: descriptor.body })
+        });
+      }
+    },
+    contextResolver: inventoryContext,
+    clock
+  });
+
   return {
     campaignCreateService,
     adgroupCreateService,
     siblingCreateService,
     leafCleanupService,
+    descendantInventoryService,
     status() {
       return {
         enabled: true,
@@ -143,6 +210,7 @@ export async function createProductionSearchAdHierarchyRuntime({
           adgroupCreate: true,
           siblingCreate: true,
           leafCleanup: true,
+          inventoryScan: true,
           cleanup: false
         },
         risk: {
