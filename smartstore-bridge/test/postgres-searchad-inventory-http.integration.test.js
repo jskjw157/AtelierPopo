@@ -351,8 +351,8 @@ test('public hierarchy descendant inventory is GET-only, Customer-scoped, saniti
     };
     const beforeInventoryReads = upstreamCalls.length;
 
-    const readerDenied = await call('reader', 'POST', '/api/v1/searchad/hierarchy/inventory/scan', inventoryBody);
-    assert.equal(readerDenied.status, 403);
+    const inventoryReaderDenied = await call('reader', 'POST', '/api/v1/searchad/hierarchy/inventory/scan', inventoryBody);
+    assert.equal(inventoryReaderDenied.status, 403);
     assert.equal(upstreamCalls.length, beforeInventoryReads);
 
     const overrideDenied = await call('admin', 'POST', '/api/v1/searchad/hierarchy/inventory/scan', {
