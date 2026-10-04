@@ -130,8 +130,8 @@ jobs:
           set -euo pipefail
           base=18a4201e5a2467e7ffed914f34c956eabdf5ad42
           git fetch --no-tags --depth=1 origin "$base"
-          git diff --check "$base"...HEAD
-          changed="$(git diff --name-only "$base"...HEAD -- smartstore-bridge .github/workflows/searchad-extended-cleanup-wip.yml)"
+          git diff --check "$base" HEAD
+          changed="$(git diff --name-only "$base" HEAD -- smartstore-bridge .github/workflows/searchad-extended-cleanup-wip.yml)"
           if test -n "$changed"; then
             if printf '%s\n' "$changed" | xargs -r grep -nE -- '-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}' ; then
               echo "Secret-like token pattern found in changed files"
