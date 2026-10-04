@@ -1,8 +1,8 @@
 # HAAR SearchAd — Recovery Dashboard
 
-## RESUME HERE — 2026-10-04
+## RESUME HERE — 2026-10-05 KST
 
-**Current verified code/test HEAD is `5371a7dba889ec151cb75eda1dd4001704201da6` on `codex/searchad-extended-cleanup-20260914` / Draft PR #28. Issue #26 remains OPEN.**
+**Current verified code/test HEAD is `ac4164168e745eea0361eede76917bbf10bf2ccd` on `codex/searchad-extended-cleanup-20260914` / Draft PR #28. Issue #26 remains OPEN.**
 
 Do **not** repeat root campaign, adgroup, keyword/creative sibling public creation wiring, leaf cleanup/read-only recovery, descendant inventory scan, generic hierarchy reconciliation, account suspension send fences, or role-scoped hierarchy OpenAPI work. Those bounded units are already implemented and verified.
 
@@ -14,8 +14,8 @@ The current application exposes a bounded server-owned hierarchy lifecycle, but 
 | Draft PR | [#28](https://github.com/jskjw157/AtelierPopo/pull/28) |
 | Work issue | [#26](https://github.com/jskjw157/AtelierPopo/issues/26) |
 | Master | [#23](https://github.com/jskjw157/AtelierPopo/issues/23) |
-| Verified code/test HEAD | `5371a7dba889ec151cb75eda1dd4001704201da6` |
-| Latest verification | [run 37187130719](https://github.com/jskjw157/AtelierPopo/actions/runs/37187130719), job 111391342507, completed SUCCESS |
+| Verified code/test HEAD | `ac4164168e745eea0361eede76917bbf10bf2ccd` |
+| Latest verification | [run 37232432564](https://github.com/jskjw157/AtelierPopo/actions/runs/37232432564), job 111524788448, completed SUCCESS |
 | Full regression | **1059/1059 PASS**, 453 top-level, 0 failed |
 | Schema | 0009 retained; this checkpoint adds no migration |
 | Live SearchAd calls | **0** |
@@ -140,12 +140,13 @@ Actual HTTP acceptance verifies readiness and this OpenAPI surface through the f
 | Trustworthy complete remote absence across unmanaged/all writers | **UNRESOLVED** |
 | Public campaign/adgroup parent deletion | **BLOCKED / NOT EXPOSED** |
 | Generalized generation 3 / arbitrary replacement | NOT SUPPORTED |
-| Whole #26 / 0009 F acceptance | **PENDING** |
-| #21 full repository regression / PG / safety / migration acceptance | OPEN |
+| Bounded public #26 F acceptance | **VERIFIED** at `afc85b1c`; public parent cleanup remains disabled |
+| Whole #26 remote-absence/all-writer boundary | **UNRESOLVED / OPEN** |
+| #21 implemented baseline regression / PG / static / coverage / dependency audit | **VERIFIED**; [verification](SEARCHAD_0021_ACCEPTANCE_2026-10-05.md) |
 | #18 reporting/Circuit/automation | PENDING |
 | #19 worker/scheduler/registry | PENDING |
 | #20 profitability/recommendation/limited Auto | PENDING |
-| #21 final whole-system validation | OPEN |
+| #21 final whole-system validation | **OPEN**; depends on #18/#19/#20 and expanded safety acceptance |
 | #22 deployment/live validation/activation | separate authorization; NOT STARTED here |
 
 ## Safety boundaries that remain authoritative
@@ -207,13 +208,21 @@ Synthetic test evidence/upstream fixtures are never live HAAR advertising proof.
 - run 37187130719 / job 111391342507 completed SUCCESS
 - full **1059/1059 PASS**, 453 top-level, 0 failed
 
+## Latest #21 acceptance
+
+- Verification commit `ac4164168e745eea0361eede76917bbf10bf2ccd`; run 37232432564 / job 111524788448.
+- Before any test populates the fresh CI database, assert empty public schema, exact 0001–0009 application, matching filenames/checksums and immediate no-op repeat.
+- Check all 191 tracked JavaScript source/script files, retaining package checks and configured diff/token-pattern checks.
+- Legacy write scanner covers only 16 write source files; its zero is not a completed whole-execution-source safety review.
+- 126 manifest operations and 117 runtime-allowlisted operations are not the yet-unimplemented #19 validation registry.
+- [Detailed acceptance and outstanding dependencies](SEARCHAD_0021_ACCEPTANCE_2026-10-05.md).
+
 ## Next bounded work
 
-1. Keep the current public parent-delete veto unchanged.
-2. Treat the current hierarchy application/bootstrap/readiness/restart/OpenAPI surface as completed bounded E work; do not reimplement it.
-3. Reassess remaining #26 F blockers against the unresolved trustworthy-complete-remote-absence boundary.
-4. Move whole-repository validation items to #21 rather than inflating #26 with duplicate regression work.
-5. Only after the remaining acceptance boundary is explicitly resolved should #26 be considered for closure.
-6. Live Naver validation/deployment remains separate #22 authorization.
+1. Retain the already-verified public hierarchy surface and parent-delete veto. Bounded public F acceptance is complete; do not repeat its HTTP/restart/OpenAPI work.
+2. Keep #26 OPEN for trustworthy remote absence across unmanaged descendants/all writers. Resolving or formally splitting that boundary is required before closure.
+3. #21 has fresh acceptance for the implemented baseline. Its remaining acceptance depends on #18 reporting/Circuit/automation, #19 worker/scheduler/126-operation validation and expanded execution-source safety, and later #20 profitability/limited Auto.
+4. Follow the recovery board to reconstruct #18, then #19 and #20; run their focused/final #21 acceptance after implementation.
+5. Live Naver validation/deployment remains separate #22 authorization.
 
 **No main/base merge, deployment, production database/migration/config change, operational gate enable, or live Naver advertising request is represented by this dashboard.**
