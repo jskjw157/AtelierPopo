@@ -1,6 +1,7 @@
 import { HttpError } from './errors.js';
 import { sendJson } from './runtime.js';
 import { requireSearchAdHttpWrites } from './searchad-write-runtime.js';
+import { searchAdHierarchyOpenApi } from './openapi-searchad-hierarchy.js';
 
 const CAMPAIGN_PREPARE_KEYS = new Set(['customerId', 'activationId']);
 const ADGROUP_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'activationId']);
@@ -55,8 +56,77 @@ function publicInventoryObservation(result) {
   };
 }
 
+function openApiRoute(role) {
+  return {
+    method: 'GET',
+    pattern: new RegExp(`^/openapi-searchad-hierarchy-${role}\\.jsonimport { HttpError } from './errors.js';
+import { sendJson } from './runtime.js';
+import { requireSearchAdHttpWrites } from './searchad-write-runtime.js';
+import { searchAdHierarchyOpenApi } from './openapi-searchad-hierarchy.js';
+
+const CAMPAIGN_PREPARE_KEYS = new Set(['customerId', 'activationId']);
+const ADGROUP_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'activationId']);
+const SIBLING_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'activationId']);
+const LEAF_CLEANUP_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'hierarchyObjectId', 'activationId']);
+const LEAF_CLEANUP_EXECUTE_KEYS = new Set(['customerId', 'executionToken', 'confirmation', 'secondConfirmation']);
+const LEAF_RECONCILE_KEYS = new Set(['customerId']);
+const INVENTORY_SCAN_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'childType']);
+const RECONCILE_KEYS = new Set(['customerId', 'hierarchyRunId', 'hierarchyObjectId']);
+const EXECUTE_KEYS = new Set(['customerId', 'executionToken']);
+
+function runtimeFor(context) {
+  const runtime = context?.app?.searchAdHierarchyRuntime;
+  if (!runtime || runtime.status?.().ready !== true) {
+    throw new HttpError(503, 'SEARCHAD_HIERARCHY_NOT_READY', 'SearchAd hierarchy lifecycle runtime is not ready.');
+  }
+  return runtime;
+}
+
+function serviceFor(context, name) {
+  const service = runtimeFor(context)[name];
+  if (!service) {
+    throw new HttpError(503, 'SEARCHAD_HIERARCHY_NOT_READY', 'SearchAd hierarchy lifecycle runtime is not ready.');
+  }
+  return service;
+}
+
+function exactBody(body, allowed) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) ||
+      Object.keys(body).length !== allowed.size ||
+      Object.keys(body).some(key => !allowed.has(key))) {
+    throw new HttpError(400, 'SEARCHAD_HIERARCHY_INPUT_INVALID', 'Only the documented hierarchy lifecycle fields are accepted.');
+  }
+}
+
+function localId(match, name) {
+  return decodeURIComponent(String(match?.groups?.[name] || ''));
+}
+
+function publicInventoryObservation(result) {
+  if (!result || typeof result !== 'object') return result;
+  return {
+    hierarchyRunId: result.hierarchyRunId,
+    parentObjectId: result.parentObjectId,
+    parentType: result.parentType,
+    childType: result.childType,
+    kind: result.kind,
+    count: result.count,
+    completeAbsence: result.completeAbsence,
+    changed: result.changed,
+    ...(result.scan ? { scan: structuredClone(result.scan) } : {})
+  };
+}
+
+),
+    auth: false,
+    write: false,
+    handler: async ({ req, res }) => sendJson(req, res, 200, searchAdHierarchyOpenApi({ role }))
+  };
+}
+
 export function createSearchAdHierarchyRoutes(context) {
   return [
+    ...['reader', 'operator', 'executor', 'admin'].map(openApiRoute),
     {
       method: 'POST',
       pattern: /^\/api\/v1\/searchad\/hierarchy\/campaigns\/prepare$/,
