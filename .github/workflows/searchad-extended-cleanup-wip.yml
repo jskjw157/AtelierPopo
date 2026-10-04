@@ -47,6 +47,7 @@ jobs:
           node --check src/naver/searchad/lifecycle/runtime-production.js
           node --check src/naver/searchad/lifecycle/bootstrap.js
           node --check src/http/routes-searchad-hierarchy.js
+          node --test test/searchad-hierarchy-openapi.test.js
           node --test test/postgres-searchad-hierarchy-http.integration.test.js
           node --test test/postgres-searchad-adgroup-http.integration.test.js
           node --test test/postgres-searchad-sibling-http.integration.test.js
