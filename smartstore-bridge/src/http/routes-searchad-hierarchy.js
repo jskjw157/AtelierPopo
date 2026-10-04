@@ -9,6 +9,7 @@ const LEAF_CLEANUP_PREPARE_KEYS = new Set(['customerId', 'hierarchyRunId', 'hier
 const LEAF_CLEANUP_EXECUTE_KEYS = new Set(['customerId', 'executionToken', 'confirmation', 'secondConfirmation']);
 const LEAF_RECONCILE_KEYS = new Set(['customerId']);
 const INVENTORY_SCAN_KEYS = new Set(['customerId', 'hierarchyRunId', 'parentObjectId', 'childType']);
+const RECONCILE_KEYS = new Set(['customerId', 'hierarchyRunId', 'hierarchyObjectId']);
 const EXECUTE_KEYS = new Set(['customerId', 'executionToken']);
 
 function runtimeFor(context) {
@@ -243,6 +244,18 @@ export function createSearchAdHierarchyRoutes(context) {
         exactBody(body, INVENTORY_SCAN_KEYS);
         const result = await serviceFor(context, 'descendantInventoryService').scan(body, { principal, requestId });
         sendJson(req, res, 200, publicInventoryObservation(result));
+      }
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/v1\/searchad\/hierarchy\/reconcile$/,
+      auth: true,
+      write: true,
+      searchAdRole: 'admin',
+      handler: async ({ req, res, body, principal, requestId }) => {
+        exactBody(body, RECONCILE_KEYS);
+        const result = await serviceFor(context, 'hierarchyReconcileService').reconcile(body, { principal, requestId });
+        sendJson(req, res, 200, result);
       }
     }
   ];

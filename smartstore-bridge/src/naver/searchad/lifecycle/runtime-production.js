@@ -8,6 +8,8 @@ import { SiblingCreateService } from './sibling-create-service.js';
 import { ChildFirstCleanupService } from './child-first-cleanup-service.js';
 import { DescendantInventoryService } from './descendant-inventory-service.js';
 import { PostgresDescendantInventoryRepository } from './postgres-descendant-inventory-repository.js';
+import { HierarchyReconcileService } from './hierarchy-reconcile-service.js';
+import { PostgresHierarchyReconcileRepository } from './postgres-hierarchy-reconcile-repository.js';
 
 const ORIGIN = 'https://api.searchad.naver.com';
 const ROOT_CREATE_RISK_UNITS = 2;
@@ -55,12 +57,13 @@ function disabledRuntime() {
     siblingCreateService: null,
     leafCleanupService: null,
     descendantInventoryService: null,
+    hierarchyReconcileService: null,
     status() {
       return {
         enabled: false,
         ready: false,
         storage: { runtime: 'postgres', schemaReady: false },
-        scope: { campaignCreate: false, adgroupCreate: false, siblingCreate: false, leafCleanup: false, inventoryScan: false, cleanup: false }
+        scope: { campaignCreate: false, adgroupCreate: false, siblingCreate: false, leafCleanup: false, inventoryScan: false, reconcile: false, cleanup: false }
       };
     },
     async close() {}
@@ -178,18 +181,25 @@ export async function createProductionSearchAdHierarchyRuntime({
     }
     return { specSha, credentialFingerprint, upstreamBaseUrl: ORIGIN };
   };
+  const readRemote = Object.freeze({
+    read(descriptor) {
+      return inventoryGateway.execute(descriptor.operationKey, {
+        customerId: descriptor.customerId,
+        pathParams: descriptor.pathParams || {},
+        query: descriptor.query || {},
+        ...(descriptor.body === undefined ? {} : { body: descriptor.body })
+      });
+    }
+  });
   const descendantInventoryService = new DescendantInventoryService({
     repository: inventoryRepository,
-    remote: {
-      read(descriptor) {
-        return inventoryGateway.execute(descriptor.operationKey, {
-          customerId: descriptor.customerId,
-          pathParams: descriptor.pathParams || {},
-          query: descriptor.query || {},
-          ...(descriptor.body === undefined ? {} : { body: descriptor.body })
-        });
-      }
-    },
+    remote: readRemote,
+    contextResolver: inventoryContext,
+    clock
+  });
+  const hierarchyReconcileService = new HierarchyReconcileService({
+    repository: new PostgresHierarchyReconcileRepository({ pool }),
+    remote: readRemote,
     contextResolver: inventoryContext,
     clock
   });
@@ -200,6 +210,7 @@ export async function createProductionSearchAdHierarchyRuntime({
     siblingCreateService,
     leafCleanupService,
     descendantInventoryService,
+    hierarchyReconcileService,
     status() {
       return {
         enabled: true,
@@ -211,6 +222,7 @@ export async function createProductionSearchAdHierarchyRuntime({
           siblingCreate: true,
           leafCleanup: true,
           inventoryScan: true,
+          reconcile: true,
           cleanup: false
         },
         risk: {
