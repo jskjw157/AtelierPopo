@@ -36,3 +36,8 @@ test('reporting runtime forces fixed-origin transport and denies redirect eviden
     assert.equal(redirect, 'error'); assert.equal(f.rows.length, 0);
   } finally { await runtime.close(); }
 });
+
+test('required ingestion storage is unready without durable storage and generation policy',async()=>{
+  const f=reportingFixture();const runtime=await createReportingRuntime({...f,reportingConfig:{enabled:true,allowReportingJobs:false,ingestionRequired:true},clock:()=>now});
+  assert.equal(runtime.status().ready,false);assert.equal(runtime.status().reporting.ingestion,false);await runtime.close();
+});

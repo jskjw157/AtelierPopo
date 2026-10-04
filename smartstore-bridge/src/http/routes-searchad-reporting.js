@@ -41,6 +41,15 @@ export function createSearchAdReportingRoutes(context) {
       const row = await runtime.jobService[action]({ customerId,reportJobId: match.groups.reportJobId }, { principal,requestId });
       sendJson(req,res,200,{ ...publicReportJob(row), ...(row.diagnostics ? { diagnostics: row.diagnostics } : {}) });
     } })),
+    ...['ingest','evaluate'].map(action => ({ method:'POST',pattern:new RegExp(`^/api/v1/searchad/reporting/jobs/(?<reportJobId>[^/]+)/${action}$`),auth:true,write:true,searchAdRole:'operator',handler:async({req,res,url,match,body,principal,requestId})=>{
+      const customerId=customerScope(principal,body?.customerId);exactKeys(body,['customerId'],'SEARCHAD_REPORT_INPUT_INVALID');queryInput(url,[]);const runtime=runtimeFor(context);
+      const service=action==='ingest'?runtime.ingestionService:runtime.spendEvidenceService;if(!service)throw new HttpError(503,'SEARCHAD_REPORTING_NOT_READY','Report ingestion is unavailable.');
+      sendJson(req,res,200,await service[action==='ingest'?'ingest':'evaluateGeneration']({customerId,reportJobId:match.groups.reportJobId},{principal,requestId}));
+    }})),
+    {method:'GET',pattern:/^\/api\/v1\/searchad\/reporting\/jobs\/(?<reportJobId>[^/]+)\/content$/,auth:true,write:false,searchAdRole:'reader',handler:async({req,res,url,match,principal,requestId})=>{
+      const query=queryInput(url,['customerId']);const customerId=customerScope(principal,query.customerId);const runtime=runtimeFor(context);if(!runtime.ingestionService)throw new HttpError(503,'SEARCHAD_REPORTING_NOT_READY','Report ingestion is unavailable.');
+      const bytes=await runtime.ingestionService.archived({customerId,reportJobId:match.groups.reportJobId},{principal,requestId});res.writeHead(200,{'Content-Type':'text/tab-separated-values; charset=utf-8','Content-Length':bytes.length,'Content-Disposition':'attachment; filename="report.tsv"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});res.end(bytes);
+    }},
     { method: 'POST', pattern: /^\/api\/v1\/searchad\/reporting\/stats$/, auth: true, write: true, searchAdRole: 'operator', handler: async ({ req, res, body, principal, requestId }) => {
       customerScope(principal, body?.customerId);
       validateStatsInput(body);
@@ -62,8 +71,10 @@ export function createSearchAdReportingRoutes(context) {
     } },
     { method: 'GET', pattern: /^\/api\/v1\/searchad\/reporting\/metrics$/, auth: true, write: false, searchAdRole: 'reader', handler: async ({ req, res, url, principal }) => {
       const query = queryInput(url, ['customerId','entityType','entityId']);
-      customerScope(principal, query.customerId); runtimeFor(context);
-      sendJson(req, res, 200, { available: false, status: 'unavailable', reason: 'REPORT_INGESTION_REQUIRED', items: [] });
+      const customerId=customerScope(principal, query.customerId); const runtime=runtimeFor(context);
+      if(!runtime.ingestionService)return sendJson(req,res,200,{available:false,status:'unavailable',reason:'REPORT_INGESTION_REQUIRED',items:[]});
+      const identity=await runtime.identityResolver(customerId);
+      sendJson(req,res,200,{available:true,status:'available',items:await runtime.repository.listMetrics({...query,customerId,identity})});
     } }
   ];
 }

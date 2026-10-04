@@ -1,3 +1,5 @@
+import { generationProof, hasProvenCollectionSlot, isGenerationFresh } from './spend-evidence-service.js';
+import { parseReportTsv } from './tsv-parser.js';
 import { randomUUID } from 'node:crypto';
 import { contentHash } from '../write/canonical.js';
 import { validateReportJobInput } from './job-service.js';
@@ -116,6 +118,538 @@ export class PostgresReportingRepository {
     if (typeof customerId !== 'string' || !customerId || !Number.isInteger(limit) || limit < 1 || limit > 100) throw reportingError('SEARCHAD_REPORTING_QUERY_INVALID');
     try { return (await this.pool.query('SELECT *,since_kst::text AS since_kst,until_kst::text AS until_kst FROM searchad_stats_observations WHERE customer_id=$1 AND ($2::text IS NULL OR entity_type=$2) AND ($3::text IS NULL OR entity_id=$3) ORDER BY observed_at DESC,observation_id DESC LIMIT $4', [customerId, entityType ?? null, entityId ?? null, limit])).rows.map(map); }
     catch { throw reportingError('SEARCHAD_REPORTING_STORAGE_FAILED', 503); }
+  }
+  async ingestionTransaction({job,identity}, action) {
+    validateIdentity(identity,job.customerId); let client;
+    try {
+      client=await this.pool.connect(); await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`report:${job.customerId}:${job.kind}:${job.reportType}:${job.statDate || ''}`]);
+      const locked=mapJob((await client.query('SELECT *,stat_date::text AS stat_date FROM searchad_report_jobs WHERE customer_id=$1 AND report_job_id=$2 FOR UPDATE',[job.customerId,job.reportJobId])).rows[0]);
+      if(!locked||contentHash(validateIdentity(locked,job.customerId))!==contentHash(identity)||locked.remoteJobId!==job.remoteJobId||!locked.claimId)throw new Error();
+      const result=await action(client,locked);await client.query('COMMIT');return result;
+    }catch(error){if(client)try{await client.query('ROLLBACK');}catch{};throw reportingError('SEARCHAD_REPORTING_STORAGE_FAILED',503);}
+    finally{client?.release();}
+  }
+  async storeBlob(client,{job,blob,now}) {
+    if(!/^[a-f0-9]{64}$/.test(blob.sha256)||blob.key!==`${job.customerId}/${blob.sha256}.tsv`||!Number.isSafeInteger(blob.size)||blob.size<1)throw new Error();
+    const result=await client.query(`INSERT INTO searchad_report_blobs(blob_id,customer_id,report_job_id,blob_key,sha256,size_bytes,content_type,created_at,retain_until) VALUES($1,$2,$3,$4,$5,$6,'text/tab-separated-values',$7,$8) ON CONFLICT(customer_id,report_job_id,sha256) DO NOTHING RETURNING blob_id`,[randomUUID(),job.customerId,job.reportJobId,blob.key,blob.sha256,blob.size,new Date(now).toISOString(),blob.retainUntil]);
+    return result.rows[0]?.blob_id || (await client.query('SELECT blob_id FROM searchad_report_blobs WHERE customer_id=$1 AND report_job_id=$2 AND sha256=$3',[job.customerId,job.reportJobId,blob.sha256])).rows[0].blob_id;
+  }
+  async quarantineIngestion(input) {
+    return this.ingestionTransaction(input, (client, job) =>
+      this.quarantineIngestionInTransaction(client, { ...input, job }),
+    );
+  }
+  async quarantineIngestionInTransaction(client, input) {
+    const { job, reasons, now } = input;
+    await this.storeBlob(client, input);
+    await client.query(
+      "UPDATE searchad_report_jobs SET quality='quarantined',metadata_json=metadata_json || $3::jsonb,updated_at=$4 WHERE customer_id=$1 AND report_job_id=$2",
+      [
+        job.customerId,
+        job.reportJobId,
+        JSON.stringify({
+          quarantineReasons: reasons,
+          quarantineAt: new Date(now).toISOString(),
+        }),
+        new Date(now).toISOString(),
+      ],
+    );
+    await client.query(
+      "UPDATE searchad_report_ingestions SET quality='changed_after_generation' WHERE customer_id=$1 AND report_kind=$2 AND report_type=$3 AND stat_date IS NOT DISTINCT FROM $4::date",
+      [job.customerId, job.kind, job.reportType, job.statDate],
+    );
+    return {
+      reportJobId: job.reportJobId,
+      quality: "quarantined",
+      reasons,
+      rowCount: 0,
+    };
+  }
+  async commitIngestion(input) {
+    return this.ingestionTransaction(input, async (client, job) => {
+      const { blob, schema, identity, now } = input;
+      const proof = generationProof(
+        job,
+        Date.parse(input.proof.downloadCompletedAt),
+        input.proof.policy,
+      );
+      if (
+        contentHash(proof) !== contentHash(input.proof) ||
+        schema.kind !== job.kind ||
+        schema.reportType !== job.reportType ||
+        schema.statDate !== job.statDate ||
+        input.quality !== "provisional"
+      )
+        throw new Error();
+      if (
+        job.kind === "stat" &&
+        !hasProvenCollectionSlot(proof, job.statDate)
+      ) {
+        return this.quarantineIngestionInTransaction(client, {
+          ...input,
+          job,
+          reasons: [{ code: "SEARCHAD_REPORT_COLLECTION_SLOT_UNPROVEN" }],
+        });
+      }
+      const parsed = parseReportTsv(
+        Buffer.from(
+          input.rows
+            .map((row) =>
+              schema.columns.map((col) => row.data[col.name]).join("\t"),
+            )
+            .join("\n") + "\n",
+        ),
+        schema,
+        { customerId: job.customerId },
+      );
+      // Reconstructed TSV has dense lines; preserve verified original physical
+      // line numbers while comparing all canonical row content independently.
+      const validLineNumbers = input.rows.every(
+        (row, index) =>
+          Number.isSafeInteger(row.rowNumber) &&
+          row.rowNumber > 0 &&
+          (index === 0 || row.rowNumber > input.rows[index - 1].rowNumber),
+      );
+      const validatedRows = parsed.rows.map((row, index) => ({
+        ...row,
+        rowNumber: input.rows[index]?.rowNumber,
+      }));
+      if (
+        !validLineNumbers ||
+        parsed.reasons.length ||
+        contentHash(validatedRows) !== contentHash(input.rows)
+      )
+        throw new Error();
+      const blobId = await this.storeBlob(client, { ...input, job });
+      const existing = (
+        await client.query(
+          "SELECT * FROM searchad_report_ingestions WHERE customer_id=$1 AND report_job_id=$2 AND generation_sha=$3 AND parser_version=$4 AND ordered_schema_sha=$5",
+          [
+            job.customerId,
+            job.reportJobId,
+            blob.sha256,
+            schema.parserVersion,
+            schema.orderedSchemaSha,
+          ],
+        )
+      ).rows[0];
+      if (existing)
+        return {
+          ingestionId: existing.ingestion_id,
+          reportJobId: job.reportJobId,
+          quality: existing.quality,
+          rowCount: Number(existing.row_count),
+          deduplicated: true,
+          generationWindow: existing.provenance_json.generationWindow,
+        };
+      const history = (
+        await client.query(
+          "SELECT * FROM searchad_report_ingestions WHERE customer_id=$1 AND report_kind=$2 AND report_type=$3 AND stat_date IS NOT DISTINCT FROM $4::date ORDER BY created_at,ingestion_id",
+          [job.customerId, job.kind, job.reportType, job.statDate],
+        )
+      ).rows;
+      const changedJob = history.some(
+        (row) =>
+          row.report_job_id === job.reportJobId &&
+          row.generation_sha !== blob.sha256,
+      );
+      const overlap = history.some(
+        (row) =>
+          row.generation_sha !== blob.sha256 &&
+          (!row.provenance_json.generationWindow ||
+            (Date.parse(proof.lower) <=
+              Date.parse(row.provenance_json.generationWindow.upper) &&
+              Date.parse(proof.upper) >=
+                Date.parse(row.provenance_json.generationWindow.lower))),
+      );
+      const laterChange = history.some(
+        (row) => row.generation_sha !== blob.sha256,
+      );
+      const quality =
+        changedJob || overlap
+          ? "quarantined"
+          : laterChange
+            ? "changed_after_generation"
+            : "provisional";
+      await client.query(
+        `INSERT INTO searchad_report_schema_registry(report_type,schema_version,selection_basis,expected_column_count,ordered_columns_json,parser_version,report_kind,column_mappings_json,ordered_schema_sha,source_provenance_json,supported) VALUES($1,$2,'generation_window',$3,$4::jsonb,$5,$6,'{}',$7,$8::jsonb,true) ON CONFLICT DO NOTHING`,
+        [
+          schema.reportType,
+          schema.schemaVersion,
+          schema.columns.length,
+          JSON.stringify(schema.columns),
+          schema.parserVersion,
+          schema.kind,
+          schema.orderedSchemaSha,
+          JSON.stringify({
+            source: schema.source,
+            notice: schema.notice,
+            vatPolicy: schema.vatPolicy,
+          }),
+        ],
+      );
+      const pinned = (
+        await client.query(
+          "SELECT ordered_schema_sha FROM searchad_report_schema_registry WHERE report_type=$1 AND schema_version=$2",
+          [schema.reportType, schema.schemaVersion],
+        )
+      ).rows[0];
+      if (pinned.ordered_schema_sha !== schema.orderedSchemaSha)
+        throw new Error();
+      const ingestionId = randomUUID();
+      const provenance = {
+        generationWindow: proof,
+        source: schema.source,
+        vatPolicy: schema.vatPolicy,
+        complete: quality !== "quarantined",
+        requiresExplicitEvaluation: true,
+      };
+      if (laterChange)
+        await client.query(
+          "UPDATE searchad_report_ingestions SET quality='changed_after_generation' WHERE customer_id=$1 AND report_kind=$2 AND report_type=$3 AND stat_date IS NOT DISTINCT FROM $4::date",
+          [job.customerId, job.kind, job.reportType, job.statDate],
+        );
+      await client.query(
+        `INSERT INTO searchad_report_ingestions(ingestion_id,customer_id,report_job_id,blob_id,report_kind,report_type,stat_date,report_created_at,schema_version,ordered_schema_sha,parser_version,generation_sha,spec_sha,credential_fingerprint,upstream_base_url,processing_state,quality,row_count,provenance_json,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,$20)`,
+        [
+          ingestionId,
+          job.customerId,
+          job.reportJobId,
+          blobId,
+          job.kind,
+          job.reportType,
+          job.statDate,
+          job.reportCreatedAt,
+          schema.schemaVersion,
+          schema.orderedSchemaSha,
+          schema.parserVersion,
+          blob.sha256,
+          identity.specSha,
+          identity.credentialFingerprint,
+          identity.upstreamBaseUrl,
+          quality === "quarantined" ? "quarantined" : "ingested",
+          quality,
+          quality === "quarantined" ? 0 : parsed.rows.length,
+          JSON.stringify(provenance),
+          new Date(now).toISOString(),
+        ],
+      );
+      if (quality !== "quarantined")
+        for (const row of validatedRows) {
+          await client.query(
+            `INSERT INTO searchad_report_rows_staging(staging_row_id,customer_id,ingestion_id,row_number,natural_key,row_sha,row_json) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+            [
+              randomUUID(),
+              job.customerId,
+              ingestionId,
+              row.rowNumber,
+              row.naturalKey,
+              row.rowSha,
+              JSON.stringify(row),
+            ],
+          );
+          const common = [
+            randomUUID(),
+            job.customerId,
+            ingestionId,
+            row.statDate,
+            row.entityType,
+            row.entityId,
+            row.naturalKey,
+            row.rowSha,
+          ];
+          if (row.table === "daily")
+            await client.query(
+              `INSERT INTO searchad_daily_metrics(metric_id,customer_id,ingestion_id,stat_date,entity_type,entity_id,natural_key,row_sha,dimensions_json,metrics_json,cost_raw,cost_basis,cost_gross_krw,cost_net_krw,vat_policy_version,observed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12,$13,$14,$15,$16)`,
+              [
+                ...common,
+                JSON.stringify(row.dimensions),
+                JSON.stringify(row.metrics),
+                row.costRaw,
+                row.costBasis,
+                row.costGrossKrw,
+                row.costNetKrw,
+                row.vatPolicyVersion,
+                new Date(now).toISOString(),
+              ],
+            );
+          if (row.table === "conversion")
+            await client.query(
+              `INSERT INTO searchad_conversion_metrics(conversion_metric_id,customer_id,ingestion_id,stat_date,entity_type,entity_id,natural_key,row_sha,dimensions_json,metrics_json,observed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11)`,
+              [
+                ...common,
+                JSON.stringify(row.dimensions),
+                JSON.stringify(row.metrics),
+                new Date(now).toISOString(),
+              ],
+            );
+          if (row.table === "term")
+            await client.query(
+              `INSERT INTO searchad_search_terms(search_term_id,customer_id,ingestion_id,stat_date,entity_type,entity_id,natural_key,row_sha,term_json,observed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)`,
+              [
+                ...common,
+                JSON.stringify({
+                  ...row.data,
+                  searchKeywordType: row.searchKeywordType,
+                }),
+                new Date(now).toISOString(),
+              ],
+            );
+          if (row.table === "master")
+            await client.query(
+              `INSERT INTO searchad_master_snapshots(master_snapshot_id,customer_id,ingestion_id,entity_type,entity_id,natural_key,row_sha,snapshot_json,observed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)`,
+              [
+                common[0],
+                job.customerId,
+                ingestionId,
+                row.entityType,
+                row.entityId,
+                row.naturalKey,
+                row.rowSha,
+                JSON.stringify(row.data),
+                new Date(now).toISOString(),
+              ],
+            );
+        }
+      await client.query(
+        "UPDATE searchad_report_jobs SET processing_state='ingested',state='ingested',quality=$3,updated_at=$4 WHERE customer_id=$1 AND report_job_id=$2",
+        [job.customerId, job.reportJobId, quality, new Date(now).toISOString()],
+      );
+      return {
+        ingestionId,
+        reportJobId: job.reportJobId,
+        quality,
+        rowCount: quality === "quarantined" ? 0 : parsed.rows.length,
+        generationWindow: proof,
+      };
+    });
+  }
+  async getIngestionBinding({customerId,reportJobId,sha256,identity}) {
+    validateIdentity(identity,customerId);
+    const row=(await this.pool.query('SELECT provenance_json FROM searchad_report_ingestions WHERE customer_id=$1 AND report_job_id=$2 AND generation_sha=$3 AND spec_sha=$4 AND credential_fingerprint=$5 AND upstream_base_url=$6 ORDER BY created_at LIMIT 1',[customerId,reportJobId,sha256,identity.specSha,identity.credentialFingerprint,identity.upstreamBaseUrl])).rows[0];
+    return row?{proof:row.provenance_json.generationWindow}:null;
+  }
+  async getArchivedBlob({customerId,reportJobId}) {
+    const row=(await this.pool.query('SELECT blob_key FROM searchad_report_blobs WHERE customer_id=$1 AND report_job_id=$2 ORDER BY created_at DESC,blob_id DESC LIMIT 1',[customerId,reportJobId])).rows[0];return row?{key:row.blob_key}:null;
+  }
+  async selectedIngestions(
+    client,
+    { customerId, reportType = null, statDate = null, identity = null },
+  ) {
+    const rows = (
+      await client.query(
+        "SELECT *,stat_date::text AS stat_date FROM searchad_report_ingestions WHERE customer_id=$1 AND ($2::text IS NULL OR report_type=$2) AND ($3::date IS NULL OR stat_date=$3) ORDER BY created_at,ingestion_id",
+        [customerId, reportType, statDate],
+      )
+    ).rows;
+    const groups = new Map();
+    for (const row of rows) {
+      const key = `${row.report_kind}:${row.report_type}:${row.stat_date || ""}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(row);
+    }
+    const selected = [];
+    for (const group of groups.values()) {
+      const sorted = group.sort(
+        (a, b) =>
+          Date.parse(b.provenance_json.generationWindow?.lower) -
+          Date.parse(a.provenance_json.generationWindow?.lower),
+      );
+      const latest = sorted[0];
+      const proof = latest.provenance_json.generationWindow;
+      if (
+        latest.report_kind === "stat" &&
+        !hasProvenCollectionSlot(proof, latest.stat_date)
+      )
+        continue;
+      if (
+        !proof ||
+        !latest.provenance_json.complete ||
+        latest.processing_state !== "ingested" ||
+        (identity &&
+          (latest.spec_sha !== identity.specSha ||
+            latest.credential_fingerprint !== identity.credentialFingerprint ||
+            latest.upstream_base_url !== identity.upstreamBaseUrl))
+      )
+        continue;
+      if (
+        group.some(
+          (r) =>
+            r !== latest &&
+            r.generation_sha !== latest.generation_sha &&
+            (!r.provenance_json.generationWindow ||
+              Date.parse(r.provenance_json.generationWindow.upper) >=
+                Date.parse(proof.lower)),
+        )
+      )
+        continue;
+      const quarantines = (
+        await client.query(
+          "SELECT metadata_json FROM searchad_report_jobs WHERE customer_id=$1 AND report_kind=$2 AND report_type=$3 AND stat_date IS NOT DISTINCT FROM $4::date AND metadata_json ? 'quarantineAt'",
+          [
+            customerId,
+            latest.report_kind,
+            latest.report_type,
+            latest.stat_date,
+          ],
+        )
+      ).rows;
+      if (
+        quarantines.some(
+          (r) =>
+            Date.parse(r.metadata_json.quarantineAt) >= Date.parse(proof.lower),
+        )
+      )
+        continue;
+      selected.push(latest);
+    }
+    return selected;
+  }
+  async listMetrics({customerId,entityType,entityId,identity}) {
+    const selected=await this.selectedIngestions(this.pool,{customerId,identity});if(!selected.length)return [];
+    return (await this.pool.query('SELECT m.*,i.quality FROM searchad_daily_metrics m JOIN searchad_report_ingestions i USING(customer_id,ingestion_id) WHERE m.customer_id=$1 AND m.ingestion_id=ANY($2::uuid[]) AND ($3::text IS NULL OR entity_type=$3) AND ($4::text IS NULL OR entity_id=$4) ORDER BY stat_date,entity_id,natural_key',[customerId,selected.map(r=>r.ingestion_id),entityType??null,entityId??null])).rows.map(r=>({ingestionId:r.ingestion_id,statDate:iso(r.stat_date)?.slice(0,10),entityType:r.entity_type,entityId:r.entity_id,quality:r.quality,dimensions:r.dimensions_json,metrics:r.metrics_json,costRaw:r.cost_raw,costBasis:r.cost_basis,costGrossKrw:r.cost_gross_krw,costNetKrw:r.cost_net_krw,vatPolicyVersion:r.vat_policy_version}));
+  }
+  async evaluateGeneration({ job, identity, now }) {
+    return this.ingestionTransaction({ job, identity }, async (client) => {
+      const selected = await this.selectedIngestions(client, {
+        customerId: job.customerId,
+        reportType: job.reportType,
+        statDate: job.statDate,
+        identity,
+      });
+      const row = selected.find((r) => r.report_job_id === job.reportJobId);
+      if (
+        !row ||
+        row.report_type !== "AD" ||
+        !hasProvenCollectionSlot(
+          row.provenance_json.generationWindow,
+          row.stat_date,
+        ) ||
+        row.provenance_json.generationWindow.slot < 3 ||
+        !row.provenance_json.generationWindow.stableAge
+      )
+        return { quality: "provisional", evidenceCount: 0 };
+      const history = (
+        await client.query(
+          "SELECT provenance_json FROM searchad_report_ingestions WHERE customer_id=$1 AND report_type=$2 AND stat_date=$3 AND processing_state='ingested' AND spec_sha=$4 AND credential_fingerprint=$5 AND upstream_base_url=$6",
+          [
+            job.customerId,
+            job.reportType,
+            job.statDate,
+            identity.specSha,
+            identity.credentialFingerprint,
+            identity.upstreamBaseUrl,
+          ],
+        )
+      ).rows;
+      const slots = new Set(
+        history
+          .filter((r) => r.provenance_json.complete)
+          .map((r) => r.provenance_json.generationWindow.slot),
+      );
+      if (![1, 2, 3].every((slot) => slots.has(slot)))
+        return { quality: "provisional", evidenceCount: 0 };
+      const metrics = (
+        await client.query(
+          "SELECT entity_type,entity_id,SUM(cost_raw)::text AS raw,SUM(cost_gross_krw)::text AS gross,COUNT(*) FILTER(WHERE cost_basis <> 'vat_included' OR cost_gross_krw IS NULL OR vat_policy_version <> 'vat-20260330-v1')::int AS invalid FROM searchad_daily_metrics WHERE customer_id=$1 AND ingestion_id=$2 GROUP BY entity_type,entity_id",
+          [job.customerId, row.ingestion_id],
+        )
+      ).rows;
+      if (!metrics.length || metrics.some((r) => r.invalid))
+        return { quality: "provisional", evidenceCount: 0 };
+      for (const metric of metrics)
+        await client.query(
+          `INSERT INTO searchad_spend_evidence(spend_evidence_id,customer_id,ingestion_id,entity_type,entity_id,stat_date,spec_sha,credential_fingerprint,upstream_base_url,generation_sha,quality,cost_raw,cost_basis,cost_gross_krw,vat_policy_version,policy_provenance_json,observed_at,stabilized_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'stabilized_by_policy',$11,'vat_included',$12,'vat-20260330-v1',$13::jsonb,$14,$15) ON CONFLICT(customer_id,ingestion_id,entity_type,entity_id,stat_date) DO NOTHING`,
+          [
+            randomUUID(),
+            job.customerId,
+            row.ingestion_id,
+            metric.entity_type,
+            metric.entity_id,
+            job.statDate,
+            identity.specSha,
+            identity.credentialFingerprint,
+            identity.upstreamBaseUrl,
+            row.generation_sha,
+            metric.raw,
+            metric.gross,
+            JSON.stringify({
+              ...row.provenance_json,
+              stabilityVersion: "d1-d2-d3-v1",
+              slots: [1, 2, 3],
+              freshnessBasis: "generation_window_lower",
+            }),
+            row.provenance_json.generationWindow.downloadCompletedAt,
+            new Date(now).toISOString(),
+          ],
+        );
+      await client.query(
+        "UPDATE searchad_report_ingestions SET quality='stabilized_by_policy' WHERE customer_id=$1 AND ingestion_id=$2",
+        [job.customerId, row.ingestion_id],
+      );
+      await client.query(
+        "UPDATE searchad_report_jobs SET quality='stabilized_by_policy' WHERE customer_id=$1 AND report_job_id=$2",
+        [job.customerId, job.reportJobId],
+      );
+      return { quality: "stabilized_by_policy", evidenceCount: metrics.length };
+    });
+  }
+  async selectSpendEvidence({
+    customerId,
+    entityType,
+    entityId,
+    identity,
+    now,
+    maxAgeMs,
+  }) {
+    validateIdentity(identity, customerId);
+    if (
+      !Number.isSafeInteger(maxAgeMs) ||
+      maxAgeMs < 1 ||
+      !Number.isFinite(now)
+    )
+      return null;
+    const selected = await this.selectedIngestions(this.pool, {
+      customerId,
+      reportType: "AD",
+      identity,
+    });
+    const ids = selected
+      .filter(
+        (r) =>
+          r.quality === "stabilized_by_policy" &&
+          isGenerationFresh(r.provenance_json.generationWindow, now, maxAgeMs),
+      )
+      .map((r) => r.ingestion_id);
+    if (!ids.length) return null;
+    return (
+      (
+        await this.pool.query(
+          `SELECT e.* FROM searchad_spend_evidence e JOIN searchad_report_ingestions i USING(customer_id,ingestion_id)
+      WHERE e.customer_id=$1 AND e.ingestion_id=ANY($2::uuid[]) AND e.entity_type=$3 AND e.entity_id=$4 AND e.spec_sha=$5 AND e.credential_fingerprint=$6 AND e.upstream_base_url=$7 AND e.quality='stabilized_by_policy' AND i.quality='stabilized_by_policy' AND i.processing_state='ingested' AND e.stabilized_at <= $8 AND e.observed_at <= $8
+      AND (i.provenance_json->'generationWindow'->>'lower')::timestamptz BETWEEN $9 AND $8
+      AND (i.provenance_json->'generationWindow'->>'downloadCompletedAt')::timestamptz BETWEEN (i.provenance_json->'generationWindow'->>'lower')::timestamptz AND $8
+      AND jsonb_typeof(i.provenance_json->'generationWindow'->'slot')='number'
+      AND (i.provenance_json->'generationWindow'->>'slot')::numeric >= 3
+      AND (i.provenance_json->'generationWindow'->>'slot')::numeric = floor((i.provenance_json->'generationWindow'->>'slot')::numeric)
+      AND NOT EXISTS(SELECT 1 FROM searchad_report_ingestions newer WHERE newer.customer_id=i.customer_id AND newer.report_type=i.report_type AND newer.stat_date=i.stat_date AND newer.ingestion_id<>i.ingestion_id AND (newer.provenance_json->'generationWindow'->>'lower')::timestamptz >= (i.provenance_json->'generationWindow'->>'lower')::timestamptz)
+      AND NOT EXISTS(SELECT 1 FROM searchad_report_jobs j WHERE j.customer_id=i.customer_id AND j.report_type=i.report_type AND j.stat_date=i.stat_date AND (j.metadata_json->>'quarantineAt')::timestamptz >= (i.provenance_json->'generationWindow'->>'lower')::timestamptz)
+      ORDER BY e.stat_date DESC LIMIT 1`,
+          [
+            customerId,
+            ids,
+            entityType,
+            entityId,
+            identity.specSha,
+            identity.credentialFingerprint,
+            identity.upstreamBaseUrl,
+            new Date(now).toISOString(),
+            new Date(now - maxAgeMs).toISOString(),
+          ],
+        )
+      ).rows[0] || null
+    );
   }
   // Stats is provisional regardless of age or identity. Task 3 supplies a
   // distinct report-derived trust selector; this table can never satisfy it.

@@ -1,3 +1,4 @@
+import { configuredReportStorage } from './reporting/s3-storage.js';
 import { createPostgresPool, closePostgresPool } from '../../infrastructure/postgres/pool.js';
 import { loadSearchAdReportingConfig } from './reporting/config.js';
 import { createReportingRuntime } from './reporting/runtime.js';
@@ -7,7 +8,7 @@ async function assertSchema(pool) {
   try {
     const result = await pool.query('SELECT name,to_regclass(name)::text AS relation FROM unnest($1::text[]) AS name', [TABLES]);
     if (result.rows?.length !== TABLES.length || result.rows.some(row => !row.relation)) throw new Error();
-    const migration = await pool.query("SELECT version FROM schema_migrations WHERE version='0010'");
+    const migration = await pool.query("SELECT version FROM schema_migrations WHERE version='0011'");
     if (migration.rows.length !== 1) throw new Error();
   } catch { throw reportingError('SEARCHAD_REPORTING_SCHEMA_NOT_READY', 503); }
 }
@@ -28,8 +29,9 @@ export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = proce
     for (const customer of app.searchAdCredentials.listCustomers()) {
       if (customer.status === 'active') await pool.query('INSERT INTO searchad_customer_accounts(customer_id) VALUES($1) ON CONFLICT(customer_id) DO NOTHING', [customer.customerId]);
     }
-    const runtime = await createReportingRuntime({ pool, gateway: app.searchAdGateway, registry: app.searchAdRegistry, credentialsRegistry: app.searchAdCredentials, config: app.searchAdConfig, reportingConfig, clock, closeOwnedResources: () => closePostgresPool(ownedPool) });
-    runtime.blobStorage = blobStorage;
+    const storage = blobStorage || configuredReportStorage(env);
+    const runtime = await createReportingRuntime({ pool, blobStorage: storage, gateway: app.searchAdGateway, registry: app.searchAdRegistry, credentialsRegistry: app.searchAdCredentials, config: app.searchAdConfig, reportingConfig, clock, closeOwnedResources: async () => { if (!blobStorage) storage?.client?.destroy?.(); await closePostgresPool(ownedPool); } });
+
     return { runtime, startupError: null };
   } catch (error) {
     await closePostgresPool(ownedPool);

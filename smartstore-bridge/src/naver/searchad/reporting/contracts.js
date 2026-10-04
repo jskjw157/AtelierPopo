@@ -25,9 +25,9 @@ export function validateStatsInput(input) {
   if (!ENTITY_TYPES.includes(input.entityType) || typeof input.entityId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(input.entityId) || !validDate(input.since) || !validDate(input.until) || input.since > input.until) throw reportingError('SEARCHAD_STATS_INPUT_INVALID');
   return { customerId: input.customerId, entityType: input.entityType, entityId: input.entityId, since: input.since, until: input.until };
 }
-export function assertReportingScope(customerId, context) {
+export function assertReportingScope(customerId, context, { readOnly = false } = {}) {
   if (!context?.principal?.principalId || !context.principal.customerIds?.includes(customerId)) throw reportingError('SEARCHAD_CUSTOMER_FORBIDDEN', 403);
-  if (!['operator', 'executor', 'admin'].includes(context.principal.role)) throw reportingError('SEARCHAD_REPORTING_ROLE_FORBIDDEN', 403);
+  if (![...(readOnly ? ['reader'] : []), 'operator', 'executor', 'admin'].includes(context.principal.role)) throw reportingError('SEARCHAD_REPORTING_ROLE_FORBIDDEN', 403);
   if (typeof context.requestId !== 'string' || !/^[A-Za-z0-9_.:-]{1,128}$/.test(context.requestId)) throw reportingError('SEARCHAD_REPORTING_CONTEXT_INVALID');
 }
 export function validateIdentity(identity, customerId) {

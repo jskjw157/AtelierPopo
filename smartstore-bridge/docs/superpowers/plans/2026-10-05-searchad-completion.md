@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Node.js >=22.5.0; ES modules; node:test; PostgreSQL 16 acceptance.
-- Preserve migrations 0001–0009 byte-for-byte; only append 0010–0013.
+- Preserve migrations 0001–0009 byte-for-byte; only append 0010–0014.
 - No live Naver request, production DB/config/gate change, deployment, main/base merge, or merge of PR #28.
 - Default automation mode is `observe`; new report registration and worker gates default OFF.
 - Reuse change plan → one-time approval → execution → verification/reconcile; no second execution engine.
@@ -78,7 +78,7 @@ At each migration task, update `test/postgres-migrator.test.js`, exact current-v
 
 ## Task 3: Signed report download, durable blobs, exact schemas and stabilized evidence
 
-**Files:** Create `src/naver/searchad/reporting/{download-adapter,blob-storage,s3-storage,schema-registry,tsv-parser,ingestion-service,spend-evidence-service}.js`; `src/naver/searchad/transport/report-download.js`; `specs/naver-searchad/report-schemas.json`; `test/searchad-reporting-ingestion.test.js`; `test/searchad-report-download.test.js`; `test/postgres-searchad-report-ingestion.integration.test.js`; source fixtures under `test/fixtures/searchad/reports/`. Modify client for explicit redirect/body-limit options, reporting repository/runtime/routes/OpenAPI, package/lock if adding `@aws-sdk/client-s3`, correction provenance and workflow.
+**Files:** Create `src/naver/searchad/reporting/{download-adapter,blob-storage,s3-storage,schema-registry,tsv-parser,ingestion-service,spend-evidence-service}.js`; `src/naver/searchad/transport/report-download.js`; `specs/naver-searchad/report-schemas.json`; `test/searchad-reporting-ingestion.test.js`; `test/searchad-report-download.test.js`; `test/postgres-searchad-report-ingestion.integration.test.js`; source fixtures under `test/fixtures/searchad/reports/`. Create narrow `migrations/postgres/0011_searchad_reporting_generation.sql` to make existing ingestion `report_created_at` nullable without altering0010; preserve stat exact generation as null and derived bounds in provenance. Update exact migration/current-version/clean-repeat tests. Modify client for explicit redirect/body-limit options, reporting repository/runtime/routes/OpenAPI, package/lock if adding `@aws-sdk/client-s3`, correction provenance and workflow.
 
 **Interfaces:**
 
@@ -96,14 +96,14 @@ At each migration task, update `test/postgres-migrator.test.js`, exact current-v
 
 ## Task 4: Circuit policies, resilient projection and all existing writer integration
 
-**Files:** Create `migrations/postgres/0011_searchad_circuit_automation.sql`; `src/naver/searchad/circuit/{policy,postgres-repository,projection-service,service}.js`; `src/http/routes-searchad-circuit.js`; `test/searchad-circuit.test.js`; `test/postgres-searchad-circuit.integration.test.js`; `test/postgres-searchad-circuit-writer.integration.test.js`. Modify completion bootstrap/OpenAPI/server, `write/runtime-production.js`, `write/production-execution-service.js`, `lifecycle/postgres-account-send-fence.js`, `lifecycle/postgres-mutation-gateway.js`, `lifecycle/runtime-production.js`, `canary/runtime-production.js`, migration checks/workflow.
+**Files:** Create `migrations/postgres/0012_searchad_circuit_automation.sql`; `src/naver/searchad/circuit/{policy,postgres-repository,projection-service,service}.js`; `src/http/routes-searchad-circuit.js`; `test/searchad-circuit.test.js`; `test/postgres-searchad-circuit.integration.test.js`; `test/postgres-searchad-circuit-writer.integration.test.js`. Modify completion bootstrap/OpenAPI/server, `write/runtime-production.js`, `write/production-execution-service.js`, `lifecycle/postgres-account-send-fence.js`, `lifecycle/postgres-mutation-gateway.js`, `lifecycle/runtime-production.js`, `canary/runtime-production.js`, migration checks/workflow.
 
 **Interfaces:**
 
 - `CircuitProjectionService({repository,sources,clock}).catchUp({customerId}) -> {ready,cursors}` reads committed existing attempts/intents/events; `sources` are server-owned concrete repository adapters.
 - `CircuitService({repository,projection,spendEvidence,clock}).evaluate(input,context)`, `.pause({customerId,reason},context)`, `.resume({customerId,reason},context)` and `.assertDispatchAllowed(dispatch,{client,now})`.
 - Dispatch is immutable `{customerId,purpose,operationKey,entityType,entityId,ruleId?,actionClass,incrementalSpendKrw?}` derived by trusted adapters, never body input. Add optional internal fifth argument to `PostgresAccountSendFence.run(customerId,validate,task,method,{dispatch,beforeSend})`; `beforeSend(client,dispatch)` executes inside locked authoritative account transaction, followed by the existing synchronous identity check/fetch initiation.
-- Repository `projectOnce({customerId,sourceKind,sourceId,event,now})`, `getState(...)`, `reserveDispatch(...)`, `appendManualControl(...)`; unique projection sources avoid recounting.0011 creates automation tables now for Task5 with no automation runtime activation.
+- Repository `projectOnce({customerId,sourceKind,sourceId,event,now})`, `getState(...)`, `reserveDispatch(...)`, `appendManualControl(...)`; unique projection sources avoid recounting.0012 creates automation tables now for Task5 with no automation runtime activation.
 
 - [ ] **RED:** `primary_success_survives_projection_error`, `next_dispatch_denied_until_projection_catches_up`, `duplicate_event_does_not_increment_failure_count`, `three_unknowns_stop_normal_customer_writes`, `pause_is_sticky_across_midnight_and_restart`, `rollback_and_read_recovery_survive_circuit_pause`, `manual_hold_and_cooldown_boundary_exact`. PG competitors test Circuit pause committed before fetch initiation across ordinary, lifecycle and Canary paths; report/read recovery does not masquerade as ordinary ad mutation.
 - [ ] **Run RED:** `node --test test/searchad-circuit.test.js test/postgres-searchad-circuit.integration.test.js test/postgres-searchad-circuit-writer.integration.test.js`.
@@ -130,7 +130,7 @@ At each migration task, update `test/postgres-migrator.test.js`, exact current-v
 
 ## Task 6: Durable leased worker and bounded schedules
 
-**Files:** Create `migrations/postgres/0012_searchad_worker.sql`; `src/naver/searchad/worker/{config,postgres-repository,scheduler,handlers,runtime}.js`; `src/searchad-worker.js`; `src/http/routes-searchad-worker.js`; `test/searchad-worker.test.js`; `test/postgres-searchad-worker.integration.test.js`. Modify package scripts, completion bootstrap/disposal/OpenAPI/server, migration checks/workflow.
+**Files:** Create `migrations/postgres/0013_searchad_worker.sql`; `src/naver/searchad/worker/{config,postgres-repository,scheduler,handlers,runtime}.js`; `src/searchad-worker.js`; `src/http/routes-searchad-worker.js`; `test/searchad-worker.test.js`; `test/postgres-searchad-worker.integration.test.js`. Modify package scripts, completion bootstrap/disposal/OpenAPI/server, migration checks/workflow.
 
 **Interfaces:**
 
@@ -163,7 +163,7 @@ At each migration task, update `test/postgres-migrator.test.js`, exact current-v
 
 ## Task 8: Canonical HAAR mapping and real provider-backed commerce evidence
 
-**Files:** Create `migrations/postgres/0013_searchad_profitability.sql`; `src/naver/searchad/profitability/{contracts,postgres-repository,product-evidence-service,commerce-provider,naver-commerce-provider,cafe24-commerce-provider,mapping-service}.js`; `src/http/routes-searchad-profitability.js`; `test/searchad-product-evidence.test.js`; `test/postgres-searchad-product-evidence.integration.test.js`. Modify completion bootstrap/OpenAPI/server, existing Commerce/Cafe24 composition only as necessary, migration tests/workflow.
+**Files:** Create `migrations/postgres/0014_searchad_profitability.sql`; `src/naver/searchad/profitability/{contracts,postgres-repository,product-evidence-service,commerce-provider,naver-commerce-provider,cafe24-commerce-provider,mapping-service}.js`; `src/http/routes-searchad-profitability.js`; `test/searchad-product-evidence.test.js`; `test/postgres-searchad-product-evidence.integration.test.js`. Modify completion bootstrap/OpenAPI/server, existing Commerce/Cafe24 composition only as necessary, migration tests/workflow.
 
 **Interfaces:**
 
@@ -174,8 +174,8 @@ At each migration task, update `test/postgres-migrator.test.js`, exact current-v
 
 - [ ] **RED:** `canonical_uuid_and_text_channel_key_are_not_confused`, `haar_own_mall_not_duplicated_as_cafe24_channel`, `same_supplier_sku_different_sources_do_not_merge`, `customer_channel_binding_required`, `manual_mapping_cannot_claim_live_evidence`, `shared_ad_mapping_needs_weights`, `commerce_provider_is_wired_in_bootstrap`, `order_adjustment_identity_deduplicates`, `missing_settlement_is_partial_not_zero`, `buyer_pii_never_persists`.
 - [ ] **Run RED:** `node --test test/searchad-product-evidence.test.js test/postgres-searchad-product-evidence.integration.test.js`.
-- [ ] **GREEN:** Implement0013 without legacy mapping destruction; new source-independent rows require canonical HAAR/channel links and Customer scope. Effective-dated cost/mapping revisions, immutable provider observations and explicit capability results. Read official provider contracts when a response field is not documented locally and pin minimal mapping fixtures. Wire Operator product collection, Admin binding/mapping/cost input, Reader evidence summaries. Source unsupported/incomplete data remains visible and blocks actual profit/Auto eligibility, with no manual “trusted=true” escape hatch. At least SmartStore product state/order/adjustment provider methods and the existing Cafe24 product/variant reads must invoke real configured read-only adapters in application composition; mocks-only or every-provider-unavailable implementation does not complete this task. Implement available settlement reads whose pinned descriptors and official field semantics are verified; retain explicit missing capability only for genuinely unsupported/unverifiable sources.
-- [ ] **Verify:** Focused unit/PG+HTTP restart suites plus existing multi-source and channel-import regression. Assert no Commerce write operation can be selected by provider and no input can replace the server-chosen operation/path/account. Exact0013 migration acceptance includes repeat and original checksum identity.
+- [ ] **GREEN:** Implement0014 without legacy mapping destruction; new source-independent rows require canonical HAAR/channel links and Customer scope. Effective-dated cost/mapping revisions, immutable provider observations and explicit capability results. Read official provider contracts when a response field is not documented locally and pin minimal mapping fixtures. Wire Operator product collection, Admin binding/mapping/cost input, Reader evidence summaries. Source unsupported/incomplete data remains visible and blocks actual profit/Auto eligibility, with no manual “trusted=true” escape hatch. At least SmartStore product state/order/adjustment provider methods and the existing Cafe24 product/variant reads must invoke real configured read-only adapters in application composition; mocks-only or every-provider-unavailable implementation does not complete this task. Implement available settlement reads whose pinned descriptors and official field semantics are verified; retain explicit missing capability only for genuinely unsupported/unverifiable sources.
+- [ ] **Verify:** Focused unit/PG+HTTP restart suites plus existing multi-source and channel-import regression. Assert no Commerce write operation can be selected by provider and no input can replace the server-chosen operation/path/account. Exact0014 migration acceptance includes repeat and original checksum identity.
 - [ ] **Commit:** `feat(searchad): connect HAAR product mappings and commerce evidence`.
 
 ## Task 9: Explainable profitability and deterministic recommendations
@@ -222,7 +222,7 @@ At each migration task, update `test/postgres-migrator.test.js`, exact current-v
 
 - [ ] **RED:** Add one integrated Customer workflow: stats→report intent/poll/ingest→trusted generation→Circuit projection→HAAR mapping/commerce→profit/recommendation→observe/approve/limited-auto fixture→outcome verification→restart→GET-only recovery. Pin role matrix, wrong Customer denial, expired identity, shutdown, missing DB/storage readiness, schedule duplicate prevention and secret/temp-token absence in responses/logs/DB. Retain parent cleanup routes404 and `cleanup:false` before/after restart; empty inventory still has no authority.
 - [ ] **Run RED:** `node --test test/searchad-completion-openapi.test.js test/postgres-searchad-completion-http.integration.test.js`; see intended failures for any unwired subsystem rather than acceptance against hand-constructed services.
-- [ ] **GREEN:** Complete any missing composition/close/readiness/documentation connections. Do not relax a safety assertion to obtain closure. Run full tests, clean0010–0013 migration acceptance, expanded scanner, exact126 registry and117 baseline runtime count (explain any separately justified correction), all syntax checks, diff/secret scans and production dependency audit. Include report/worker/Auto focused jobs as well as full `npm test` so file omission cannot hide gaps.
+- [ ] **GREEN:** Complete any missing composition/close/readiness/documentation connections. Do not relax a safety assertion to obtain closure. Run full tests, clean0010–0014 migration acceptance, expanded scanner, exact126 registry and117 baseline runtime count (explain any separately justified correction), all syntax checks, diff/secret scans and production dependency audit. Include report/worker/Auto focused jobs as well as full `npm test` so file omission cannot hide gaps.
 - [ ] **Verify and document:** `npm ci`; `npm run check`; syntax-check every tracked source/script; `npm test`; `node scripts/searchad-write-safety.mjs`; `node scripts/searchad-execution-safety.mjs`; `node scripts/searchad-validation-coverage.mjs`; `npm run searchad:coverage`; `npm run commerce:coverage`; `git diff --check`; `npm audit --omit=dev --audit-level=high`. Use fresh CI with required realPG and zero skips for acceptance, record exact SHA/run/job/counts and limits. Network audit failure is `unverified`. Distinguish software-supported, provider/schema-blocked, #26 unresolved and #22 unstarted. Preserve PR28 Draft/unmerged and publish only through the controller's authorized feature-branch workflow.
 - [ ] **Commit:** `test(searchad): verify composed completion and retain operational blockers`.
 

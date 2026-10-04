@@ -1,3 +1,7 @@
+import { ReportDownloadTransport } from '../transport/report-download.js';
+import { ReportDownloadAdapter } from './download-adapter.js';
+import { ReportIngestionService } from './ingestion-service.js';
+import { SpendEvidenceService } from './spend-evidence-service.js';
 import { createPostgresMutationGateway } from '../lifecycle/postgres-mutation-gateway.js';
 import { ReportRemoteAdapter } from './remote-adapter.js';
 import { ReportJobService } from './job-service.js';
@@ -6,7 +10,7 @@ import { SearchAdOperationGateway } from '../gateway.js';
 import { PostgresReportingRepository } from './postgres-repository.js';
 import { StatsObservationService } from './stats-service.js';
 import { currentReportingIdentity, reportingError } from './contracts.js';
-export async function createReportingRuntime({ pool, repository = null, gateway, registry = gateway?.registry, credentialsRegistry = gateway?.credentialsRegistry, config = gateway?.config, reportingConfig = { enabled: true, allowReportingJobs: false }, identityResolver = customerId => currentReportingIdentity({ customerId, registry, credentialsRegistry, config }), clock = Date.now, closeOwnedResources = async () => {} } = {}) {
+export async function createReportingRuntime({ pool, repository = null, blobStorage = null, gateway, registry = gateway?.registry, credentialsRegistry = gateway?.credentialsRegistry, config = gateway?.config, reportingConfig = { enabled: true, allowReportingJobs: false }, identityResolver = customerId => currentReportingIdentity({ customerId, registry, credentialsRegistry, config }), clock = Date.now, closeOwnedResources = async () => {} } = {}) {
   let closing = false, closePromise;
   const active = new Set();
   const reportingRepository = repository || (pool && new PostgresReportingRepository({ pool, clock }));
@@ -20,6 +24,9 @@ export async function createReportingRuntime({ pool, repository = null, gateway,
   const reportJobsAvailable = enabled && typeof pool?.connect === 'function' && typeof reportingRepository?.createReportIntent === 'function';
   if (enabled && reportingConfig.allowReportingJobs && !reportJobsAvailable) throw reportingError('SEARCHAD_REPORTING_DEPENDENCIES_REQUIRED', 503);
   const jobService = reportJobsAvailable && new ReportJobService({ repository: reportingRepository, remote: new ReportRemoteAdapter({ gateway: createPostgresMutationGateway({ gateway: reportingGateway, pool }), registry }), identityResolver, clock, config: reportingConfig });
+  const ingestionAvailable = Boolean(jobService && blobStorage?.put && blobStorage?.get && reportingConfig.generationPolicy && (!reportingConfig.production || blobStorage.durableProduction));
+  const ingestion = ingestionAvailable && new ReportIngestionService({ repository: reportingRepository, jobService, storage: blobStorage, downloadAdapter: new ReportDownloadAdapter({ jobService, transport: new ReportDownloadTransport({ client: reportingGateway.client, maxBytes: reportingConfig.maxDownloadBytes }), identityResolver, clock }), clock, generationPolicy: reportingConfig.generationPolicy });
+  const spendEvidence = ingestionAvailable && new SpendEvidenceService({ repository: reportingRepository, jobService, identityResolver, clock });
   function track(task) {
     if (closing) return Promise.reject(reportingError('SEARCHAD_REPORTING_NOT_READY', 503));
     const promise = task(); active.add(promise);
@@ -35,7 +42,10 @@ export async function createReportingRuntime({ pool, repository = null, gateway,
       return promise;
     } } : null,
     jobService: jobService ? Object.fromEntries(['register','poll','reconcile'].map(method => [method, (input, context) => track(() => jobService[method](input, context))])) : null,
-    status() { return { enabled, ready: enabled && !closing, storage: { runtime: 'postgres', schemaReady: enabled }, reporting: { stats: enabled, metrics: 'unavailable', reportJobs: Boolean(reportJobsAvailable) } }; },
+    ingestionService: ingestion ? Object.fromEntries(['ingest','archived'].map(method => [method,(input,context)=>track(()=>ingestion[method](input,context))])) : null,
+    spendEvidenceService: spendEvidence ? { evaluateGeneration: (input,context)=>track(()=>spendEvidence.evaluateGeneration(input,context)) } : null,
+    identityResolver,
+    status() { return { enabled, ready: enabled && !closing && (!reportingConfig.ingestionRequired || ingestionAvailable), storage: { runtime: 'postgres', schemaReady: enabled }, reporting: { stats: enabled, metrics: ingestionAvailable ? 'available' : 'unavailable', ingestion: ingestionAvailable, reportJobs: Boolean(reportJobsAvailable) } }; },
     close() {
       if (!closePromise) { closing = true; closePromise = (async () => { await Promise.allSettled([...active]); await closeOwnedResources(); })(); }
       return closePromise;

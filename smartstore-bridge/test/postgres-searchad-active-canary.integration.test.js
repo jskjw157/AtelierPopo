@@ -18,7 +18,7 @@ test('PostgreSQL Active Canary schema is idempotent, immutable where required, a
   const pool = createPostgresPool({ connectionString: process.env.TEST_DATABASE_URL, sslMode: 'disable' });
   try {
     const first = await runPostgresMigrations({ pool, migrationsDir });
-    assert.equal(first.currentVersion, '0010');
+    assert.equal(first.currentVersion, '0011');
     const second = await runPostgresMigrations({ pool, migrationsDir });
     assert.deepEqual(second.applied, []);
 

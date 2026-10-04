@@ -5,12 +5,13 @@ import { REPORT_TYPES } from './operations.js';
 export function validateReportJobInput(input) {
   exactKeys(input, ['customerId','kind','reportType','statDate','fromTime','intentKey'], 'SEARCHAD_REPORT_INPUT_INVALID');
   scopedCustomer(input.customerId);
+  if(input.kind==='stat' && input.reportType==='NAVERPAY_CONVERSION')throw reportingError('SEARCHAD_REPORT_TYPE_RETIRED',409);
   if (typeof input.kind !== 'string' || !Object.hasOwn(REPORT_TYPES, input.kind) || !REPORT_TYPES[input.kind].includes(input.reportType) || typeof input.intentKey !== 'string' || !/^[A-Za-z0-9_.:-]{1,128}$/.test(input.intentKey)) throw reportingError('SEARCHAD_REPORT_INPUT_INVALID');
   if (input.kind === 'stat' ? (!validDate(input.statDate) || Object.hasOwn(input, 'fromTime')) : Object.hasOwn(input, 'statDate')) throw reportingError('SEARCHAD_REPORT_INPUT_INVALID');
   return { customerId: input.customerId, kind: input.kind, reportType: input.reportType, statDate: input.kind === 'stat' ? input.statDate : null, fromTime: input.fromTime === undefined ? null : utcTimestamp(input.fromTime), intentKey: input.intentKey };
 }
-function jobScope(input, context) {
-  exactKeys(input, ['customerId','reportJobId'], 'SEARCHAD_REPORT_INPUT_INVALID'); scopedCustomer(input.customerId); assertReportingScope(input.customerId, context);
+function jobScope(input, context, options) {
+  exactKeys(input, ['customerId','reportJobId'], 'SEARCHAD_REPORT_INPUT_INVALID'); scopedCustomer(input.customerId); assertReportingScope(input.customerId, context, options);
   if (typeof input.reportJobId !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(input.reportJobId)) throw reportingError('SEARCHAD_REPORT_INPUT_INVALID');
   return input;
 }
@@ -59,8 +60,8 @@ export class ReportJobService {
     try { return await this.repository.settleReportJob({ customerId: row.customerId, reportJobId: row.reportJobId, claimId: row.claimId, processingState: state, lastErrorCode, ...(response ? { remoteUpdatedAt: response.remoteUpdatedAt ?? null, reportCreatedAt: response.reportCreatedAt ?? null } : {}), ...(status === 'ERROR' || status === 'NONE' ? { quality: 'failed' } : {}), now: this.clock() }); }
     catch { throw reportingError('SEARCHAD_REPORTING_STORAGE_FAILED', 503); }
   }
-  async load(input, context) {
-    jobScope(input, context);
+  async load(input, context, options) {
+    jobScope(input, context, options);
     const row = await this.repository.getReportJob(input);
     if (!row) throw reportingError('SEARCHAD_REPORT_JOB_NOT_FOUND', 404);
     await this.identity(row.customerId, row); return row;
