@@ -62,6 +62,11 @@ test('public hierarchy root lifecycle composes bootstrap, activation, approval, 
     return { status: response.status, body: await response.json() };
   };
 
+  const getJson = async route => {
+    const response = await nativeFetch(`http://127.0.0.1:${current.api.server.address().port}${route}`);
+    return { status: response.status, body: await response.json() };
+  };
+
   const simulatedUpstream = async (url, init) => {
     const parsed = new URL(url);
     if (parsed.origin !== origin) {
@@ -186,6 +191,25 @@ test('public hierarchy root lifecycle composes bootstrap, activation, approval, 
     assert.equal(hierarchyReadiness.initialized, true);
     assert.equal(hierarchyReadiness.ready, true);
 
+    const publicReady = await getJson('/health/ready');
+    assert.equal(publicReady.status, 200, JSON.stringify(publicReady));
+    assert.deepEqual(publicReady.body.searchAdHierarchy, {
+      required: true,
+      initialized: true,
+      ready: true
+    });
+
+    const readerHierarchyDoc = await getJson('/openapi-searchad-hierarchy-reader.json');
+    assert.equal(readerHierarchyDoc.status, 200);
+    assert.deepEqual(readerHierarchyDoc.body.paths, {});
+
+    const adminHierarchyDoc = await getJson('/openapi-searchad-hierarchy-admin.json');
+    assert.equal(adminHierarchyDoc.status, 200);
+    assert.equal(Object.keys(adminHierarchyDoc.body.paths).length, 13);
+    const hierarchyPathList = Object.keys(adminHierarchyDoc.body.paths).join('\n');
+    assert.equal(hierarchyPathList.includes('/campaigns/cleanup'), false);
+    assert.equal(hierarchyPathList.includes('/adgroups/cleanup'), false);
+
     const activationRuntime = current.app.searchAdActivationRuntime;
     const evidenceId = randomUUID();
     const now = Date.now();
@@ -229,6 +253,12 @@ test('public hierarchy root lifecycle composes bootstrap, activation, approval, 
     current = null;
     await start();
     assert.equal(current.app.searchAdHierarchyRuntime?.status().ready, true);
+    const restartedReady = await getJson('/health/ready');
+    assert.equal(restartedReady.status, 200);
+    assert.equal(restartedReady.body.searchAdHierarchy.ready, true);
+    const restartedAdminDoc = await getJson('/openapi-searchad-hierarchy-admin.json');
+    assert.equal(restartedAdminDoc.status, 200);
+    assert.equal(Object.keys(restartedAdminDoc.body.paths).length, 13);
 
     const approved = await call('admin', 'POST', `/api/v1/searchad/changes/${prepared.body.planId}/approve`, {
       confirmation: 'APPROVE_SEARCHAD_CHANGE'
