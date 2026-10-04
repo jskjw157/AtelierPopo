@@ -79,10 +79,10 @@ test('0009 storage recovery: isolated PostgreSQL upgrade, ownership persistence 
         repository = new Repository({ pool });
         assert.equal((await pool.query('SELECT current_schema() AS name')).rows[0].name, schema);
       },
-      historicalDir() {
+      historicalDir(through = '0008') {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'haar-storage-0008-'));
         dirs.push(dir);
-        for (const migration of listMigrationFiles(migrationsDir).filter(entry => entry.version <= '0008')) {
+        for (const migration of listMigrationFiles(migrationsDir).filter(entry => entry.version <= through)) {
           fs.copyFileSync(path.join(migrationsDir, migration.fileName), path.join(dir, migration.fileName));
         }
         return dir;
@@ -129,10 +129,11 @@ test('0009 storage recovery: isolated PostgreSQL upgrade, ownership persistence 
       operationKeys: ['fixture.read'], fieldScope: [], expiresAt: '2026-09-13T03:00:00.000Z' };
     await activation.createEvidence({ ...scope, result: 'verified', createdAt: now });
     await activation.createActivation({ ...scope, activationId, activatedByPrincipalId: 'fixture-admin', activatedAt: now });
-    const upgraded = await runPostgresMigrations({ pool: f.pool, migrationsDir, logger });
+    const historical0009Dir = f.historicalDir('0009');
+    const upgraded = await runPostgresMigrations({ pool: f.pool, migrationsDir: historical0009Dir, logger });
     assert.deepEqual(upgraded.applied, [migrationName]);
     assert.equal(upgraded.currentVersion, '0009');
-    const repeat = await runPostgresMigrations({ pool: f.pool, migrationsDir, logger });
+    const repeat = await runPostgresMigrations({ pool: f.pool, migrationsDir: historical0009Dir, logger });
     assert.deepEqual(repeat, { applied: [], currentVersion: '0009' });
     assert.deepEqual((await f.pool.query("SELECT version, checksum FROM schema_migrations WHERE version <= '0008' ORDER BY version")).rows, before);
     const present = (await f.pool.query('SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=ANY($1::text[]) ORDER BY table_name', [tables])).rows;

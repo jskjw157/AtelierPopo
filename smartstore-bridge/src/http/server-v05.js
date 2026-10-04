@@ -25,6 +25,7 @@ import { createProductRoutesV03 } from './routes-products-v03.js';
 import { createLedgerRoutesV03 } from './routes-ledger-v03.js';
 import { createDriveRoutes } from './routes-drive.js';
 import { createCommerceRoutes } from './routes-commerce.js';
+import { createSearchAdReportingRoutes } from './routes-searchad-reporting.js';
 import { createSearchAdRoutes } from './routes-searchad.js';
 import { createSearchAdWriteRoutesV3 } from './routes-searchad-write-v3.js';
 import { createSearchAdCanaryRoutes } from './routes-searchad-canary.js';
@@ -81,7 +82,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
   const routes = [
     // Override only v0.5 readiness; legacy servers keep their existing contract.
     route('GET', /^\/health\/ready$/, async ({ req, res }) => {
-      const { ready, searchAdActivation, searchAdHierarchy } = api.readiness();
+      const { ready, searchAdActivation, searchAdHierarchy, searchAdCompletion } = api.readiness();
       sendJson(req, res, ready ? 200 : 503, {
         ok: ready,
         status: ready ? 'ready' : 'not_ready',
@@ -91,6 +92,9 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
           required: searchAdActivation.required,
           initialized: searchAdActivation.initialized,
           ready: searchAdActivation.ready
+        },
+        searchAdCompletion: {
+          required: searchAdCompletion.required, initialized: searchAdCompletion.initialized, ready: searchAdCompletion.ready
         },
         searchAdHierarchy: {
           required: searchAdHierarchy.required,
@@ -105,6 +109,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createDriveRoutes(routeContext),
     ...createCommerceRoutes(routeContext),
     ...createSearchAdRoutes(routeContext),
+    ...createSearchAdReportingRoutes(routeContext),
     ...createSearchAdWriteRoutesV3(routeContext),
     ...createSearchAdCanaryRoutes(routeContext),
     ...createSearchAdActivationRoutes(routeContext),
@@ -234,7 +239,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       const errors = [];
       const resources = new Set([
         app.searchAdWriteRuntime, app.searchAdActiveCanaryRuntime,
-        app.searchAdHierarchyRuntime, app.searchAdActivationRuntime, app.ledger
+        app.searchAdCompletionRuntime, app.searchAdHierarchyRuntime, app.searchAdActivationRuntime, app.ledger
       ]);
       for (const resource of resources) {
         try { await resource?.close?.(); } catch (error) { errors.push(error); }
@@ -264,13 +269,17 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       const hierarchyStatus = app.searchAdHierarchyRuntime?.status?.() || null;
       const hierarchyRequired = app.searchAdConfig?.allowActiveCanary === true;
       const hierarchyReady = hierarchyStatus?.ready === true;
+      const completionRequired = app.searchAdCompletionRequired === true;
+      const completionReady = app.searchAdCompletionRuntime?.status?.().ready === true;
       // Infrastructure readiness is not permission to mutate any Customer.
       // This projection performs no upstream probe or lazy write initialization.
       return {
       ...base,
       ready: base.readyForRead === true &&
         (!activationRequired || activationReady) &&
-        (!hierarchyRequired || hierarchyReady),
+        (!hierarchyRequired || hierarchyReady) &&
+        (!completionRequired || completionReady),
+      searchAdCompletion: { required: completionRequired, initialized: Boolean(app.searchAdCompletionRuntime), ready: completionReady },
       searchAd: {
         configured: Boolean(app.searchAdConfig?.configured),
         ready: Boolean(app.searchAdGateway),

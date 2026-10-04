@@ -8,10 +8,11 @@ import { SearchAdCapabilityService } from './naver/searchad/capability.js';
 import { bootstrapActiveCanaryRuntime } from './naver/searchad/canary/bootstrap.js';
 import { bootstrapSearchAdActivationRuntime } from './naver/searchad/activation/bootstrap.js';
 import { bootstrapSearchAdHierarchyRuntime } from './naver/searchad/lifecycle/bootstrap.js';
+import { bootstrapSearchAdCompletionRuntime } from './naver/searchad/completion-bootstrap.js';
 import { bootstrapMultiSourceCatalog } from './catalog/multi-source/bootstrap.js';
 import { logger } from './infrastructure/logger.js';
 
-export async function bootstrapV05(configPath, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
+export async function bootstrapV05(configPath, { env = process.env, fetchImpl = globalThis.fetch, clock = Date.now, blobStorage = null } = {}) {
   const app = await bootstrapV04(configPath, { env });
   const searchAdConfig = loadSearchAdConfig(env);
   let searchAdRegistry = null;
@@ -28,6 +29,7 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
       baseUrl: searchAdConfig.baseUrl,
       credentialsRegistry: searchAdCredentials,
       fetchImpl,
+      clock,
       requestTimeoutMs: searchAdConfig.requestTimeoutMs,
       maxRetries: searchAdConfig.maxRetries,
       logger
@@ -57,6 +59,7 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
   } = await bootstrapActiveCanaryRuntime({
     app: { ...app, searchAdGateway, searchAdCredentials },
     env,
+    clock,
     logger
   });
 
@@ -66,6 +69,7 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
   } = await bootstrapSearchAdActivationRuntime({
     app: { ...app, searchAdGateway, searchAdCredentials, searchAdCapabilityService },
     env,
+    clock,
     logger
   });
 
@@ -82,6 +86,7 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
       searchAdActivationRuntime
     },
     fetchImpl,
+    clock,
     logger
   });
 
@@ -106,8 +111,16 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
     logger.error('Multi-source catalog startup failed', multiSourceCatalogStartupError);
   }
 
+  const { runtime: searchAdCompletionRuntime, startupError: searchAdCompletionStartupError } = await bootstrapSearchAdCompletionRuntime({
+    app: { ...app, searchAdConfig, searchAdRegistry, searchAdCredentials, searchAdGateway, searchAdActivationRuntime, searchAdHierarchyRuntime, catalogSourceRegistry, salesChannelRegistry },
+    env, clock, blobStorage, logger
+  });
+
   return {
     ...app,
+    searchAdCompletionRuntime,
+    searchAdCompletionStartupError,
+    searchAdCompletionRequired: searchAdConfig.configured === true && env.ATELIER_SEARCHAD_REPORTING_ENABLED !== 'false',
     searchAdConfig,
     searchAdRegistry,
     searchAdCredentials,

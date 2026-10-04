@@ -68,9 +68,12 @@ export class NaverSearchAdClient {
     sleep = sleepDefault,
     requestTimeoutMs = 30_000,
     maxRetries = 3,
+    redirectPolicy = 'follow',
     logger = console,
     random = Math.random
   }) {
+    if (!['follow', 'error'].includes(redirectPolicy)) throw new TypeError('SearchAd redirect policy is invalid.');
+    this.redirectPolicy = redirectPolicy;
     if (!fetchImpl) throw new Error('SearchAd client requires fetch.');
     this.baseUrl = String(baseUrl || 'https://api.searchad.naver.com').replace(/\/$/, '');
     this.credentialsRegistry = credentialsRegistry;
@@ -133,8 +136,11 @@ export class NaverSearchAdClient {
           headers: requestHeaders,
           body: ['GET', 'HEAD'].includes(normalizedMethod) ? undefined : requestBody,
           signal: controller.signal,
-          redirect: 'follow'
+          redirect: this.redirectPolicy
         });
+        if (this.redirectPolicy === 'error' && (response.redirected || (response.status >= 300 && response.status < 400))) {
+          throw new SearchAdError('SearchAd redirects are forbidden.', { code: 'SEARCHAD_REDIRECT_FORBIDDEN', status: 502 });
+        }
         const data = await parseResponseBody(response, responseType);
         const requestId = response.headers.get('x-request-id') || response.headers.get('x-transaction-id') || null;
         if (!response.ok) {

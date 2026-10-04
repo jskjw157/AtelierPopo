@@ -19,6 +19,7 @@ const logger = { info() {}, warn() {}, error() {} };
 // Network responses and activation authorization are explicit test doubles.
 // The pinned manifest, signer, client, gateway, SQLite services and HTTP server are real.
 export async function startWriteFixture(t, { masterWrites = true, searchAdWrites = true,
+  httpEnv = {},
   activationGuard = { async assertMutationAllowed() { return { allowed: true }; } }
 } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'haar-write-integration-'));
@@ -90,7 +91,7 @@ export async function startWriteFixture(t, { masterWrites = true, searchAdWrites
     ATELIER_SEARCHAD_EXECUTOR_PRINCIPAL_ID: 'fixture-executor',
     ATELIER_SEARCHAD_ALLOW_WRITES: String(searchAdWrites), ATELIER_SEARCHAD_ALLOW_ROLLBACK: 'true',
     ATELIER_SEARCHAD_WRITE_DB_PATH: path.join(dir, 'writes.sqlite'),
-    ATELIER_WRITE_RATE_LIMIT_PER_MINUTE: '1000'
+    ATELIER_WRITE_RATE_LIMIT_PER_MINUTE: '1000', ...httpEnv
   };
   const api = createHttpApiV05({ app, env, logger });
   const address = await api.listen({ host: '127.0.0.1', port: 0 });
