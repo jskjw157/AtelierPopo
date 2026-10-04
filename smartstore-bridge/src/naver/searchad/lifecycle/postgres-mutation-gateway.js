@@ -80,6 +80,7 @@ export function createPostgresMutationGateway({ gateway: source, pool } = {}) {
     execute(key, input = {}) {
       return source.get(key)?.sideEffect === false ? source.execute(key, input) : mutate(key, input, false);
     },
+    consumeReportDownloadResponse: (key, input, consume) => source.consumeReportDownloadResponse(key, input, consume),
     executeCanary: (key, input = {}) => mutate(key, input, true),
     executeReportJob: (key, input = {}) => mutate(key, input, 'report')
   });

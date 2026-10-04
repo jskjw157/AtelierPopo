@@ -37,6 +37,17 @@ export class ReportRemoteAdapter {
     const pathParams = intent.kind === 'stat' ? { reportJobId: intent.remoteJobId } : { id: intent.remoteJobId };
     return parseReportResponse((await this.gateway.execute(key, { customerId: intent.customerId, pathParams })).data, intent, { knownId: intent.remoteJobId });
   }
+  async withDownload(intent, consume) {
+    if (!intent.remoteJobId) throw reportingError('SEARCHAD_REPORT_REMOTE_ID_REQUIRED', 409);
+    const key = intent.kind === 'stat' ? REPORT_OPERATION_KEYS.getStat : REPORT_OPERATION_KEYS.getMaster;
+    assertReportOperation(this.registry.get(key), this.registry);
+    const pathParams = intent.kind === 'stat' ? { reportJobId: intent.remoteJobId } : { id: intent.remoteJobId };
+    return this.gateway.consumeReportDownloadResponse(key, { customerId: intent.customerId, pathParams }, data => {
+      const response = parseReportResponse(data, intent, { knownId: intent.remoteJobId });
+      // Only the sanitized binding may be settled; URL is a separate transient argument.
+      return consume(response, data.downloadUrl);
+    });
+  }
   async list(intent) {
     const key = intent.kind === 'stat' ? REPORT_OPERATION_KEYS.listStat : REPORT_OPERATION_KEYS.listMaster;
     assertReportOperation(this.registry.get(key), this.registry);

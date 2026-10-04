@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import { assertReportOperation, REPORT_TYPES } from './reporting/operations.js';
-import { exactKeys, validDate, utcTimestamp } from './reporting/contracts.js';
+import { assertReportOperation, REPORT_TYPES, REPORT_OPERATION_KEYS } from './reporting/operations.js';
+import { exactKeys, validDate, utcTimestamp, reportingError } from './reporting/contracts.js';
 import { redactSearchAdObject, SearchAdError } from './errors.js';
 
 function canonicalize(value) {
@@ -205,6 +205,41 @@ export class SearchAdOperationGateway {
     this.reportExecutionCheck(operation, input);
     const result = await this.client.request({ customerId: input.customerId, method: 'POST', path: operation.path, json: input.body, responseType: 'json', retrySafe: false });
     return { operation: this.registry.publicOperation(operation), upstream: { status: result.status, requestId: result.requestId, attempts: result.attempts }, data: redactSearchAdObject(result.data) };
+  }
+
+  /** Internal capability: consume one owned-job GET response in the same call.
+   * Generic execute() stays redacted; no input flag can request raw results. */
+  async consumeReportDownloadResponse(operationKey, input, consume) {
+    if (![REPORT_OPERATION_KEYS.getStat, REPORT_OPERATION_KEYS.getMaster].includes(operationKey) ||
+        typeof consume !== 'function') throw reportingError('SEARCHAD_REPORT_OPERATION_FORBIDDEN', 403);
+    const operation = this.get(operationKey);
+    const contract = assertReportOperation(operation, this.registry);
+    exactKeys(input, ['customerId', 'pathParams'], 'SEARCHAD_REPORT_INPUT_INVALID');
+    const idKey = contract.kind === 'stat' ? 'reportJobId' : 'id';
+    exactKeys(input.pathParams, [idKey], 'SEARCHAD_REPORT_INPUT_INVALID');
+    const remoteId = input.pathParams[idKey];
+    const validId = typeof remoteId === 'string' && (contract.kind === 'stat'
+      ? /^[1-9]\d*$/.test(remoteId) && Number.isSafeInteger(Number(remoteId))
+      : /^[A-Za-z0-9_-]{1,200}$/.test(remoteId));
+    if (!validId || typeof input.customerId !== 'string' || !/^\d{1,30}$/.test(input.customerId))
+      throw reportingError('SEARCHAD_REPORT_INPUT_INVALID');
+    if (this.client.baseUrl !== 'https://api.searchad.naver.com' || this.config.baseUrl !== 'https://api.searchad.naver.com')
+      throw reportingError('SEARCHAD_REPORT_OPERATION_FORBIDDEN', 403);
+    this.executionCheck(operation, input, { throwOnFailure: true });
+    let result;
+    try {
+      result = await this.client.request({
+        customerId: input.customerId, method: 'GET',
+        path: interpolatePath(operation, input.pathParams),
+        responseType: 'json', retrySafe: false, redirectPolicy: 'error'
+      });
+      return await consume(result.data);
+    } catch {
+      throw reportingError('SEARCHAD_REPORT_DOWNLOAD_FAILED', 502);
+    } finally {
+      // Do not leave the temporary credential on the consumed response object.
+      if (result?.data && typeof result.data === 'object') delete result.data.downloadUrl;
+    }
   }
 
   async execute(operationKey, input = {}) {
