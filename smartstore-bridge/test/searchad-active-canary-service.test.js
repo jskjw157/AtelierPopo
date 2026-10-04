@@ -89,6 +89,7 @@ function recipe() {
     verifiedOperationScope: {
       operationKeys: ['campaign.create', 'campaign.read', 'campaign.update', 'campaign.delete'],
       fieldScope: ['campaign.userLock', 'campaign.budget'],
+      lifecycleKinds: ['create', 'delete'],
       campaignType: 'WEB_SITE'
     },
     beforeSpendRead({ customerId, remoteId }) {
@@ -369,6 +370,7 @@ test('zero-spend evidence is issued only after the 48h post-cleanup observation 
   assert.equal(evidence.result, 'verified');
   assert.deepEqual(evidence.operationKeys, ['campaign.create', 'campaign.read', 'campaign.update', 'campaign.delete']);
   assert.deepEqual(evidence.fieldScope, ['campaign.userLock', 'campaign.budget']);
+  assert.deepEqual(evidence.lifecycleKinds, ['create', 'delete']);
 });
 
 test('non-zero post-cleanup spend prevents PASS and evidence issuance', async () => {

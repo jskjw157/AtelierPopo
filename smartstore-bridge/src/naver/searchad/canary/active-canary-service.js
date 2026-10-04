@@ -599,6 +599,7 @@ export class ActiveCanaryService {
       upstreamBaseUrl: run.upstreamBaseUrl,
       operationKeys: structuredClone(run.verifiedOperationScope?.operationKeys || []),
       fieldScope: structuredClone(run.verifiedOperationScope?.fieldScope || []),
+      lifecycleKinds: structuredClone(run.verifiedOperationScope?.lifecycleKinds || []),
       result: 'verified',
       sourceRunId: run.canaryRunId,
       recipeId: run.recipeId,

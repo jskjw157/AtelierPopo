@@ -1,0 +1,39 @@
+name: SearchAd isolated development snapshot
+on:
+  push:
+    branches: [codex/searchad-extended-cleanup-20260914]
+    paths: [.github/workflows/searchad-dev-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b57638c096fb520fa12e5c8ca3e0771bd05b718a
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked test dependencies without lifecycle scripts
+        working-directory: smartstore-bridge
+        run: npm ci --ignore-scripts
+      - name: Package disposable PostgreSQL 16 test runtime
+        run: |
+          mkdir -p "$RUNNER_TEMP/pg"
+          docker run --rm --entrypoint bash -v "$RUNNER_TEMP/pg:/out" postgres:16 -ceu '
+            cp -a /usr/lib/postgresql/16 /out/16
+            cp -a /usr/share/postgresql/16 /out/share
+            mkdir /out/deps
+            ldd /usr/lib/postgresql/16/bin/{postgres,initdb,pg_ctl,psql} | awk '\''/=> \// {print $3}'\'' | sort -u | while read -r lib; do cp -L "$lib" /out/deps/; done
+          '
+          tar -czf /tmp/searchad-development-runtime.tar.gz -C smartstore-bridge node_modules -C "$RUNNER_TEMP" pg
+          sha256sum /tmp/searchad-development-runtime.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: searchad-development-runtime-b57638c
+          path: /tmp/searchad-development-runtime.tar.gz
+          retention-days: 1
+          if-no-files-found: error

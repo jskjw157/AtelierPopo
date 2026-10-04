@@ -49,6 +49,27 @@ function sameStringArray(left = [], right = []) {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
+
+function supportsEmptyDeleteFieldScope(gateway, evidence) {
+  if (!Array.isArray(evidence?.operationKeys) || evidence.operationKeys.length !== 1 ||
+      !Array.isArray(evidence?.fieldScope) || evidence.fieldScope.length !== 0 ||
+      !sameStringArray(evidence?.lifecycleKinds || [], ['delete'])) {
+    return false;
+  }
+  try {
+    const operation = gateway.get(String(evidence.operationKeys[0]));
+    return Boolean(
+      operationStillVerified(gateway, evidence.operationKeys[0]) &&
+      String(operation?.method || '').toUpperCase() === 'DELETE' &&
+      operation?.destructive === true &&
+      typeof operation?.confirmation === 'string' &&
+      operation.confirmation.trim()
+    );
+  } catch {
+    return false;
+  }
+}
+
 function grantMatchesEvidence(grant, evidence) {
   return Boolean(
     grant && evidence &&
@@ -60,6 +81,7 @@ function grantMatchesEvidence(grant, evidence) {
     normalizeBaseUrl(grant.upstreamBaseUrl) === normalizeBaseUrl(evidence.upstreamBaseUrl) &&
     sameStringArray(grant.operationKeys, evidence.operationKeys) &&
     sameStringArray(grant.fieldScope, evidence.fieldScope) &&
+    sameStringArray(grant.lifecycleKinds, evidence.lifecycleKinds) &&
     String(grant.expiresAt) === String(evidence.expiresAt)
   );
 }
@@ -127,7 +149,8 @@ export class SearchAdActivationService {
       fail('SEARCHAD_ACTIVATION_EVIDENCE_INVALID', 'SearchAd evidence is not verified and current.', 409);
     }
     if (!Array.isArray(evidence.operationKeys) || !evidence.operationKeys.length ||
-        !Array.isArray(evidence.fieldScope) || !evidence.fieldScope.length) {
+        !Array.isArray(evidence.fieldScope) ||
+        (evidence.fieldScope.length === 0 && !supportsEmptyDeleteFieldScope(this.gateway, evidence))) {
       fail('SEARCHAD_ACTIVATION_SCOPE_INVALID', 'SearchAd evidence scope is empty or malformed.', 409);
     }
 
@@ -166,6 +189,7 @@ export class SearchAdActivationService {
       upstreamBaseUrl: normalizeBaseUrl(evidence.upstreamBaseUrl),
       operationKeys: structuredClone(evidence.operationKeys),
       fieldScope: structuredClone(evidence.fieldScope),
+      lifecycleKinds: structuredClone(evidence.lifecycleKinds || []),
       activatedByPrincipalId: principal.principalId,
       activatedAt,
       expiresAt: evidence.expiresAt
@@ -179,5 +203,6 @@ export const _internal = {
   normalizeBaseUrl,
   publicGrant,
   operationStillVerified,
-  grantMatchesEvidence
+  grantMatchesEvidence,
+  supportsEmptyDeleteFieldScope
 };

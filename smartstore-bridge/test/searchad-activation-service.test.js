@@ -23,6 +23,7 @@ function evidence(overrides = {}) {
     upstreamBaseUrl: 'https://api.searchad.naver.com',
     operationKeys: [CANARY_OPERATION_KEYS.updateCampaign],
     fieldScope: ['campaign.dailyBudget', 'campaign.userLock'],
+    lifecycleKinds: ['create', 'delete'],
     result: 'verified',
     createdAt: new Date(NOW - 60_000).toISOString(),
     expiresAt: FUTURE,
@@ -30,7 +31,7 @@ function evidence(overrides = {}) {
   };
 }
 
-function fixture({ evidenceValue = evidence(), currentCredential = 'credential-100', operationValid = true, existingActivation = null } = {}) {
+function fixture({ evidenceValue = evidence(), currentCredential = 'credential-100', operationValid = true, operationShape = { method: 'PUT', destructive: false, confirmation: null }, existingActivation = null } = {}) {
   let getEvidenceCount = 0;
   let createCount = 0;
   const stored = [];
@@ -56,7 +57,8 @@ function fixture({ evidenceValue = evidence(), currentCredential = 'credential-1
         operationKey,
         runtimeAllowlisted: operationValid,
         state: operationValid ? 'public_documented' : 'internal_quarantined',
-        tier: operationValid ? 'B' : 'D'
+        tier: operationValid ? 'B' : 'D',
+        ...operationShape
       };
     }
   };
@@ -158,6 +160,7 @@ test('activation copies immutable evidence scope and returns a public projection
   assert.equal(f.stored[0].credentialFingerprint, 'credential-100');
   assert.deepEqual(f.stored[0].operationKeys, [CANARY_OPERATION_KEYS.updateCampaign]);
   assert.deepEqual(f.stored[0].fieldScope, ['campaign.dailyBudget', 'campaign.userLock']);
+  assert.deepEqual(f.stored[0].lifecycleKinds, ['create', 'delete']);
   assert.equal(f.stored[0].activatedByPrincipalId, 'admin-100');
   assert.equal(f.stored[0].expiresAt, FUTURE);
   assert.equal(Object.hasOwn(grant, 'credentialFingerprint'), false);
@@ -176,6 +179,7 @@ test('activation is idempotent for one evidence id and does not create a second 
     upstreamBaseUrl: 'https://api.searchad.naver.com',
     operationKeys: [CANARY_OPERATION_KEYS.updateCampaign],
     fieldScope: ['campaign.dailyBudget', 'campaign.userLock'],
+    lifecycleKinds: ['create', 'delete'],
     activatedByPrincipalId: 'admin-100',
     activatedAt: new Date(NOW - 30_000).toISOString(),
     expiresAt: FUTURE
@@ -185,4 +189,49 @@ test('activation is idempotent for one evidence id and does not create a second 
   assert.equal(f.getCreateCount(), 0);
   assert.equal(grant.activationId, existingActivation.activationId);
   assert.equal(Object.hasOwn(grant, 'credentialFingerprint'), false);
+});
+
+
+test('activation allows empty field scope only for exact verified destructive DELETE evidence', async () => {
+  const deleteEvidence = evidence({
+    operationKeys: ['fixture.delete'],
+    fieldScope: [],
+    lifecycleKinds: ['delete']
+  });
+  const valid = fixture({
+    evidenceValue: deleteEvidence,
+    operationShape: { method: 'DELETE', destructive: true, confirmation: 'DELETE_SEARCHAD_RESOURCE' }
+  });
+  const grant = await valid.service.activate({ evidenceId: 'evidence-100' }, admin100);
+  assert.deepEqual(grant.operationKeys, ['fixture.delete']);
+  assert.deepEqual(grant.fieldScope, []);
+  assert.deepEqual(grant.lifecycleKinds, ['delete']);
+  assert.equal(valid.getCreateCount(), 1);
+
+  for (const invalid of [
+    { evidenceValue: evidence({ fieldScope: [] }) },
+    {
+      evidenceValue: deleteEvidence,
+      operationShape: { method: 'DELETE', destructive: false, confirmation: 'DELETE_SEARCHAD_RESOURCE' }
+    },
+    {
+      evidenceValue: deleteEvidence,
+      operationShape: { method: 'DELETE', destructive: true, confirmation: null }
+    },
+    {
+      evidenceValue: evidence({ operationKeys: ['fixture.delete'], fieldScope: [], lifecycleKinds: ['create'] }),
+      operationShape: { method: 'DELETE', destructive: true, confirmation: 'DELETE_SEARCHAD_RESOURCE' }
+    },
+    {
+      evidenceValue: evidence({ operationKeys: ['fixture.delete'], fieldScope: [], lifecycleKinds: ['delete', 'create'] }),
+      operationShape: { method: 'DELETE', destructive: true, confirmation: 'DELETE_SEARCHAD_RESOURCE' }
+    }
+  ]) {
+    const f = fixture(invalid);
+    await assert.rejects(
+      f.service.activate({ evidenceId: 'evidence-100' }, admin100),
+      error => error?.code === 'SEARCHAD_ACTIVATION_SCOPE_INVALID' && error?.status === 409
+    );
+    assert.equal(f.getCreateCount(), 0);
+  }
 });

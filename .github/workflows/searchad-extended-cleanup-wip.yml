@@ -1,0 +1,126 @@
+name: SearchAd Extended Cleanup WIP
+
+on:
+  push:
+    branches:
+      - codex/searchad-extended-cleanup-20260914
+    paths:
+      - 'smartstore-bridge/**'
+      - '.github/workflows/searchad-extended-cleanup-wip.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: atelier_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d atelier_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      ATELIER_POSTGRES_SSL_MODE: disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        working-directory: smartstore-bridge
+        run: npm ci
+      - name: Public campaign and adgroup hierarchy lifecycle wiring
+        working-directory: smartstore-bridge
+        run: |
+          node --check src/naver/searchad/lifecycle/runtime-production.js
+          node --check src/naver/searchad/lifecycle/bootstrap.js
+          node --check src/http/routes-searchad-hierarchy.js
+          node --test test/postgres-searchad-hierarchy-http.integration.test.js
+          node --test test/postgres-searchad-adgroup-http.integration.test.js
+          node --test test/postgres-searchad-sibling-http.integration.test.js
+          node --test test/searchad-activation-service.test.js
+          node --test test/postgres-searchad-leaf-cleanup-http.integration.test.js
+          node --test test/postgres-searchad-inventory-http.integration.test.js
+      - name: Application account-store binding and restart send fence
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-application-send-fence.integration.test.js
+      - name: Remaining PostgreSQL writer and Canary suspension fence
+        working-directory: smartstore-bridge
+        run: |
+          node --test test/searchad-send-fence-*.test.js test/searchad-postgres-mutation-gateway.test.js
+          node --test test/postgres-searchad-remaining-send-fence.integration.test.js
+      - name: Account suspension to lifecycle transport initiation fence
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-suspend-send-fence.integration.test.js
+      - name: Root-only expired unused DELETE plan retirement and replacement
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-root-cleanup-replanning.integration.test.js
+      - name: Replacement generation inventory and recovery consumers
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-generation-consumers.integration.test.js
+      - name: Expired unused cleanup plan retirement and replacement
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-cleanup-plan-replanning.integration.test.js
+      - name: PostgreSQL sibling replacement and cleanup
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-sibling-replan-cleanup.integration.test.js
+      - name: Sibling plan retirement and atomic-batch veto sensitivity
+        working-directory: smartstore-bridge
+        run: node scripts/verify-searchad-sibling-retirement-boundary.mjs
+      - name: Expired unused adgroup plan retirement preserves live parent
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-adgroup-plan-retirement.integration.test.js
+      - name: Expired unused campaign plan retirement
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-campaign-plan-retirement.integration.test.js
+      - name: Remote absence counterexamples and veto sensitivity
+        working-directory: smartstore-bridge
+        run: node scripts/verify-searchad-absence-boundary.mjs
+      - name: Bounded inventory scan contracts
+        working-directory: smartstore-bridge
+        run: |
+          node --test test/postgres-searchad-descendant-scan.integration.test.js
+          node --test test/searchad-descendant-inventory-scan.test.js
+      - name: Inventory cleanup boundary regression
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-inventory-cleanup-fence.integration.test.js
+      - name: Focused sibling and extended cleanup contracts
+        working-directory: smartstore-bridge
+        run: |
+          node --check src/naver/searchad/lifecycle/sibling-create-contract.js
+          node --check src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+          node --check src/naver/searchad/lifecycle/child-first-cleanup-contract.js
+          node --check src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js
+          node --check src/naver/searchad/lifecycle/partial-keyword-inventory-contract.js
+          node --check src/naver/searchad/lifecycle/partial-keyword-inventory-service.js
+          node --check src/naver/searchad/lifecycle/postgres-partial-keyword-inventory-repository.js
+          node --check src/naver/searchad/lifecycle/descendant-inventory-service.js
+          node --check src/naver/searchad/lifecycle/postgres-descendant-inventory-repository.js
+          node --test test/searchad-hierarchy-sibling-contract.test.js
+          node --test test/postgres-searchad-sibling-create.integration.test.js
+          node --test test/searchad-hierarchy-sibling-partial-contract.test.js
+          node --test test/postgres-searchad-partial-keyword-quarantine.integration.test.js
+          node --test test/postgres-searchad-partial-keyword-quarantine-cleanup.integration.test.js
+          node --test test/searchad-partial-keyword-inventory-contract.test.js
+          node --test test/searchad-descendant-inventory-contract.test.js
+          node --test test/postgres-searchad-partial-keyword-inventory.integration.test.js
+          node --test test/postgres-searchad-descendant-inventory.integration.test.js
+          node --test test/postgres-searchad-creative-child-first-cleanup.integration.test.js
+          node --test test/postgres-searchad-extended-child-first-cleanup.integration.test.js
+          node --test test/postgres-searchad-extended-parent-cleanup.integration.test.js
+          node --test test/postgres-searchad-extended-root-cleanup.integration.test.js
+      - name: Full regression test suite
+        working-directory: smartstore-bridge
+        run: npm test

@@ -6,6 +6,7 @@ import { SearchAdChangePlanService } from './plan-service.js';
 import { SearchAdApprovalService } from './approval-service.js';
 import { ProductionSearchAdExecutionService } from './production-execution-service.js';
 import { SearchAdWriteError } from './errors.js';
+import { createPostgresMutationGateway } from '../lifecycle/postgres-mutation-gateway.js';
 import { createPostgresPool, closePostgresPool } from '../../../infrastructure/postgres/pool.js';
 
 export function createProductionSearchAdWriteRuntime({
@@ -19,6 +20,7 @@ export function createProductionSearchAdWriteRuntime({
 } = {}) {
   const config = loadSearchAdWriteConfig(env, { baseDir });
   let ownedPostgresPool = null;
+  let mutationPool = null;
   let repository;
 
   if (config.storageBackend === 'postgres') {
@@ -35,12 +37,22 @@ export function createProductionSearchAdWriteRuntime({
       sslMode: config.postgresSslMode
     });
     if (!postgresPool) ownedPostgresPool = pool;
+    mutationPool = pool;
     repository = new PostgresSearchAdWriteRepository({ pool });
   } else {
     repository = new SearchAdWriteRepository({ databasePath: config.databasePath, database });
   }
 
-  const remote = new SafeSearchAdGatewayRemoteAdapter({ gateway });
+  // Native activation owns the authoritative account row, even when write plans
+  // use another database. Never substitute a mirror for an existing repository.
+  // Repository-free injected guards retain the supplied pool as their account store.
+  const accountPool = activationGuard?.repository ? activationGuard.repository.pool : mutationPool;
+  // Plan storage is not the account-control authority. SQLite plans using native
+  // activation must use its fence too; a missing native pool must not fall back.
+  const requiresAccountFence = Boolean(mutationPool || activationGuard?.repository);
+  const remote = new SafeSearchAdGatewayRemoteAdapter({
+    gateway: requiresAccountFence ? createPostgresMutationGateway({ gateway, pool: accountPool }) : gateway
+  });
   const approvalService = new SearchAdApprovalService({ repository, config, clock });
   const planService = new SearchAdChangePlanService({ repository, remote, config, clock });
   const executionService = new ProductionSearchAdExecutionService({
