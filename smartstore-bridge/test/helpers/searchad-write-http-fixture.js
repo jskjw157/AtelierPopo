@@ -22,14 +22,24 @@ const ROLE_API_KEY = 'fixture-executor-key-'.repeat(4);
 export const CUSTOMER_ID = '1001';
 const logger = { info() {}, warn() {}, error() {} };
 
-// HTTP/component fixture: network responses and activation authorization are explicit
+// Opt-in HTTP/component fixture: network responses and activation authorization are explicit
 // test doubles. The manifest, signer, client, gateway, SQLite services, operation
 // queue and HTTP shutdown are real. This does not construct the production runtime
 // and provides no native PostgreSQL or all-writer authority evidence.
-export async function startWriteFixture(t, { masterWrites = true, searchAdWrites = true,
+export function startWriteComponentFixture(t, options = {}) {
+  return startFixture(t, options, true);
+}
+
+// Default application fixture preserves lazy production runtime initialization:
+// readiness and reporting must not construct a write runtime as a side effect.
+export function startWriteFixture(t, options = {}) {
+  return startFixture(t, options, false);
+}
+
+async function startFixture(t, { masterWrites = true, searchAdWrites = true,
   httpEnv = {},
   activationGuard = { async assertMutationAllowed() { return { allowed: true }; } }
-} = {}) {
+} = {}, componentWrites) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'haar-write-integration-'));
   const catalogRoot = path.join(dir, 'catalog');
   fs.mkdirSync(catalogRoot);
@@ -101,16 +111,18 @@ export async function startWriteFixture(t, { masterWrites = true, searchAdWrites
     ATELIER_SEARCHAD_WRITE_DB_PATH: path.join(dir, 'writes.sqlite'),
     ATELIER_WRITE_RATE_LIMIT_PER_MINUTE: '1000', ...httpEnv
   };
-  const writeConfig = loadSearchAdWriteConfig(env, { baseDir: dir });
-  const repository = new SearchAdWriteRepository({ databasePath: writeConfig.databasePath });
-  const remote = new SafeSearchAdGatewayRemoteAdapter({ gateway });
-  const approvalService = new SearchAdApprovalService({ repository, config: writeConfig });
-  app.searchAdWriteRuntime = {
-    config: writeConfig, repository, remote, approvalService,
-    planService: new SearchAdChangePlanService({ repository, remote, config: writeConfig }),
-    executionService: new ProductionSearchAdExecutionService({ repository, remote, approvalService, config: writeConfig, activationGuard }),
-    close: () => repository.close()
-  };
+  if (componentWrites) {
+    const writeConfig = loadSearchAdWriteConfig(env, { baseDir: dir });
+    const repository = new SearchAdWriteRepository({ databasePath: writeConfig.databasePath });
+    const remote = new SafeSearchAdGatewayRemoteAdapter({ gateway });
+    const approvalService = new SearchAdApprovalService({ repository, config: writeConfig });
+    app.searchAdWriteRuntime = {
+      config: writeConfig, repository, remote, approvalService,
+      planService: new SearchAdChangePlanService({ repository, remote, config: writeConfig }),
+      executionService: new ProductionSearchAdExecutionService({ repository, remote, approvalService, config: writeConfig, activationGuard }),
+      close: () => repository.close()
+    };
+  }
   const api = createHttpApiV05({ app, env, logger });
   const address = await api.listen({ host: '127.0.0.1', port: 0 });
   t.after(async () => { await api.close(); fs.rmSync(dir, { recursive: true, force: true }); });

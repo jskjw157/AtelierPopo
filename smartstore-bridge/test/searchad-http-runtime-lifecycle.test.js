@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { startWriteFixture } from './helpers/searchad-write-http-fixture.js';
+import { startWriteComponentFixture as startWriteFixture } from './helpers/searchad-write-http-fixture.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 

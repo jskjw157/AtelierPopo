@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { startWriteFixture, API_KEY, CUSTOMER_ID } from './helpers/searchad-write-http-fixture.js';
+import { startWriteComponentFixture as startWriteFixture, API_KEY, CUSTOMER_ID } from './helpers/searchad-write-http-fixture.js';
 
 const keys = Object.fromEntries(['reader', 'operator', 'executor', 'admin'].map(role => [role, `recovery-${role}-`.repeat(4)]));
 
