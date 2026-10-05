@@ -1,3 +1,5 @@
+import { currentAutomationPreparation, PostgresAutomationRepository } from '../automation/postgres-repository.js';
+import { randomUUID } from 'node:crypto';
 import { SearchAdWriteError } from './errors.js';
 
 const JSON_COLUMNS = new Set([
@@ -37,11 +39,12 @@ async function rollbackQuietly(client) {
 }
 
 export class PostgresSearchAdWriteRepository {
-  constructor({ pool } = {}) {
+  constructor({ pool, clock=Date.now, identityResolver=null } = {}) {
     if (!pool || typeof pool.query !== 'function' || typeof pool.connect !== 'function') {
       throw new SearchAdWriteError('SEARCHAD_WRITE_POSTGRES_POOL_REQUIRED', 'SearchAd write PostgreSQL pool이 필요합니다.', {}, 500);
     }
     this.pool = pool;
+    this.automation = new PostgresAutomationRepository({pool,clock,identityResolver});
   }
 
   async lockAccountForPlan(client, planId) {
@@ -68,7 +71,8 @@ export class PostgresSearchAdWriteRepository {
   }
 
   async createPlan(plan) {
-    const result = await this.pool.query(`
+    const insert = async client => {
+    const result = await client.query(`
       INSERT INTO searchad_write_change_plans (
         plan_id, customer_id, mutation_operation_key, mutation_json, read_json,
         before_json, before_hash, expected_after_json, rollback_json, reason,
@@ -96,6 +100,13 @@ export class PostgresSearchAdWriteRepository {
       plan.expires_at
     ]);
     return hydrate(result.rows[0]);
+    };
+    const preparation=currentAutomationPreparation();
+    if (preparation) {
+      if (preparation.pool!==this.pool) throw new SearchAdWriteError('SEARCHAD_AUTOMATION_STORE_MISMATCH','Preparation requires the same primary store.',{},503);
+      return preparation.persist(plan,insert);
+    }
+    return insert(this.pool);
   }
 
   async getPlan(planId) {
@@ -180,7 +191,10 @@ export class PostgresSearchAdWriteRepository {
   }
 
   async createApproval(approval) {
-    const result = await this.pool.query(`
+    const pending=await this.automation.reservePlanPhase(approval.plan_id,'approval_pending');
+    const insert=async client=>{
+    if(pending) await this.automation.planAuthority(approval.plan_id,{client,states:['approval_pending']});
+    const result = await client.query(`
       INSERT INTO searchad_write_approvals (
         approval_id, plan_id, actor, confirmation, token_hash, created_at, expires_at
       ) VALUES ($1, $2, $3, $4, $5, $6::timestamptz, $7::timestamptz)
@@ -194,7 +208,14 @@ export class PostgresSearchAdWriteRepository {
       approval.created_at,
       approval.expires_at
     ]);
+    if(pending){
+      await client.query("UPDATE searchad_automation_runs SET approval_id=$2,state='approved',updated_at=$3 WHERE plan_id=$1 AND approval_id IS NULL",[approval.plan_id,approval.approval_id,approval.created_at]);
+      await this.automation.event(client,pending.run,'approved',{approvalId:approval.approval_id,actor:approval.actor});
+    }
     return hydrate(result.rows[0]);
+    };
+    try { return pending ? await this.accountTransaction(approval.plan_id,insert) : await insert(this.pool); }
+    catch(error){ if(pending)try{await this.automation.settleRun({customerId:pending.run.customerId,runId:pending.run.runId,state:'manual_review'});}catch{} throw error; }
   }
 
   async getApproval(approvalId) {
@@ -205,11 +226,19 @@ export class PostgresSearchAdWriteRepository {
     return hydrate(result.rows[0]);
   }
 
+  async assertAutomationAuthority(planId,phase='execute') { return this.automation.planAuthority(planId,{states:phase==='execute'?['approved']:undefined}); }
   async claimApproval({ planId, tokenHash, now }) {
+    const pending=await this.automation.reservePlanPhase(planId,'claim_pending',async(client,bound)=>{
+      const row=(await client.query('SELECT * FROM searchad_write_approvals WHERE plan_id=$1 AND token_hash=$2',[planId,tokenHash])).rows[0];
+      if(!row || row.approval_id!==bound.run.approvalId)throw new SearchAdWriteError('SEARCHAD_EXECUTION_TOKEN_INVALID','Invalid execution token.',{},403);
+      if(row.used_at)throw new SearchAdWriteError('SEARCHAD_EXECUTION_TOKEN_USED','Execution token is consumed.',{},409);
+      if(Date.parse(row.expires_at)<=Date.parse(now))throw new SearchAdWriteError('SEARCHAD_EXECUTION_TOKEN_EXPIRED','Execution token is expired.',{},409);
+    });
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       await this.lockAccountForPlan(client, planId);
+      if(pending)await this.automation.planAuthority(planId,{client,states:['claim_pending']});
       const result = await client.query(`
         SELECT * FROM searchad_write_approvals
         WHERE plan_id = $1 AND token_hash = $2
@@ -227,6 +256,19 @@ export class PostgresSearchAdWriteRepository {
       if (Date.parse(row.expires_at) <= Date.parse(now)) {
         throw new SearchAdWriteError('SEARCHAD_EXECUTION_TOKEN_EXPIRED', '실행 토큰이 만료되었습니다.', { planId, expiresAt: row.expires_at }, 409);
       }
+      const unresolved = await client.query(`SELECT c.ordinal FROM searchad_write_execution_claims c
+        LEFT JOIN LATERAL (SELECT outcome FROM searchad_write_execution_outcomes o WHERE o.customer_id=c.customer_id AND o.ordinal=c.ordinal ORDER BY version DESC LIMIT 1) terminal ON true
+        WHERE c.customer_id=(SELECT customer_id FROM searchad_write_change_plans WHERE plan_id=$1) AND (terminal.outcome IS NULL OR terminal.outcome='unknown') LIMIT 1`, [planId]);
+      if (unresolved.rows.length) throw new SearchAdWriteError('SEARCHAD_EXECUTION_ORDER_UNRESOLVED', 'An earlier accepted attempt has no known terminal outcome.', {}, 409);
+      const plan = (await client.query('SELECT * FROM searchad_write_change_plans WHERE plan_id=$1', [planId])).rows[0];
+      const entity = Object.entries(plan.mutation_json?.pathParams || {})[0];
+      const entityType = entity?.[0]?.replace(/^ncc/, '').replace(/Id$/, '').toLowerCase() || 'plan';
+      const entityId = entity?.[1] || planId;
+      const rule = (await client.query(`INSERT INTO searchad_automation_rules(rule_id,customer_id,entity_type,entity_id) VALUES($1,$2,$3,$4)
+        ON CONFLICT(customer_id,entity_type,entity_id) DO UPDATE SET entity_id=EXCLUDED.entity_id RETURNING rule_id`, [randomUUID(),plan.customer_id,entityType,entityId])).rows[0];
+      const ordinal = (await client.query(`INSERT INTO searchad_write_execution_counters(customer_id,last_ordinal) VALUES($1,1)
+        ON CONFLICT(customer_id) DO UPDATE SET last_ordinal=searchad_write_execution_counters.last_ordinal+1 RETURNING last_ordinal`, [plan.customer_id])).rows[0].last_ordinal;
+      await client.query('INSERT INTO searchad_write_execution_claims(customer_id,ordinal,plan_id,approval_id,rule_id,accepted_at) VALUES($1,$2,$3,$4,$5,$6)', [plan.customer_id,ordinal,planId,row.approval_id,rule.rule_id,now]);
       const claimed = await client.query(`
         UPDATE searchad_write_approvals
         SET used_at = $1::timestamptz
@@ -236,10 +278,16 @@ export class PostgresSearchAdWriteRepository {
       if (claimed.rowCount !== 1) {
         throw new SearchAdWriteError('SEARCHAD_EXECUTION_TOKEN_RACE', '실행 토큰을 다른 요청이 먼저 사용했습니다.', { planId }, 409);
       }
+      if(pending){
+        await client.query("UPDATE searchad_automation_runs SET state='executing',updated_at=$2 WHERE plan_id=$1",[planId,now]);
+        await client.query("UPDATE searchad_automation_reservations SET state='consumed',updated_at=$3 WHERE customer_id=$1 AND run_id=$2",[pending.run.customerId,pending.run.runId,now]);
+        await this.automation.event(client,pending.run,'execute_claimed',{approvalId:row.approval_id,ordinal:String(ordinal)},Date.parse(now));
+      }
       await client.query('COMMIT');
-      return hydrate(claimed.rows[0]);
+      return { ...hydrate(claimed.rows[0]), execution_ordinal: ordinal };
     } catch (error) {
       await rollbackQuietly(client);
+      if(pending)try{await this.automation.settleRun({customerId:pending.run.customerId,runId:pending.run.runId,state:'manual_review'});}catch{}
       throw error;
     } finally {
       client.release();
@@ -269,6 +317,7 @@ export class PostgresSearchAdWriteRepository {
       attempt.remote_request_id || null,
       attempt.created_at
     ]);
+    await this.appendOrderedOutcome(client, attempt);
     return hydrate(result.rows[0]);
     };
     if (attempt.phase !== 'plan' || attempt.status !== 'succeeded') return this.accountTransaction(attempt.plan_id, insert);
@@ -283,6 +332,22 @@ export class PostgresSearchAdWriteRepository {
       const result = await insert(client); await client.query('COMMIT'); return result;
     } catch (error) { await rollbackQuietly(client); throw error; }
     finally { client.release(); }
+  }
+
+  async appendOrderedOutcome(client, attempt) {
+    let outcome = null;
+    if (attempt.phase === 'execute' && attempt.status === 'failed') outcome = 'failed';
+    if ((attempt.phase === 'execute' && attempt.status === 'unknown_outcome') || (attempt.phase === 'verify' && attempt.status === 'failed') || (attempt.phase === 'reconcile' && attempt.status === 'manual_review')) outcome = 'unknown';
+    if (attempt.phase === 'verify' && attempt.status === 'succeeded') outcome = 'applied';
+    if (attempt.phase === 'reconcile' && ['applied_reconciled','not_applied'].includes(attempt.status)) outcome = attempt.status;
+    if (!outcome) return;
+    const claim = (await client.query('SELECT c.*,p.status FROM searchad_write_execution_claims c JOIN searchad_write_change_plans p USING(plan_id) WHERE c.plan_id=$1', [attempt.plan_id])).rows[0];
+    if (!claim) return; // Pre-protocol/other primary writers remain explicitly unordered.
+    if (['applied','applied_reconciled','not_applied'].includes(outcome) && claim.status !== outcome) throw new SearchAdWriteError('SEARCHAD_EXECUTION_OUTCOME_UNPROVEN', 'A verified primary plan outcome is required.', {}, 409);
+    await client.query(`INSERT INTO searchad_write_execution_outcomes(outcome_id,customer_id,ordinal,version,source_attempt_id,outcome,occurred_at)
+      SELECT $1,$2,$3,COALESCE(max(version),0)+1,$4,$5,$6 FROM searchad_write_execution_outcomes WHERE customer_id=$2 AND ordinal=$3`, [randomUUID(),claim.customer_id,claim.ordinal,attempt.attempt_id,outcome,attempt.created_at]);
+    const run=(await client.query('UPDATE searchad_automation_runs SET state=$2,updated_at=$3 WHERE plan_id=$1 RETURNING run_id,customer_id',[attempt.plan_id,outcome==='unknown'?'unknown_outcome':outcome,attempt.created_at])).rows[0];
+    if(run)await this.automation.event(client,{runId:run.run_id,customerId:run.customer_id},'primary_outcome',{outcome,ordinal:String(claim.ordinal),sourceAttemptId:attempt.attempt_id},Date.parse(attempt.created_at));
   }
 
   async listAttempts(planId) {

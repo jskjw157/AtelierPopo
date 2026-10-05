@@ -1,3 +1,4 @@
+import { getApplicationSearchAdWriteRuntime } from './naver/searchad/write/runtime-production.js';
 import { circuitError } from './naver/searchad/circuit/postgres-repository.js';
 import { bootstrapV04 } from './bootstrap-v04.js';
 import { loadSearchAdConfig } from './naver/searchad/config.js';
@@ -120,13 +121,14 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
     logger.error('Multi-source catalog startup failed', multiSourceCatalogStartupError);
   }
 
+  let completedApp;
   const { runtime: searchAdCompletionRuntime, startupError: searchAdCompletionStartupError } = await bootstrapSearchAdCompletionRuntime({
     app: { ...app, searchAdConfig, searchAdRegistry, searchAdCredentials, searchAdGateway, searchAdActivationRuntime, searchAdHierarchyRuntime, catalogSourceRegistry, salesChannelRegistry },
-    env, clock, blobStorage, logger
+    env, clock, blobStorage, getWriteRuntime: () => getApplicationSearchAdWriteRuntime({app:completedApp,env}), logger
   });
 
   completionCircuit = searchAdCompletionRuntime?.circuitService || null;
-  return {
+  completedApp = {
     ...app,
     clock,
     searchAdCompletionRuntime,
@@ -151,4 +153,5 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
     multiSourceCatalogStartupErrors,
     multiSourceCatalogStartupError
   };
+  return completedApp;
 }

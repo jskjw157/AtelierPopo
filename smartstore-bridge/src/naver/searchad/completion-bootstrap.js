@@ -1,21 +1,23 @@
+import { AutomationService } from './automation/service.js';
+import { PostgresAutomationRepository } from './automation/postgres-repository.js';
 import { createCircuitGuard } from './circuit/service.js';
 import { configuredReportStorage } from './reporting/s3-storage.js';
 import { createPostgresPool, closePostgresPool } from '../../infrastructure/postgres/pool.js';
 import { loadSearchAdReportingConfig } from './reporting/config.js';
 import { createReportingRuntime } from './reporting/runtime.js';
 import { reportingError } from './reporting/contracts.js';
-const TABLES = ['searchad_stats_observations', 'searchad_report_blobs', 'searchad_report_ingestions', 'searchad_report_rows_staging', 'searchad_daily_metrics', 'searchad_conversion_metrics', 'searchad_search_terms', 'searchad_master_snapshots', 'searchad_spend_evidence', 'searchad_circuit_policies', 'searchad_circuit_state', 'searchad_circuit_events', 'searchad_circuit_projection_cursors', 'searchad_automation_reservations'];
+const TABLES = ['searchad_stats_observations', 'searchad_report_blobs', 'searchad_report_ingestions', 'searchad_report_rows_staging', 'searchad_daily_metrics', 'searchad_conversion_metrics', 'searchad_search_terms', 'searchad_master_snapshots', 'searchad_spend_evidence', 'searchad_circuit_policies', 'searchad_circuit_state', 'searchad_circuit_events', 'searchad_circuit_projection_cursors', 'searchad_automation_reservations', 'searchad_automation_policy_revisions', 'searchad_write_execution_claims', 'searchad_write_execution_outcomes'];
 async function assertSchema(pool) {
   try {
     const result = await pool.query('SELECT name,to_regclass(name)::text AS relation FROM unnest($1::text[]) AS name', [TABLES]);
     if (result.rows?.length !== TABLES.length || result.rows.some(row => !row.relation)) throw new Error();
-    const migration = await pool.query("SELECT version FROM schema_migrations WHERE version='0012'");
+    const migration = await pool.query("SELECT version FROM schema_migrations WHERE version='0013'");
     if (migration.rows.length !== 1) throw new Error();
   } catch { throw reportingError('SEARCHAD_REPORTING_SCHEMA_NOT_READY', 503); }
 }
 /** Completion borrows the activation pool when available. Any injected storage
  * is borrowed; future ingestion services reuse this same resource owner. */
-export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = process.env, clock = Date.now, blobStorage = null, logger = console } = {}) {
+export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = process.env, clock = Date.now, blobStorage = null, getWriteRuntime, logger = console } = {}) {
   let ownedPool = null;
   try {
     const reportingConfig = loadSearchAdReportingConfig(env);
@@ -47,8 +49,12 @@ export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = proce
     } } : null;
     runtime.circuitService = createCircuitGuard({ pool, clock, spendEvidence });
     runtime.circuitRepository = runtime.circuitService.repository;
+    runtime.automationRepository = new PostgresAutomationRepository({pool,clock,identityResolver:runtime.identityResolver});
+    runtime.circuitService.automationRepository = runtime.automationRepository;
+    const automationService = new AutomationService({repository:runtime.automationRepository,evidenceSelector:{select:input=>runtime.repository?.selectAutomationEvidence(input) || {stats:null,spend:null}},circuit:runtime.circuitService,getWriteRuntime,identityResolver:runtime.identityResolver,clock});
+    runtime.automationService = Object.fromEntries(['createPolicy','listPolicies','listRuns','getRun','evaluate','prepare','executeApproved'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>automationService[method](input,context))]));
     const reportingStatus = runtime.status.bind(runtime);
-    runtime.status = () => ({ ...reportingStatus(), circuit: { ready: true, mode: 'observe', automationEnabled: false } });
+    runtime.status = () => ({ ...reportingStatus(), circuit: { ready: !runtime.isClosing(), mode: 'observe', automationEnabled: false }, automation: { ready: !runtime.isClosing(), defaultMode: 'observe', autoAvailable: false } });
     return { runtime, startupError: null };
   } catch (error) {
     await closePostgresPool(ownedPool);

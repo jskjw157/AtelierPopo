@@ -33,6 +33,8 @@ export async function createReportingRuntime({ pool, repository = null, blobStor
     promise.then(() => active.delete(promise), () => active.delete(promise)); return promise;
   }
   const runtime = {
+    trackOperation: track,
+    isClosing: () => closing,
     config: reportingConfig,
     repository: enabled ? reportingRepository : null,
     statsService: enabled ? { collect(input, context) {

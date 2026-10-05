@@ -11,7 +11,7 @@ Software complete means production composition, HTTP authorization, role OpenAPI
 Global invariants:
 
 - Node.js >=22.5.0; ES modules; node:test; PostgreSQL 16 acceptance.
-- Preserve migrations 0001–0009 byte-for-byte; only append 0010–0013.
+- Preserve migrations 0001–0012 byte-for-byte at the Task 5 boundary. Task 5 appends 0013; later worker/profitability migrations are 0014/0015.
 - No live Naver request, production DB/config/gate change, deployment, main/base merge, or merge of PR #28.
 - Default automation mode is `observe`; new report registration and worker gates default OFF.
 - Reuse change plan → one-time approval → execution → verification/reconcile; no second execution engine.
@@ -45,8 +45,9 @@ The schema audit found existing `searchad_report_jobs`, `searchad_report_schema_
 | `0010_searchad_reporting.sql` | ALTER existing report jobs with kind, intent key/hash, dispatch claim/time, identity fields and distinct processing/quality fields; unique `(customer_id,report_kind,intent_key)`. ALTER schema registry with mappings, ordered schema SHA and source provenance. CREATE `searchad_stats_observations`, `searchad_report_blobs`, `searchad_report_ingestions`, `searchad_report_rows_staging`, `searchad_daily_metrics`, `searchad_conversion_metrics`, `searchad_search_terms`, `searchad_master_snapshots`, `searchad_spend_evidence`. |
 | `0011_searchad_reporting_generation.sql` | R14 narrow repair: make ingestion `report_created_at` nullable so stat jobs retain honest derived-window provenance; preserve all prior migration bytes. |
 | `0012_searchad_circuit_automation.sql` | CREATE `searchad_circuit_policies`, `searchad_circuit_state`, `searchad_circuit_events`, `searchad_circuit_projection_cursors`, `searchad_automation_policies`, `searchad_automation_runs`, `searchad_automation_events`, `searchad_automation_reservations`. |
-| `0013_searchad_worker.sql` | CREATE `searchad_worker_jobs`, `searchad_worker_schedules`, `searchad_worker_runs`; lease owner/token/expiry columns live on jobs. Do not invent an existing `platform_worker_leases` table: it was listed in prose but is absent in 0001–0009. |
-| `0014_searchad_profitability.sql` | ALTER mappings to support canonical source-independent rows: allow legacy `source_product_id` NULL only when HAAR+channel relation is valid; add scoped canonical uniqueness and validity/allocation/provenance. CREATE `searchad_customer_channel_bindings`, `searchad_commerce_observations`, `searchad_product_cost_inputs`, `searchad_profitability_snapshots`, `searchad_recommendations`. |
+| `0013_searchad_automation_protocol.sql` | Task 5: immutable policy revisions and current Campaign GET observations, stable Customer/entity rule lineage, owned plan/approval associations, durable accepted-execute ordinals and primary terminal versions, and scoped audited known-failure recovery. |
+| `0014_searchad_worker.sql` | CREATE `searchad_worker_jobs`, `searchad_worker_schedules`, `searchad_worker_runs`; lease owner/token/expiry columns live on jobs. Do not invent an existing `platform_worker_leases` table: it was listed in prose but is absent in 0001–0009. |
+| `0015_searchad_profitability.sql` | ALTER mappings to support canonical source-independent rows: allow legacy `source_product_id` NULL only when HAAR+channel relation is valid; add scoped canonical uniqueness and validity/allocation/provenance. CREATE `searchad_customer_channel_bindings`, `searchad_commerce_observations`, `searchad_product_cost_inputs`, `searchad_profitability_snapshots`, `searchad_recommendations`. |
 
 Every new table has Customer scope, explicit immutable IDs and appropriate composite unique/FK constraints; child references cannot point across Customers. Immutable observations/events/snapshots use the established rejecting trigger. Mutable projections never overwrite source evidence. Existing legacy mappings remain readable but cannot enter automatic decisions until verified against canonical identities.
 
@@ -159,3 +160,12 @@ No available pinned list contract proves snapshot-complete absence across unmana
 - Bundled correction provenance points to NAVERPAY retirement, search-term aggregation and AI Ads master notices. Verify/source missing complete column schemas before declaring those semantic parsers supported. The VAT correction needs its missing provenance filled from pinned `_posts/2026-02-11-notice1.md` ([official notice](https://naver.github.io/searchad-apidoc/notice/2026/02/11/notice1/)): post-2026-03-30 statDate COST is rounded long and VAT-included; regenerated older dates retain historical representation. `/stats.salesAmt` VAT inclusion is independently documented in bundled Swagger.
 
 Master schema source pin: gist revision `8f5aed7a003af91e00fc2eede43e8452fd369a33`, content SHA256 `7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e`; do not use a mutable latest gist without validating the pin.
+
+
+## Task 5 implemented protocol clarification
+
+The Task 5 contract is documented in [SEARCHAD_AUTOMATION_APPROVAL_PROTOCOL.md](../../SEARCHAD_AUTOMATION_APPROVAL_PROTOCOL.md). Its policy modes are observe, recommend and approve; default observe/disabled and all operational gates stay unchanged. Approve still requires the ordinary explicit one-shot approval endpoint. The conservative 20%/100000 KRW recipe caps are applied to these modes as well as the future limited-Auto proposal; campaign userLock recipes permit true only.
+
+The pinned Campaign PUT documents `fields=userLock`. The activation guard now derives only `campaign.userLock` for that field with an exact `{nccCampaignId,userLock}` body, strict matching campaign identity and a Boolean value. Budget-only grants, mixed budget/lock bodies and other query scopes cannot authorize this branch. This is field mapping under existing activation evidence, account controls and the final send fence; policy creation does not mint activation evidence. Ordinary manual userLock behavior follows existing grant authority, while automation never proposes unlocking.
+
+The final send fence remains read-only and always rolls back. Accepted execute ordinals are committed with one-shot approval consumption before entering that fence, and represent local accepted attempts, not remote delivery. Current unlinked read/acceptance/rollback events on such a plan do not acquire rule-failure counter authority. Existing unordered failure history is separate; old not_applied projections and historical entity names are interpreted using primary evidence without rewriting immutable history.

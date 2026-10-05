@@ -5,9 +5,12 @@ export function circuitError(code = 'UNAVAILABLE', status = 503, reasons = []) {
   return new SearchAdWriteError(`SEARCHAD_CIRCUIT_${code}`, 'SearchAd Circuit authorization is unavailable or denied.', { reasons }, status);
 }
 const SOURCE_SQL = {
+  ordered_write: `SELECT o.outcome_id::text AS source_id,o.outcome AS status,'ordered' AS phase,o.occurred_at AS created_at,c.plan_id::text AS owner_id,p.mutation_json AS descriptor,p.mutation_operation_key AS operation_key,
+    c.plan_id::text AS logical_id,c.rule_id::text AS rule_id,c.ordinal::text,o.version FROM searchad_write_execution_outcomes o JOIN searchad_write_execution_claims c USING(customer_id,ordinal) JOIN searchad_write_change_plans p USING(plan_id) WHERE o.customer_id=$1`,
   write: `SELECT a.attempt_id::text AS source_id,a.phase,a.status,a.created_at,p.plan_id::text AS owner_id,p.mutation_json AS descriptor,p.mutation_operation_key AS operation_key,p.before_json,
-    NULL::text AS object_id,p.plan_id::text AS logical_id,(SELECT ar.policy_id::text FROM searchad_automation_runs ar WHERE ar.customer_id=p.customer_id AND ar.plan_id=p.plan_id) AS rule_id FROM searchad_write_attempts a JOIN searchad_write_change_plans p USING(plan_id)
-    WHERE p.customer_id=$1 AND a.phase<>'plan' AND NOT EXISTS(SELECT 1 FROM searchad_hierarchy_events h WHERE h.customer_id=$1 AND h.details_json->>'planId'=p.plan_id::text)`,
+    EXISTS(SELECT 1 FROM searchad_write_execution_claims claim WHERE claim.plan_id=p.plan_id) AS protocol_claim,
+    NULL::text AS object_id,p.plan_id::text AS logical_id,(SELECT ar.rule_id::text FROM searchad_automation_runs ar WHERE ar.customer_id=p.customer_id AND ar.plan_id=p.plan_id) AS rule_id FROM searchad_write_attempts a JOIN searchad_write_change_plans p USING(plan_id)
+    WHERE p.customer_id=$1 AND a.phase<>'plan' AND NOT EXISTS(SELECT 1 FROM searchad_write_execution_outcomes o WHERE o.source_attempt_id=a.attempt_id) AND NOT EXISTS(SELECT 1 FROM searchad_hierarchy_events h WHERE h.customer_id=$1 AND h.details_json->>'planId'=p.plan_id::text)`,
   canary: `SELECT e.event_id::text AS source_id,e.phase,e.status,e.created_at,e.canary_run_id::text AS owner_id,'{}'::jsonb AS descriptor,e.operation_key,'{}'::jsonb AS before_json,
     r.remote_id AS object_id,e.canary_run_id::text||':'||e.phase AS logical_id FROM searchad_canary_events e JOIN searchad_canary_runs r USING(canary_run_id) WHERE e.customer_id=$1`,
   hierarchy: `SELECT e.event_id::text AS source_id,e.phase,e.status,e.created_at,e.hierarchy_run_id::text AS owner_id,COALESCE(p.mutation_json,'{}'::jsonb) AS descriptor,e.operation_key,'{}'::jsonb AS before_json,
@@ -17,19 +20,36 @@ const SOURCE_SQL = {
 function sourceEvent(kind, row) {
   let outcome = 'neutral'; const phase = row.phase, status = row.status;
   if (['unknown_outcome','rollback_unknown_outcome','cleanup_unknown_outcome','outcome_unknown','unavailable','response_mismatch','mismatch','partial_ids_recorded','unverified'].includes(status) || (/verify|verification/.test(phase) && status === 'failed')) outcome = 'unknown';
-  else if (['failed','rollback_failed'].includes(status)) outcome = 'failed';
-  else if (['succeeded','verified','deleted_verified','applied_reconciled','not_applied'].includes(status)) outcome = 'succeeded';
+  else if (['failed','rollback_failed','not_applied'].includes(status)) outcome = 'failed';
+  else if (['succeeded','verified','deleted_verified','applied','applied_reconciled'].includes(status)) outcome = 'succeeded';
   else if (status === 'stale') outcome = 'manual_drift';
   if (kind === 'hierarchy') {
     if (phase === 'tree_cleanup_result' && status === 'unknown') outcome = 'unknown';
     if (phase === 'tree_cleanup_observation') outcome = status === 'absent' ? 'succeeded' : 'unknown';
     if (phase === 'cleanup_observation') outcome = status === 'deleted' ? 'succeeded' : 'unknown';
   }
-  if (kind === 'write' && phase === 'plan') outcome = 'neutral';
+  if (kind === 'write' && ['plan','read'].includes(phase)) outcome = 'neutral';
+  if (kind === 'ordered_write' && status === 'unknown') outcome = 'unknown';
   if (kind === 'canary' && ['preflight','baseline_spend','spend_verify'].includes(phase)) outcome = 'neutral';
   const logicalKey = `${kind}:${row.logical_id}${kind === 'write' ? ':' + (phase.startsWith('rollback') ? 'rollback' : 'execute') : ''}`;
   const entity = Object.entries(row.descriptor?.pathParams || {})[0];
-  return { logicalKey, outcome, occurredAt: new Date(row.created_at).getTime(), entityType: entity?.[0]?.replace(/Id$/, '') || 'campaign', entityId: entity?.[1] || row.object_id || row.owner_id, operationKey: row.operation_key, ownerId: row.owner_id, ...(row.rule_id ? { ruleId: row.rule_id } : {}) };
+  return { logicalKey, outcome, occurredAt: new Date(row.created_at).getTime(), entityType: entity?.[0]?.replace(/^ncc/, '').replace(/Id$/, '').toLowerCase() || 'campaign', entityId: entity?.[1] || row.object_id || row.owner_id, operationKey: row.operation_key, ownerId: row.owner_id, ...(row.rule_id ? { ruleId: row.rule_id } : {}), ...(kind==='write' && row.protocol_claim ? {counterEligible:false} : {}), ...(kind === 'ordered_write' ? { ordinal: row.ordinal, version: row.version, outcomeId: row.source_id, primaryOutcome: status } : {}) };
+}
+// Preserve immutable old projections while interpreting their primary source
+// with current known semantics. In particular, 0012 labelled not_applied success.
+const LEGACY_SOURCE_COLUMNS = `
+  (SELECT a.phase FROM searchad_write_attempts a WHERE c.source_kind='write' AND a.attempt_id::text=c.source_id) AS legacy_phase,
+  (SELECT a.status FROM searchad_write_attempts a WHERE c.source_kind='write' AND a.attempt_id::text=c.source_id) AS legacy_status,
+  EXISTS(SELECT 1 FROM searchad_write_attempts a JOIN searchad_write_execution_claims claim USING(plan_id) WHERE c.source_kind='write' AND a.attempt_id::text=c.source_id) AS protocol_claim`;
+function projectedEvent(row) {
+  const event={...row.event_json,eventId:row.event_id};
+  if(!event.ordinal){
+    event.entityType=event.entityType?.replace(/^ncc/,'').toLowerCase();
+    if(row.legacy_status==='not_applied')event.outcome='failed';
+    if(['plan','read'].includes(row.legacy_phase))event.outcome='neutral';
+    if(row.protocol_claim)event.counterEligible=false;
+  }
+  return event;
 }
 /** All mutable primary outcome writers use account-first transactions. Projection
  * takes the same lock. Final fence reads never mutate these ledgers. */
@@ -65,11 +85,22 @@ export class PostgresCircuitRepository {
   async getPolicy({ customerId, client = this.pool }) { return (await client.query('SELECT policy_json FROM searchad_circuit_policies WHERE customer_id=$1', [customerId])).rows[0]?.policy_json || {}; }
   async getState({ customerId, entityType, entityId, client = this.pool }) {
     const row = (await client.query('SELECT manual_paused,reason FROM searchad_circuit_state WHERE customer_id=$1', [customerId])).rows[0];
-    const events = (await client.query(`SELECT event_json FROM searchad_circuit_events c WHERE c.customer_id=$1
+    const events = (await client.query(`SELECT event_json,event_id::text,${LEGACY_SOURCE_COLUMNS} FROM searchad_circuit_events c WHERE c.customer_id=$1
       AND NOT(c.source_kind='write' AND EXISTS(SELECT 1 FROM searchad_write_attempts a JOIN searchad_write_change_plans p USING(plan_id)
-        WHERE a.attempt_id::text=c.source_id AND p.customer_id=c.customer_id AND a.phase='plan')) ORDER BY c.event_id`, [customerId])).rows.map(r => r.event_json);
-    const logical = new Map(); const state = { manualPaused: row?.manual_paused === true, reason: row?.reason || null, unknownCount: 0, counterBasis: 'unresolved_logical_failure_upper_bound', consecutiveFailures: {}, changedAt: null, manualChangedAt: null, dailyLossNetKrw: null };
+        WHERE a.attempt_id::text=c.source_id AND p.customer_id=c.customer_id AND (a.phase='plan' OR EXISTS(SELECT 1 FROM searchad_write_execution_outcomes o WHERE o.source_attempt_id=a.attempt_id)))) ORDER BY c.event_id`, [customerId])).rows.map(projectedEvent);
+    const rules=(await client.query('SELECT rule_id::text,entity_type,entity_id FROM searchad_automation_rules WHERE customer_id=$1',[customerId])).rows;
+    const policyRules=(await client.query('SELECT policy_id::text,rule_id::text FROM searchad_automation_policies WHERE customer_id=$1',[customerId])).rows;
+    for(const event of events) if(!event.ordinal){
+      const mapped=policyRules.find(row=>row.policy_id===event.ruleId)?.rule_id || rules.find(row=>row.entity_type===event.entityType && row.entity_id===event.entityId)?.rule_id;
+      if(mapped)event.ruleId=mapped;
+    }
+    const logical = new Map(); const state = { manualPaused: row?.manual_paused === true, reason: row?.reason || null, unknownCount: 0, counterBasis: 'unresolved_logical_failure_upper_bound', consecutiveFailures: {}, orderedConsecutiveFailures: {}, legacyFailures: {}, changedAt: null, manualChangedAt: null, dailyLossNetKrw: null };
+    const ordered = new Map();
+    const recovered = (await client.query('SELECT selected_json FROM searchad_circuit_failure_recoveries WHERE customer_id=$1', [customerId])).rows;
+    const recoveredOutcomes = new Set(recovered.flatMap(row => row.selected_json?.outcomeIds || []));
+    const recoveredLegacy = new Set(recovered.flatMap(row => row.selected_json?.legacyEventIds || []));
     for (const event of events) {
+      if (event.ordinal) { const prior = ordered.get(event.ordinal); if (!prior || event.version > prior.version) ordered.set(event.ordinal,event); continue; }
       if (event.outcome === 'manual_drift' && event.entityType === entityType && event.entityId === entityId) state.manualChangedAt = Math.max(state.manualChangedAt || 0, event.occurredAt);
       if (!['failed','unknown','succeeded'].includes(event.outcome)) continue;
       const prior = logical.get(event.logicalKey);
@@ -81,12 +112,24 @@ export class PostgresCircuitRepository {
       if (event.outcome === 'unknown') state.unknownCount++;
       // Upper bound without a causal send sequence: unrelated success cannot
       // reset late/backdated failures. Only exact logical verification resolves.
-      if (event.ruleId && event.outcome !== 'succeeded') state.consecutiveFailures[event.ruleId] = (state.consecutiveFailures[event.ruleId] || 0) + 1;
+      if (event.counterEligible!==false && event.ruleId && event.outcome !== 'succeeded' && !recoveredLegacy.has(event.eventId)) state.legacyFailures[event.ruleId] = (state.legacyFailures[event.ruleId] || 0) + 1;
       if (event.outcome === 'succeeded' && event.entityType === entityType && event.entityId === entityId) state.changedAt = Math.max(state.changedAt || 0, event.occurredAt);
     }
+    for (const event of [...ordered.values()].sort((a,b) => BigInt(a.ordinal) < BigInt(b.ordinal) ? -1 : 1)) {
+      if (event.outcome === 'unknown') state.unknownCount++;
+      if (event.outcome === 'succeeded') {
+        state.orderedConsecutiveFailures[event.ruleId] = 0;
+        if (event.entityType === entityType && event.entityId === entityId) state.changedAt = Math.max(state.changedAt || 0,event.occurredAt);
+      } else if (!recoveredOutcomes.has(event.outcomeId)) state.orderedConsecutiveFailures[event.ruleId] = (state.orderedConsecutiveFailures[event.ruleId] || 0) + 1;
+    }
+    for (const key of new Set([...Object.keys(state.legacyFailures),...Object.keys(state.orderedConsecutiveFailures)])) state.consecutiveFailures[key] = (state.legacyFailures[key] || 0) + (state.orderedConsecutiveFailures[key] || 0);
+    if (ordered.size) state.counterBasis = 'accepted_attempt_ordinals_plus_conservative_legacy';
     return state;
   }
   async unresolved({ customerId, owner = {}, dispatch = {}, client = this.pool }) {
+    const pending=(await client.query(`SELECT c.ordinal FROM searchad_write_execution_claims c LEFT JOIN LATERAL(SELECT outcome FROM searchad_write_execution_outcomes o WHERE o.customer_id=c.customer_id AND o.ordinal=c.ordinal ORDER BY version DESC LIMIT 1) terminal ON true
+      WHERE c.customer_id=$1 AND c.plan_id::text<>COALESCE($2,'') AND (terminal.outcome IS NULL OR terminal.outcome='unknown') LIMIT 1`,[customerId,owner.planId || null])).rows;
+    if(pending.length)return true;
     const target = dispatch.entityId || null;
     const plans = await client.query(`SELECT p.plan_id FROM searchad_write_change_plans p WHERE p.customer_id=$1 AND p.plan_id::text<>COALESCE($2,'')
       AND NOT EXISTS(SELECT 1 FROM searchad_hierarchy_events h WHERE h.customer_id=$1 AND h.details_json->>'planId'=p.plan_id::text)
@@ -127,13 +170,39 @@ export class PostgresCircuitRepository {
       AND (state IN('dispatching','delete_pending') OR (state IN('create_unknown','delete_unknown','manual_review') AND (hierarchy_object_id::text=$4 OR remote_id=$4)))
       AND NOT(hierarchy_object_id::text=ANY($2::text[])) AND NOT EXISTS(SELECT 1 FROM searchad_hierarchy_events h WHERE h.customer_id=$1 AND h.hierarchy_object_id=o.hierarchy_object_id AND h.details_json->>'planId'=$3) LIMIT 1`, [customerId,owner.objectIds || [],owner.planId || null,target]);
     if (objects.rows.length) return true;
-    const reservations = await client.query(`SELECT reservation_id FROM searchad_automation_reservations WHERE customer_id=$1 AND state IN('reserved','consumed','unknown') AND reservation_id::text<>COALESCE($2,'') LIMIT 1`, [customerId,owner.reservationId || null]);
+    const reservations = await client.query(`SELECT r.reservation_id FROM searchad_automation_reservations r WHERE r.customer_id=$1 AND r.state IN('reserved','consumed','unknown') AND r.reservation_id::text<>COALESCE($2,'')
+      AND NOT EXISTS(SELECT 1 FROM searchad_automation_runs ar JOIN searchad_write_execution_claims c ON c.plan_id=ar.plan_id
+        JOIN LATERAL(SELECT outcome FROM searchad_write_execution_outcomes o WHERE o.customer_id=c.customer_id AND o.ordinal=c.ordinal ORDER BY version DESC LIMIT 1) terminal ON true
+        WHERE ar.customer_id=r.customer_id AND ar.run_id=r.run_id AND terminal.outcome IN('failed','not_applied','applied','applied_reconciled')) LIMIT 1`, [customerId,owner.reservationId || null]);
     return reservations.rows.length > 0;
   }
   async reserveDispatch({ customerId, dispatchKey, dispatch, now }) {
     return this.transaction(customerId, async client => {
       const result = await client.query(`INSERT INTO searchad_automation_reservations(reservation_id,customer_id,dispatch_key,entity_type,entity_id,state,dispatch_json,created_at,updated_at) VALUES($1,$2,$3,$4,$5,'reserved',$6::jsonb,$7,$7) ON CONFLICT(customer_id,dispatch_key) DO NOTHING RETURNING reservation_id`, [randomUUID(),customerId,dispatchKey,dispatch.entityType,dispatch.entityId,JSON.stringify(dispatch),new Date(now).toISOString()]);
       return result.rows[0]?.reservation_id || null;
+    });
+  }
+  async recoverKnownFailures({customerId,policyId,expectedRevision,actor,reason,now}) {
+    return this.transaction(customerId,async client=>{
+      const policy=(await client.query('SELECT * FROM searchad_automation_policies WHERE customer_id=$1 AND policy_id=$2',[customerId,policyId])).rows[0];
+      if(!policy || policy.revision!==expectedRevision)throw circuitError('RECOVERY_REVISION',409);
+      const state=await this.getState({customerId,client});
+      if(state.unknownCount || await this.hasBacklog({customerId,client}) || await this.unresolved({customerId,client}))throw circuitError('RECOVERY_UNRESOLVED',409);
+      const prior=(await client.query('SELECT selected_json FROM searchad_circuit_failure_recoveries WHERE customer_id=$1 AND rule_id=$2',[customerId,policy.rule_id])).rows;
+      const recoveredOutcomes=new Set(prior.flatMap(row=>row.selected_json.outcomeIds));
+      const recoveredLegacy=new Set(prior.flatMap(row=>row.selected_json.legacyEventIds));
+      const outcomes=(await client.query(`SELECT terminal.outcome_id FROM searchad_write_execution_claims c JOIN LATERAL(SELECT outcome_id,outcome FROM searchad_write_execution_outcomes o WHERE o.customer_id=c.customer_id AND o.ordinal=c.ordinal ORDER BY version DESC LIMIT 1) terminal ON true WHERE c.customer_id=$1 AND c.rule_id=$2 AND terminal.outcome IN('failed','not_applied')`,[customerId,policy.rule_id])).rows.map(row=>row.outcome_id).filter(id=>!recoveredOutcomes.has(id));
+      const events=(await client.query(`SELECT c.event_id::text,c.event_json,${LEGACY_SOURCE_COLUMNS} FROM searchad_circuit_events c WHERE c.customer_id=$1 AND NOT(c.event_json ? 'ordinal')
+        AND NOT EXISTS(SELECT 1 FROM searchad_write_execution_outcomes o WHERE c.source_kind='write' AND o.source_attempt_id::text=c.source_id) ORDER BY c.event_id`,[customerId])).rows;
+      const logical=new Map();
+      for(const row of events){const event=projectedEvent(row);row.event_json=event;if(!['failed','unknown','succeeded'].includes(event.outcome))continue;const previous=logical.get(event.logicalKey);if(!previous || event.outcome==='succeeded' || (previous.event_json.outcome!=='succeeded' && event.outcome==='unknown'))logical.set(event.logicalKey,row);}
+      const legacy=[...logical.values()].filter(row=>row.event_json.counterEligible!==false && row.event_json.outcome==='failed' && !recoveredLegacy.has(row.event_id) && (row.event_json.ruleId===policy.rule_id || row.event_json.ruleId===policy.policy_id || (row.event_json.entityType===policy.entity_type && row.event_json.entityId===policy.entity_id))).map(row=>row.event_id);
+      if(!outcomes.length && !legacy.length)throw circuitError('RECOVERY_EMPTY',409);
+      const revision=(await client.query('UPDATE searchad_automation_rules SET recovery_revision=recovery_revision+1 WHERE customer_id=$1 AND rule_id=$2 RETURNING recovery_revision',[customerId,policy.rule_id])).rows[0].recovery_revision;
+      const recoveryId=randomUUID(), selected={outcomeIds:outcomes,legacyEventIds:legacy};
+      await client.query('INSERT INTO searchad_circuit_failure_recoveries(recovery_id,customer_id,rule_id,policy_id,policy_revision,recovery_revision,actor,reason,selected_json,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[recoveryId,customerId,policy.rule_id,policyId,expectedRevision,revision,actor,reason,selected,new Date(now).toISOString()]);
+      await client.query('UPDATE searchad_automation_runs SET revoked_at=$3 WHERE customer_id=$1 AND rule_id=$2 AND revoked_at IS NULL',[customerId,policy.rule_id,new Date(now).toISOString()]);
+      return {recoveryId,customerId,ruleId:policy.rule_id,policyRevision:expectedRevision,recoveryRevision:revision,selected};
     });
   }
   async appendManualControl({ customerId, paused, reason, actor, now }) {

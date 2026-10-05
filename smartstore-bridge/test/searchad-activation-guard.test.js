@@ -172,3 +172,12 @@ test('field scope, expiry, operation verification and current identity are all r
     error => error?.code === 'SEARCHAD_ACTIVATION_CONTEXT_MISMATCH' && error?.status === 403
   );
 });
+
+test('explicit userLock query derives only exact campaign.userLock authority and never budget-only authority',async()=>{
+  const descriptor=updateDescriptor({query:{fields:'userLock'},body:{nccCampaignId:'cmp-100',userLock:true}});
+  const narrow=fixture({grant:activation({fieldScope:['campaign.userLock']}),evidenceValue:evidence({fieldScope:['campaign.userLock']})});
+  const result=await narrow.guard.assertMutationAllowed({customerId:'100',descriptor});assert.deepEqual(result.mutableFields,['campaign.userLock']);
+  const budget=fixture({grant:activation({fieldScope:['campaign.dailyBudget']}),evidenceValue:evidence({fieldScope:['campaign.dailyBudget']})});
+  await assert.rejects(budget.guard.assertMutationAllowed({customerId:'100',descriptor}));
+  for(const body of [{nccCampaignId:'cmp-100',userLock:true,dailyBudget:1000},{nccCampaignId:'wrong',userLock:true},{nccCampaignId:'cmp-100',userLock:'true'},{userLock:true}])await assert.rejects(narrow.guard.assertMutationAllowed({customerId:'100',descriptor:{...descriptor,body}}),{code:'SEARCHAD_ACTIVATION_FIELD_MAPPING_UNKNOWN'});
+});

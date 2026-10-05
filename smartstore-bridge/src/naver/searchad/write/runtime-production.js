@@ -1,3 +1,6 @@
+import { currentReportingIdentity } from '../reporting/contracts.js';
+import { NaverSearchAdClient } from '../client.js';
+import { SearchAdOperationGateway } from '../gateway.js';
 import { createCircuitGuard } from '../circuit/service.js';
 import { loadSearchAdWriteConfig } from './config.js';
 import { SearchAdWriteRepository } from './repository.js';
@@ -40,7 +43,7 @@ export function createProductionSearchAdWriteRuntime({
     });
     if (!postgresPool) ownedPostgresPool = pool;
     mutationPool = pool;
-    repository = new PostgresSearchAdWriteRepository({ pool });
+    repository = new PostgresSearchAdWriteRepository({ pool, clock, identityResolver:customerId=>currentReportingIdentity({customerId,registry:gateway.registry,credentialsRegistry:gateway.credentialsRegistry,config:gateway.config}) });
   } else {
     repository = new SearchAdWriteRepository({ databasePath: config.databasePath, database });
   }
@@ -52,7 +55,13 @@ export function createProductionSearchAdWriteRuntime({
   // Plan storage is not the account-control authority. SQLite plans using native
   // activation must use its fence too; a missing native pool must not fall back.
   const guard = circuitGuard || createCircuitGuard({ pool: accountPool, clock });
+  if(repository.pool && guard.repository?.pool===accountPool) guard.automationRepository=repository.automation;
+  const readGateway = gateway instanceof SearchAdOperationGateway && gateway.client instanceof NaverSearchAdClient ? new SearchAdOperationGateway({
+    registry:gateway.registry,credentialsRegistry:gateway.credentialsRegistry,config:gateway.config,logger:gateway.logger,
+    client:new NaverSearchAdClient({baseUrl:gateway.client.baseUrl,credentialsRegistry:gateway.credentialsRegistry,fetchImpl:gateway.client.fetchImpl,clock:gateway.client.clock,requestTimeoutMs:gateway.client.requestTimeoutMs,maxRetries:0,redirectPolicy:'error',logger:gateway.client.logger})
+  }) : gateway;
   const remote = new SafeSearchAdGatewayRemoteAdapter({
+    readGateway,
     gateway: createPostgresMutationGateway({ gateway, pool: accountPool, circuitGuard: guard, requireWriteOwner: true, ordinaryStoreReady: Boolean(accountPool && repository.pool === accountPool) })
   });
   const approvalService = new SearchAdApprovalService({ repository, config, clock });
@@ -101,4 +110,11 @@ export function createProductionSearchAdWriteRuntime({
       if (ownedPostgresPool) await closePostgresPool(ownedPostgresPool);
     }
   };
+}
+
+/** One lazy application-owned writer, shared by HTTP and completion services. */
+export function getApplicationSearchAdWriteRuntime({app,env=process.env}) {
+  if (!app.searchAdGateway) throw new SearchAdWriteError('SEARCHAD_NOT_READY','SearchAd gateway is unavailable.',{},503);
+  if (!app.searchAdWriteRuntime) app.searchAdWriteRuntime=createProductionSearchAdWriteRuntime({gateway:app.searchAdGateway,env,baseDir:app.config?.workDir || process.cwd(),activationGuard:app.searchAdActivationRuntime?.guard,circuitGuard:app.searchAdCompletionRuntime?.circuitService,postgresPool:!env.ATELIER_SEARCHAD_WRITE_DATABASE_URL || env.ATELIER_SEARCHAD_WRITE_DATABASE_URL===env.DATABASE_URL ? app.searchAdActivationRuntime?.repository?.pool : undefined,clock:app.clock});
+  return app.searchAdWriteRuntime;
 }

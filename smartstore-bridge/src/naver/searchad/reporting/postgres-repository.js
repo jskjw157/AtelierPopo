@@ -653,6 +653,14 @@ export class PostgresReportingRepository {
       ).rows[0] || null
     );
   }
+  async selectAutomationEvidence({customerId,entityType,entityId,identity,now,maxCurrentAgeMs=1800000}) {
+    validateIdentity(identity,customerId);
+    const stats=map((await this.pool.query(`SELECT *,since_kst::text AS since_kst,until_kst::text AS until_kst FROM searchad_stats_observations
+      WHERE customer_id=$1 AND entity_type=$2 AND entity_id=$3 AND spec_sha=$4 AND credential_fingerprint=$5 AND upstream_base_url=$6
+      AND observed_at BETWEEN $7 AND $8 AND cycle_at BETWEEN $7 AND $8 ORDER BY observed_at DESC,observation_id DESC LIMIT 1`,[customerId,entityType,entityId,identity.specSha,identity.credentialFingerprint,identity.upstreamBaseUrl,new Date(now-Math.min(maxCurrentAgeMs,1800000)).toISOString(),new Date(now).toISOString()])).rows[0]);
+    const spend=await this.selectSpendEvidence({customerId,entityType,entityId,identity,now,maxAgeMs:86400000});
+    return {stats,spend};
+  }
   // Stats is provisional regardless of age or identity. Task 3 supplies a
   // distinct report-derived trust selector; this table can never satisfy it.
   async findLatestTrustedObservation() { return null; }

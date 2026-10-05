@@ -1,4 +1,4 @@
-import { createProductionSearchAdWriteRuntime } from '../naver/searchad/write/runtime-production.js';
+import { getApplicationSearchAdWriteRuntime } from '../naver/searchad/write/runtime-production.js';
 import { HttpError } from './errors.js';
 
 export function requireSearchAdHttpWrites(context) {
@@ -14,19 +14,4 @@ export function requiredSearchAdIdempotencyKey(req, body = {}) {
   return value;
 }
 
-export function getSearchAdWriteRuntime(context) {
-  const { app, env = process.env } = context;
-  if (!app.searchAdGateway) {
-    throw new HttpError(503, 'SEARCHAD_NOT_READY', 'SearchAd gateway가 준비되지 않았습니다.');
-  }
-  if (!app.searchAdWriteRuntime) {
-    app.searchAdWriteRuntime = createProductionSearchAdWriteRuntime({
-      gateway: app.searchAdGateway, env, baseDir: app.config?.workDir || process.cwd(),
-      activationGuard: app.searchAdActivationRuntime?.guard,
-      circuitGuard: app.searchAdCompletionRuntime?.circuitService,
-      postgresPool: !env.ATELIER_SEARCHAD_WRITE_DATABASE_URL || env.ATELIER_SEARCHAD_WRITE_DATABASE_URL === env.DATABASE_URL ? app.searchAdActivationRuntime?.repository?.pool : undefined,
-      clock: app.clock
-    });
-  }
-  return app.searchAdWriteRuntime;
-}
+export function getSearchAdWriteRuntime(context) { return getApplicationSearchAdWriteRuntime(context); }

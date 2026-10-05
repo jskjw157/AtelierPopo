@@ -1,3 +1,4 @@
+import { createSearchAdAutomationRoutes } from './routes-searchad-automation.js';
 import http from 'node:http';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -112,6 +113,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createSearchAdRoutes(routeContext),
     ...createSearchAdReportingRoutes(routeContext),
     ...createSearchAdCircuitRoutes(routeContext),
+    ...createSearchAdAutomationRoutes(routeContext),
     ...createSearchAdWriteRoutesV3(routeContext),
     ...createSearchAdCanaryRoutes(routeContext),
     ...createSearchAdActivationRoutes(routeContext),

@@ -38,17 +38,26 @@ export class CircuitService {
   }
   async decision(dispatch, { client, now }) {
     if (['rollback','report_registration'].includes(dispatch.purpose)) return { allowed: true, reasons: [] };
+    let authority=null, owner=bindings.get(dispatch);
+    if(dispatch.purpose==='ordinary' && owner?.planId && this.automationRepository){
+      authority=await this.automationRepository.planAuthority(owner.planId,{client,now,states:['executing']});
+      if(authority){
+        if(authority.reservation?.state!=='consumed' || dispatch.operationKey!==authority.run.decision.recipe.mutation.operationKey || dispatch.entityId!==authority.policy.entityId)throw circuitError('AUTOMATION_AUTHORITY',409);
+        dispatch={...dispatch,ruleId:authority.policy.ruleId,entityType:authority.policy.entityType,entityId:authority.policy.entityId};
+        owner={...owner,reservationId:authority.reservation.reservation_id};
+      }
+    }
     if (await this.repository.hasBacklog({ customerId: dispatch.customerId, client })) return { allowed: false, reasons: ['PROJECTION_BACKLOG'] };
-    if (await this.repository.unresolved({ customerId: dispatch.customerId, owner: bindings.get(dispatch), dispatch, client })) return { allowed: false, reasons: ['UNRESOLVED_MUTATION'] };
+    if (await this.repository.unresolved({ customerId: dispatch.customerId, owner, dispatch, client })) return { allowed: false, reasons: ['UNRESOLVED_MUTATION'] };
     if (!Number.isFinite(now)) throw circuitError();
-    let validUntil = Infinity;
+    let validUntil = authority?.validUntil ?? Infinity;
     const statDateKst = new Date(now + 9 * 3600000).toISOString().slice(0, 10);
     const state = await this.repository.getState({ ...dispatch, client, now });
     // Loss is a complete Customer/KST-day net total, never a report spend alias.
     // Task 9 must supply the identity-bound actual selector; missing stays null.
     if (dispatch.actionClass === 'increase' && this.lossEvidence) {
       const loss = await this.lossEvidence.select({ customerId: dispatch.customerId }, { client, now });
-      if (loss?.customerId === dispatch.customerId && loss.quality === 'actual' && loss.completeCustomerDay === true && loss.identityVerified === true && Number.isFinite(loss.observedAt) && loss.observedAt <= now && now - loss.observedAt <= 86400000 && loss.statDateKst === new Date(now + 9 * 3600000).toISOString().slice(0, 10) && Number.isFinite(loss.amountNetKrw) && loss.amountNetKrw >= 0) { state.dailyLossNetKrw = loss.amountNetKrw; validUntil = loss.observedAt + 86400000; }
+      if (loss?.customerId === dispatch.customerId && loss.quality === 'actual' && loss.completeCustomerDay === true && loss.identityVerified === true && Number.isFinite(loss.observedAt) && loss.observedAt <= now && now - loss.observedAt <= 86400000 && loss.statDateKst === new Date(now + 9 * 3600000).toISOString().slice(0, 10) && Number.isFinite(loss.amountNetKrw) && loss.amountNetKrw >= 0) { state.dailyLossNetKrw = loss.amountNetKrw; validUntil = Math.min(validUntil, loss.observedAt + 86400000); }
     }
     const policy = await this.repository.getPolicy({ customerId: dispatch.customerId, client });
     const evidence = dispatch.ruleId && this.spendEvidence ? await this.spendEvidence.select(dispatch, { client, now }) : null;
@@ -84,6 +93,13 @@ export class CircuitService {
   async projectOutcome(customerId) {
     try { return await this.projection.catchUp({ customerId }); }
     catch { return { ready: false, cursors: {} }; }
+  }
+  async recoverRule(input,context) {
+    const actor=authorize(input.customerId,context,true);
+    if(Object.keys(input).some(key=>!['customerId','policyId','expectedRevision','reason','confirmation'].includes(key)) || !/^[a-f0-9-]{36}$/.test(input.policyId || '') || !Number.isInteger(input.expectedRevision) || input.expectedRevision<1 || typeof input.reason!=='string' || !input.reason.trim() || input.reason.length>500 || input.confirmation!=='RECOVER_SEARCHAD_KNOWN_FAILURES')throw circuitError('INPUT',400);
+    const projection=await this.projection.catchUp({customerId:input.customerId});
+    if(!projection.ready)throw circuitError('RECOVERY_UNRESOLVED',409);
+    return this.repository.recoverKnownFailures({...input,actor,reason:input.reason.trim(),now:this.clock()});
   }
   async pause(input, context) { return this.control(input, context, true); }
   async resume(input, context) { return this.control(input, context, false); }

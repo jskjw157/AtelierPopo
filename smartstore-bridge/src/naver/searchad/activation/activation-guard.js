@@ -40,6 +40,10 @@ function deriveMutableFields(descriptor = {}) {
   }
 
   const queryFields = descriptor.query?.fields;
+  if(queryFields === 'userLock') {
+    if(Object.keys(body).length!==2 || !Object.hasOwn(body,'nccCampaignId') || !Object.hasOwn(body,'userLock') || typeof body.userLock!=='boolean' || typeof body.nccCampaignId!=='string' || !/^[A-Za-z0-9_-]{1,200}$/.test(body.nccCampaignId) || body.nccCampaignId!==descriptor.pathParams?.campaignId) fail('SEARCHAD_ACTIVATION_FIELD_MAPPING_UNKNOWN','Exact campaign userLock body and path are required.',409);
+    return ['campaign.userLock'];
+  }
   if (queryFields != null && String(queryFields) !== 'budget') {
     fail(
       'SEARCHAD_ACTIVATION_FIELD_MAPPING_UNKNOWN',
