@@ -86,7 +86,7 @@ test('PostgreSQL Canary runtime executes the pinned stopped-campaign recipe thro
       allowBatchWrites: false, allowRollbacks: false, allowUnverifiedOperations: false,
       allowActiveCanary: true, automationMode: 'observe'
     };
-    const client = new NaverSearchAdClient({ baseUrl: origin, credentialsRegistry, fetchImpl, maxRetries: 0, logger });
+    const client = new NaverSearchAdClient({ baseUrl: origin, credentialsRegistry, fetchImpl, maxRetries: 0, logger, clock: () => now });
     const gateway = new SearchAdOperationGateway({ client, config, registry, credentialsRegistry, logger });
     runtime = await createProductionActiveCanaryRuntime({
       gateway, credentialsRegistry, pool, clock: () => now, logger,

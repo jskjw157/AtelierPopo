@@ -50,7 +50,7 @@ test('0008 activation guards the real PostgreSQL async write runtime before toke
         allowRollbacks: true, allowActiveCanary: false, allowUnverifiedOperations: false,
         automationMode: 'observe', passiveProbeLimit: 20
       };
-      const client = new NaverSearchAdClient({ baseUrl: origin, credentialsRegistry: credentials, maxRetries: 0, logger,
+      const client = new NaverSearchAdClient({ baseUrl: origin, credentialsRegistry: credentials, maxRetries: 0, logger, clock: () => now,
         fetchImpl: async (url, init) => {
           assert.equal(new URL(url).origin, origin);
           assert.equal(init.headers['X-Customer'], customerId);
@@ -102,8 +102,8 @@ test('0008 activation guards the real PostgreSQL async write runtime before toke
         query: { fields: 'budget' }, body, confirmation: update.confirmation });
       const plan = await write.planService.create({
         customerId, createdBy: 'fixture-planner', reason: 'activation async boundary',
-        mutation: descriptor({ nccCampaignId: 'cmp-fixture', dailyBudget: 1200, userLock: true }),
-        verification: { read: { operationKey: read.operationKey, pathParams: { campaignId: 'cmp-fixture', nccCampaignId: 'cmp-fixture' } }, expectedPatch: { dailyBudget: 1200 } },
+        mutation: descriptor({ nccCampaignId: 'cmp-fixture', dailyBudget: 800, userLock: true }),
+        verification: { read: { operationKey: read.operationKey, pathParams: { campaignId: 'cmp-fixture', nccCampaignId: 'cmp-fixture' } }, expectedPatch: { dailyBudget: 800 } },
         rollback: { mutation: descriptor({ nccCampaignId: 'cmp-fixture', userLock: true }), bodyFromBefore: { dailyBudget: 'dailyBudget' } }
       });
       const approval = await write.approvalService.approve(plan.plan_id, { actor: 'fixture-approver', confirmation: 'APPROVE_SEARCHAD_CHANGE' });
