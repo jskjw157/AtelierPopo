@@ -1,0 +1,123 @@
+name: HAAR Meta Ads Live MCP Security Boundary
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/meta-ads-live-mcp-security-boundary.yml']
+permissions:
+  contents: read
+concurrency:
+  group: haar-social-studio-hostinger
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Verify MCP authentication and read-only boundary inside production container
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_PRIVATE_KEY"
+          mkdir -p ~/.ssh /tmp/haar-mcp-security
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/haar_hostinger
+          chmod 600 ~/.ssh/haar_hostinger
+          ssh -i ~/.ssh/haar_hostinger -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" 'if [ "$(id -u)" = 0 ]; then exec bash -s; else exec sudo -n bash -s; fi' <<'REMOTE' > /tmp/haar-mcp-security/report.json
+          set -euo pipefail
+          APP_DIR=/opt/haar-social-studio/app
+          APP_ID=$(docker ps -q --filter label=com.docker.compose.service=app | while read -r id; do
+            wd=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$id")
+            [ "$wd" = "$APP_DIR" ] && echo "$id"
+          done)
+          test "$(printf '%s\n' "$APP_ID" | sed '/^$/d' | wc -l)" -eq 1
+          docker exec -i "$APP_ID" node --input-type=module - <<'NODE'
+          import express from 'express';
+          import http from 'node:http';
+          import { randomBytes } from 'node:crypto';
+          import { pool } from './server/db.js';
+          import { adsServices } from './server/meta/ads/instance.js';
+          import { createAdsMcpRouter } from './server/meta/ads/mcp.js';
+
+          const owner=(await pool.query("SELECT id FROM users WHERE role='owner' AND status='active' ORDER BY created_at LIMIT 1")).rows[0];
+          if(!owner) throw new Error('No active owner');
+          const secret=randomBytes(32).toString('hex');
+
+          const app=express();app.use(express.json());
+          app.use('/mcp',createAdsMcpRouter({bearerToken:secret,actorId:owner.id,appBaseUrl:'https://social.haarapp.tech',services:adsServices}));
+          const server=await new Promise((resolve,reject)=>{const s=app.listen(3003,'127.0.0.1',()=>resolve(s));s.on('error',reject);});
+
+          const request=({token,origin,method='POST',body})=>new Promise((resolve,reject)=>{
+            const data=body?JSON.stringify(body):'';
+            const headers={host:'social.haarapp.tech',accept:'application/json, text/event-stream'};
+            if(token!==undefined) headers.authorization='Bearer '+token;
+            if(origin) headers.origin=origin;
+            if(data){headers['content-type']='application/json';headers['content-length']=Buffer.byteLength(data);}
+            const req=http.request({hostname:'127.0.0.1',port:3003,path:'/mcp',method,headers},res=>{
+              let text='';res.setEncoding('utf8');res.on('data',c=>text+=c);res.on('end',()=>resolve({status:res.statusCode,body:text}));
+            });req.on('error',reject);if(data)req.write(data);req.end();
+          });
+          const list={jsonrpc:'2.0',id:1,method:'tools/list',params:{}};
+          try{
+            const missing=await request({body:list});
+            const wrong=await request({token:'x'.repeat(40),body:list});
+            const foreign=await request({token:secret,origin:'https://evil.invalid',body:list});
+            const good=await request({token:secret,body:list});
+            const get=await request({token:secret,method:'GET'});
+            if(missing.status!==401||wrong.status!==401||foreign.status!==403||good.status!==200||get.status!==405) throw new Error('MCP security status mismatch');
+            const parsed=JSON.parse(good.body);
+            const tools=parsed.result?.tools||[];
+            if(tools.some(t=>/(execute|approve|create|update|pause|resume|budget)/i.test(t.name))) throw new Error('Write-like MCP tool exposed');
+            if(tools.length!==6||!tools.every(t=>t.annotations?.readOnlyHint===true&&t.annotations?.destructiveHint===false)) throw new Error('Read-only tool contract mismatch');
+            if([missing.body,wrong.body,foreign.body,good.body,get.body].some(x=>x.includes(secret))) throw new Error('MCP credential leaked in response');
+            const live=await adsServices.status(owner.id);
+            if(live.executionEnabled) throw new Error('Paid delivery gate unexpectedly enabled');
+            console.log(JSON.stringify({
+              missingCredentialHttp:missing.status,
+              wrongCredentialHttp:wrong.status,
+              foreignOriginHttp:foreign.status,
+              validCredentialHttp:good.status,
+              unsupportedGetHttp:get.status,
+              toolCount:tools.length,
+              tools:tools.map(t=>t.name).sort(),
+              readOnlyAnnotationsVerified:true,
+              noWriteTools:true,
+              credentialNotReturned:true,
+              executionEnabled:false,
+              productionMcpConfigChanged:false
+            },null,2));
+          } finally {
+            await new Promise(resolve=>server.close(resolve));
+            await pool.end();
+          }
+          NODE
+          REMOTE
+          PUBLIC_CODE=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 20 https://social.haarapp.tech/mcp)
+          test "$PUBLIC_CODE" = "503"
+          python3 - <<'PY'
+          import json
+          p='/tmp/haar-mcp-security/report.json'
+          d=json.load(open(p))
+          assert d['missingCredentialHttp']==401
+          assert d['wrongCredentialHttp']==401
+          assert d['foreignOriginHttp']==403
+          assert d['validCredentialHttp']==200
+          assert d['unsupportedGetHttp']==405
+          assert d['noWriteTools'] is True
+          assert d['executionEnabled'] is False
+          d['publicProductionMcpHttp']=503
+          open(p,'w').write(json.dumps(d,ensure_ascii=False,indent=2)+'\n')
+          print('MCP security boundary verified; production endpoint remains disabled.')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haar-meta-ads-live-mcp-security-boundary
+          path: /tmp/haar-mcp-security/report.json
+          retention-days: 7
+      - name: Remove SSH material
+        if: always()
+        run: rm -f ~/.ssh/haar_hostinger
