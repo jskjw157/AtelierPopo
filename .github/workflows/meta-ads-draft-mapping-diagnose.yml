@@ -1,0 +1,78 @@
+name: HAAR Meta Ads Draft Mapping Diagnose
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/meta-ads-draft-mapping-diagnose.yml']
+permissions:
+  contents: read
+concurrency:
+  group: haar-social-studio-hostinger
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Diagnose product campaign post mapping read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_PRIVATE_KEY"
+          mkdir -p ~/.ssh /tmp/haar-draft-mapping
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/haar_hostinger
+          chmod 600 ~/.ssh/haar_hostinger
+          ssh -i ~/.ssh/haar_hostinger -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" 'if [ "$(id -u)" = 0 ]; then exec bash -s; else exec sudo -n bash -s; fi' <<'REMOTE' > /tmp/haar-draft-mapping/report.json
+          set -euo pipefail
+          APP_DIR=/opt/haar-social-studio/app
+          APP_ID=$(docker ps -q --filter label=com.docker.compose.service=app | while read -r id; do
+            wd=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$id")
+            [ "$wd" = "$APP_DIR" ] && echo "$id"
+          done)
+          test "$(printf '%s\n' "$APP_ID" | sed '/^$/d' | wc -l)" -eq 1
+          docker exec -i "$APP_ID" node --input-type=module - <<'NODE'
+          import { pool } from './server/db.js';
+          const one=async(sql,p=[])=>(await pool.query(sql,p)).rows[0];
+          const many=async(sql,p=[]) => (await pool.query(sql,p)).rows;
+          const counts={
+            activeProducts:Number((await one("SELECT count(*)::int c FROM products WHERE active=TRUE")).c),
+            productsWithUrl:Number((await one("SELECT count(*)::int c FROM products WHERE active=TRUE AND product_url IS NOT NULL AND product_url<>''")).c),
+            campaigns:Number((await one("SELECT count(*)::int c FROM campaigns")).c),
+            campaignsWithProduct:Number((await one("SELECT count(*)::int c FROM campaigns WHERE product_id IS NOT NULL")).c),
+            publishedInstagram:Number((await one("SELECT count(*)::int c FROM post_variants WHERE publish_state='published' AND platform='instagram'")).c),
+            publishedInstagramSingleMedia:Number((await one("SELECT count(*)::int c FROM post_variants WHERE publish_state='published' AND platform='instagram' AND jsonb_array_length(media_asset_ids)=1")).c)
+          };
+          const products=await many("SELECT name,product_url,price,active FROM products WHERE active=TRUE ORDER BY updated_at DESC LIMIT 20");
+          const campaigns=await many(`
+            SELECT c.title,c.product_id,p.name AS product_name,c.status,c.updated_at
+              FROM campaigns c LEFT JOIN products p ON p.id=c.product_id
+             ORDER BY c.updated_at DESC LIMIT 20
+          `);
+          const posts=await many(`
+            SELECT pv.platform,pv.publish_state,pv.external_post_id,
+                   jsonb_array_length(pv.media_asset_ids) AS media_count,
+                   c.title AS campaign_title,c.product_id,p.name AS product_name,
+                   pv.updated_at
+              FROM post_variants pv
+              JOIN campaigns c ON c.id=pv.campaign_id
+              LEFT JOIN products p ON p.id=c.product_id
+             WHERE pv.platform='instagram'
+             ORDER BY pv.updated_at DESC LIMIT 20
+          `);
+          console.log(JSON.stringify({counts,products,campaigns,posts},null,2));
+          await pool.end();
+          NODE
+          REMOTE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haar-meta-ads-draft-mapping-diagnosis
+          path: /tmp/haar-draft-mapping/report.json
+          retention-days: 7
+      - name: Remove SSH material
+        if: always()
+        run: rm -f ~/.ssh/haar_hostinger
