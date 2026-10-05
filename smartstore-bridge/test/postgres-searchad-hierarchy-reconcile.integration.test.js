@@ -35,7 +35,7 @@ test('B2b hierarchy reconcile: actual PostgreSQL state transitions, stale reads 
   globalThis.fetch = async () => { externalCalls += 1; throw new Error('External HTTP forbidden in this PG test'); };
   t.after(async () => { globalThis.fetch = originalFetch; await closePostgresPool(admin); assert.equal(externalCalls, 0); });
 
-  async function fixture(st, state = 'delete_pending') {
+  async function fixture(st, state = 'delete_pending', { account = true } = {}) {
     const schema = `reconcile_${randomUUID().replaceAll('-', '')}`;
     const pools = new Set(); let created = false;
     st.after(async () => {
@@ -51,6 +51,7 @@ test('B2b hierarchy reconcile: actual PostgreSQL state transitions, stale reads 
     let pool = connect(); let storage = new Storage({ pool });
     await runPostgresMigrations({ pool, migrationsDir: path.resolve('migrations/postgres'), logger });
     assert.equal((await pool.query('SELECT current_schema() AS name')).rows[0].name, schema);
+    if (account) await pool.query("INSERT INTO searchad_canary_accounts(customer_id,suspended) VALUES('1001',true)");
     const run = await storage.createRun({ hierarchyRunId: randomUUID(), customerId: '1001', recipeId: 'synthetic-reconcile-only',
       status: 'unknown_outcome', startedByPrincipalId: principal.principalId, ...current, startedAt: now });
     const objects = []; const holds = [];
@@ -92,6 +93,20 @@ test('B2b hierarchy reconcile: actual PostgreSQL state transitions, stale reads 
         data: { customerId: 1001, nccAdId: target.remoteId, nccAdgroupId: objects[1].remoteId, type: 'TEXT_45', extra: 'secret-body' } }; }
     };
   }
+
+  await t.test('legacy missing-account graph remains readable but cannot settle until a real account is locked',async st=>{
+    const f=await fixture(st,'delete_pending',{account:false});
+    const repository=new ReconcileRepository({pool:f.pool});
+    assert.ok(await repository.loadSnapshot(f.input));
+    await assert.rejects(f.execute(),{code:'SEARCHAD_SOURCE_ACCOUNT_REQUIRED'});
+    assert.equal(f.reads.length,1);assert.equal((await f.events()).length,0);
+    assert.equal((await f.storage.getObject(f.target.hierarchyObjectId,'1001')).state,'delete_pending');
+    await f.unchangedRisk();
+    await f.pool.query("INSERT INTO searchad_canary_accounts(customer_id,suspended) VALUES('1001',true)");
+    assert.equal((await f.execute()).state,'deleted');
+    assert.equal((await f.pool.query("SELECT suspended FROM searchad_canary_accounts WHERE customer_id='1001'")).rows[0].suspended,true);
+    await f.unchangedRisk();
+  });
 
   await t.test('delete_pending is settled only by explicit upstream 404; ownership and one sanitized event commit together', async st => {
     const f = await fixture(st);

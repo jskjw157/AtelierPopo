@@ -44,6 +44,29 @@ export class PostgresSearchAdWriteRepository {
     this.pool = pool;
   }
 
+  async lockAccountForPlan(client, planId) {
+    const locked = await client.query('SELECT a.customer_id,p.customer_id AS plan_customer_id FROM searchad_canary_accounts a JOIN searchad_write_change_plans p ON p.customer_id=a.customer_id WHERE p.plan_id=$1 FOR UPDATE OF a', [planId]);
+    if (locked.rows.length === 1 && typeof locked.rows[0].customer_id === 'string' && locked.rows[0].customer_id === locked.rows[0].plan_customer_id) return;
+    const plan = await client.query('SELECT customer_id FROM searchad_write_change_plans WHERE plan_id=$1', [planId]);
+    if (!plan.rows.length) throw new SearchAdWriteError('SEARCHAD_CHANGE_PLAN_NOT_FOUND', 'SearchAd 변경 계획을 찾을 수 없습니다.', { planId }, 404);
+    throw new SearchAdWriteError('SEARCHAD_SOURCE_ACCOUNT_REQUIRED', 'An existing locked Customer account is required for source persistence.', {}, 503);
+  }
+  async accountTransaction(planId, action) {
+    const client = await this.pool.connect();
+    try { await client.query('BEGIN'); await this.lockAccountForPlan(client, planId); const value = await action(client); await client.query('COMMIT'); return value; }
+    catch (error) { await rollbackQuietly(client); throw error; }
+    finally { client.release(); }
+  }
+
+  async claimRollbackDispatch({ planId, attemptId, now }) {
+    return this.accountTransaction(planId, async client => {
+      const plan = await client.query('SELECT status FROM searchad_write_change_plans WHERE plan_id=$1 FOR UPDATE', [planId]);
+      const prior = await client.query("SELECT attempt_id FROM searchad_write_attempts WHERE plan_id=$1 AND phase IN('rollback','rollback_verify') LIMIT 1", [planId]);
+      if (!['applied','applied_reconciled'].includes(plan.rows[0]?.status) || prior.rows.length) throw new SearchAdWriteError('SEARCHAD_ROLLBACK_INTENT_USED', 'Rollback dispatch was already claimed or is unavailable.', {}, 409);
+      await client.query("INSERT INTO searchad_write_attempts(attempt_id,plan_id,phase,status,created_at) VALUES($1,$2,'rollback','send_intent',$3)", [attemptId,planId,now]);
+    });
+  }
+
   async createPlan(plan) {
     const result = await this.pool.query(`
       INSERT INTO searchad_write_change_plans (
@@ -114,6 +137,7 @@ export class PostgresSearchAdWriteRepository {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      await this.lockAccountForPlan(client, planId);
       const currentResult = await client.query(
         'SELECT * FROM searchad_write_change_plans WHERE plan_id = $1 FOR UPDATE',
         [planId]
@@ -185,6 +209,7 @@ export class PostgresSearchAdWriteRepository {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      await this.lockAccountForPlan(client, planId);
       const result = await client.query(`
         SELECT * FROM searchad_write_approvals
         WHERE plan_id = $1 AND token_hash = $2
@@ -222,7 +247,8 @@ export class PostgresSearchAdWriteRepository {
   }
 
   async addAttempt(attempt) {
-    const result = await this.pool.query(`
+    const insert = async client => {
+    const result = await client.query(`
       INSERT INTO searchad_write_attempts (
         attempt_id, plan_id, phase, status, request_fingerprint, request_json,
         response_json, error_json, remote_request_id, created_at
@@ -244,6 +270,19 @@ export class PostgresSearchAdWriteRepository {
       attempt.created_at
     ]);
     return hydrate(result.rows[0]);
+    };
+    if (attempt.phase !== 'plan' || attempt.status !== 'succeeded') return this.accountTransaction(attempt.plan_id, insert);
+    // A neutral planning audit is not a mutation outcome/source. It may be
+    // appended without an account only while its existing owned plan is planned.
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const plan = (await client.query('SELECT status FROM searchad_write_change_plans WHERE plan_id=$1 FOR UPDATE', [attempt.plan_id])).rows[0];
+      if (!plan) throw new SearchAdWriteError('SEARCHAD_CHANGE_PLAN_NOT_FOUND', 'SearchAd 변경 계획을 찾을 수 없습니다.', { planId: attempt.plan_id }, 404);
+      if (plan.status !== 'planned') throw new SearchAdWriteError('SEARCHAD_CHANGE_PLAN_STATE_CONFLICT', 'Planning audit requires a still-planned change.', {}, 409);
+      const result = await insert(client); await client.query('COMMIT'); return result;
+    } catch (error) { await rollbackQuietly(client); throw error; }
+    finally { client.release(); }
   }
 
   async listAttempts(planId) {

@@ -45,6 +45,9 @@ function fixture({ status = 'cleanup_required', remoteId = 'cmp-returned-100', b
       calls.push({ type: 'updateObject', canaryRunId, remoteId: objectRemoteId, patch: structuredClone(patch) });
       return { canaryRunId, remoteId: objectRemoteId, ...patch };
     },
+    async settleMutation(runId, patch, event) {
+      const result = await this.updateRun(runId, patch); await this.addEvent(event); return result;
+    },
     async addEvent(event) {
       calls.push({ type: 'addEvent', event: structuredClone(event) });
       return event.eventId;

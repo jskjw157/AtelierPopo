@@ -53,18 +53,18 @@ jobs:
           try {
             const migrationsDir = path.resolve('migrations/postgres');
             const files = listMigrationFiles(migrationsDir);
-            assert.deepEqual(files.map(file => file.version), ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011']);
+            assert.deepEqual(files.map(file => file.version), ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012']);
             assert.equal((await pool.query('SELECT current_schema() AS name')).rows[0].name, 'public');
             const existing = await pool.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
             assert.deepEqual(existing.rows, [], 'Migration acceptance must start before any test populates the fresh CI database');
             const first = await runPostgresMigrations({ pool, migrationsDir });
             assert.deepEqual(first.applied, files.map(file => file.fileName));
-            assert.equal(first.currentVersion, '0011');
+            assert.equal(first.currentVersion, '0012');
             const metadata = () => pool.query('SELECT version, file_name, checksum FROM schema_migrations ORDER BY version');
             const before = (await metadata()).rows;
             assert.deepEqual(before, files.map(file => ({ version: file.version, file_name: file.fileName, checksum: file.checksum })));
             const second = await runPostgresMigrations({ pool, migrationsDir });
-            assert.deepEqual(second, { applied: [], currentVersion: '0011' });
+            assert.deepEqual(second, { applied: [], currentVersion: '0012' });
             assert.deepEqual((await metadata()).rows, before);
             console.log(JSON.stringify({ cleanDatabase: true, first, second, checksumsVerified: true }, null, 2));
           } finally {
@@ -93,6 +93,14 @@ jobs:
           set -o pipefail
           node --test --test-reporter=tap test/postgres-searchad-report-ingestion.integration.test.js | tee /tmp/searchad-report-ingestion-pg.tap
           node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-report-ingestion-pg.tap','utf8'), /^# skipped 0$/m, 'Report ingestion PostgreSQL acceptance requires zero skips');"
+      - name: Durable Circuit policies, exact source projection and native writer ordering
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          set -o pipefail
+          node --test test/searchad-circuit.test.js test/searchad-send-fence-*.test.js test/searchad-postgres-mutation-gateway.test.js
+          node --test --test-reporter=tap test/postgres-searchad-circuit.integration.test.js test/postgres-searchad-circuit-writer.integration.test.js test/postgres-searchad-application-send-fence.integration.test.js test/postgres-searchad-hierarchy-http.integration.test.js test/postgres-searchad-partial-keyword-quarantine-cleanup.integration.test.js test/postgres-searchad-active-canary.integration.test.js | tee /tmp/searchad-circuit-pg.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-circuit-pg.tap','utf8'), /^# skipped 0$/m, 'Circuit PostgreSQL acceptance requires zero skips');"
       - name: Public campaign and adgroup hierarchy lifecycle wiring
         working-directory: smartstore-bridge
         run: |

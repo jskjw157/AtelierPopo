@@ -28,10 +28,10 @@ test('reporting observations remain immutable Customer scoped and provisional af
     const legacyJob = randomUUID();
     await pool.query("INSERT INTO searchad_report_jobs(report_job_id,customer_id,report_type,state,metadata_json) VALUES($1,'1001','AD','legacy_state','{\"historical\":true}')", [legacyJob]);
     const historicalChecksums = (await pool.query('SELECT version,checksum FROM schema_migrations ORDER BY version')).rows;
-    assert.deepEqual(await runPostgresMigrations({ pool, migrationsDir, logger }), { applied: ['0010_searchad_reporting.sql', '0011_searchad_reporting_generation.sql'], currentVersion: '0011' });
+    assert.deepEqual(await runPostgresMigrations({ pool, migrationsDir, logger }), { applied: ['0010_searchad_reporting.sql', '0011_searchad_reporting_generation.sql', '0012_searchad_circuit_automation.sql'], currentVersion: '0012' });
     assert.deepEqual((await pool.query("SELECT version,checksum FROM schema_migrations WHERE version <= '0009' ORDER BY version")).rows, historicalChecksums);
     assert.deepEqual((await pool.query('SELECT state,metadata_json,processing_state,quality FROM searchad_report_jobs WHERE report_job_id=$1', [legacyJob])).rows[0], { state: 'legacy_state', metadata_json: { historical: true }, processing_state: null, quality: null });
-    assert.deepEqual(await runPostgresMigrations({ pool, migrationsDir, logger }), { applied: [], currentVersion: '0011' });
+    assert.deepEqual(await runPostgresMigrations({ pool, migrationsDir, logger }), { applied: [], currentVersion: '0012' });
     const repository = new PostgresReportingRepository({ pool, clock: () => now });
     const f = reportingFixture({ repository });
     const observation = await new StatsObservationService({ ...f, clock: () => now }).collect(input, context);

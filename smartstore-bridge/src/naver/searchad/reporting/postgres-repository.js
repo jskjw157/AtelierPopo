@@ -123,6 +123,7 @@ export class PostgresReportingRepository {
     validateIdentity(identity,job.customerId); let client;
     try {
       client=await this.pool.connect(); await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`report-circuit:${job.customerId}`]);
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`report:${job.customerId}:${job.kind}:${job.reportType}:${job.statDate || ''}`]);
       const locked=mapJob((await client.query('SELECT *,stat_date::text AS stat_date FROM searchad_report_jobs WHERE customer_id=$1 AND report_job_id=$2 FOR UPDATE',[job.customerId,job.reportJobId])).rows[0]);
       if(!locked||contentHash(validateIdentity(locked,job.customerId))!==contentHash(identity)||locked.remoteJobId!==job.remoteJobId||!locked.claimId)throw new Error();
@@ -602,6 +603,7 @@ export class PostgresReportingRepository {
     identity,
     now,
     maxAgeMs,
+    client = this.pool,
   }) {
     validateIdentity(identity, customerId);
     if (
@@ -610,7 +612,7 @@ export class PostgresReportingRepository {
       !Number.isFinite(now)
     )
       return null;
-    const selected = await this.selectedIngestions(this.pool, {
+    const selected = await this.selectedIngestions(client, {
       customerId,
       reportType: "AD",
       identity,
@@ -625,8 +627,8 @@ export class PostgresReportingRepository {
     if (!ids.length) return null;
     return (
       (
-        await this.pool.query(
-          `SELECT e.* FROM searchad_spend_evidence e JOIN searchad_report_ingestions i USING(customer_id,ingestion_id)
+        await client.query(
+          `SELECT e.*,i.provenance_json->'generationWindow'->>'lower' AS generation_lower FROM searchad_spend_evidence e JOIN searchad_report_ingestions i USING(customer_id,ingestion_id)
       WHERE e.customer_id=$1 AND e.ingestion_id=ANY($2::uuid[]) AND e.entity_type=$3 AND e.entity_id=$4 AND e.spec_sha=$5 AND e.credential_fingerprint=$6 AND e.upstream_base_url=$7 AND e.quality='stabilized_by_policy' AND i.quality='stabilized_by_policy' AND i.processing_state='ingested' AND e.stabilized_at <= $8 AND e.observed_at <= $8
       AND (i.provenance_json->'generationWindow'->>'lower')::timestamptz BETWEEN $9 AND $8
       AND (i.provenance_json->'generationWindow'->>'downloadCompletedAt')::timestamptz BETWEEN (i.provenance_json->'generationWindow'->>'lower')::timestamptz AND $8

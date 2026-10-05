@@ -1,3 +1,4 @@
+import { withCircuitWriteContext } from '../circuit/service.js';
 import { randomUUID } from 'node:crypto';
 import { SearchAdExecutionService } from './execution-service.js';
 import { SafeSearchAdExecutionService } from './safe-execution-service.js';
@@ -15,8 +16,33 @@ function safeError(error) {
 }
 
 export class ProductionSearchAdExecutionService extends SafeSearchAdExecutionService {
+  constructor(options) { super(options); this.circuitGuard = options.circuitGuard || null; }
+  async beforeRollbackDispatch(plan) {
+    if (!this.circuitGuard) return; // Component-only service composition has no production Circuit authority.
+    this.rollbackClaims ||= new Set();
+    if (this.rollbackClaims.has(plan.plan_id)) throw new SearchAdWriteError('SEARCHAD_ROLLBACK_INTENT_USED', 'Rollback dispatch was already claimed.', {}, 409);
+    this.rollbackClaims.add(plan.plan_id);
+    try {
+      await this.repository.claimRollbackDispatch({ planId: plan.plan_id, attemptId: randomUUID(), now: new Date(this.clock()).toISOString() });
+    } catch (error) {
+      if (error?.code === 'SEARCHAD_ROLLBACK_INTENT_USED') throw error;
+      try { await this.repository.updatePlan(plan.plan_id, { status: 'rollback_unknown_outcome' }, { expectedStatuses: ['applied','applied_reconciled'] }); } catch { /* Durable intent, if committed, still holds. No transport was entered. */ }
+      throw new SearchAdWriteError('SEARCHAD_ROLLBACK_INTENT_UNCERTAIN', 'Rollback intent acknowledgement is unavailable; no dispatch is authorized.', {}, 503);
+    }
+  }
+  async circuitOperation(planId, purpose, task) {
+    const plan = await this.get(planId);
+    try { return await withCircuitWriteContext({ customerId: plan.customer_id, planId, purpose, before: plan.before_json, mutation: purpose === 'rollback' ? plan.rollback_json : plan.mutation_json }, task); }
+    finally { try { await this.circuitGuard?.projectOutcome(plan.customer_id); } catch { /* Primary outcome/error remains authoritative. */ } }
+  }
+  async execute(planId, input = {}, context = {}) {
+    return this.circuitOperation(planId, 'ordinary', () => super.execute(planId, input, context));
+  }
+  async reconcile(planId, input = {}, context = {}) {
+    return this.circuitOperation(planId, 'read', () => super.reconcile(planId, input, context));
+  }
   async rollback(planId, input = {}, context = {}) {
-    return this.withLock(planId, 'rollback', async () => {
+    return this.circuitOperation(planId, 'rollback', () => this.withLock(planId, 'rollback', async () => {
       try {
         return await SearchAdExecutionService.prototype.rollback.call(this, planId, input, context);
       } catch (error) {
@@ -49,6 +75,6 @@ export class ProductionSearchAdExecutionService extends SafeSearchAdExecutionSer
         }
         throw error;
       }
-    });
+    }));
   }
 }

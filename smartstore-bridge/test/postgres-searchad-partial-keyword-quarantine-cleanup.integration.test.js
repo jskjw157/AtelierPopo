@@ -132,6 +132,38 @@ test('known partial keyword leaf can be deleted once while unresolved sibling ke
 
   const cleanupPlan=await cleanup.prepare({customerId:'1001',hierarchyRunId:root.hierarchyRunId,hierarchyObjectId:known.hierarchy_object_id,activationId:await authority(OPS.keyword.delete,[],'delete')},context);
   assert.equal(cleanupPlan.objectType,'keyword');assert.equal(cleanupPlan.state,'planned');assert.equal(calls.length,0,'planning must stay local');
+  // Native Circuit classification over the actual partial-batch source graph.
+  // The real cleanup dispatch below still proves the supported known-leaf path.
+  const { createCircuitGuard, createCircuitDispatch } = await import('../src/naver/searchad/circuit/service.js');
+  const circuit = createCircuitGuard({ pool, clock: () => NOW });
+  const dispatch = createCircuitDispatch({customerId:'1001',purpose:'lifecycle',operationKey:OPS.keyword.delete,entityType:'hierarchy_object',entityId:known.hierarchy_object_id}, {planId:cleanupPlan.planId,objectIds:[known.hierarchy_object_id]});
+  await circuit.prepareDispatch(dispatch);
+  assert.equal((await circuit.repository.getState({customerId:'1001'})).unknownCount,1,'mirrored plan/intent/result rows count as one partial mutation');
+  const check = async (change, reason, candidate=dispatch) => {
+    const client=await pool.connect();
+    try {
+      await client.query('BEGIN'); await client.query("SELECT customer_id FROM searchad_canary_accounts WHERE customer_id='1001' FOR UPDATE");
+      await change(client);
+      if(reason) await assert.rejects(circuit.assertDispatchAllowed(candidate,{client,now:NOW}), error=>error.details?.reasons?.includes(reason));
+      else await circuit.assertDispatchAllowed(candidate,{client,now:NOW});
+    } finally { await client.query('ROLLBACK'); client.release(); }
+  };
+  await check(async()=>{},null);
+  await check(async client=>{
+    const sourceId=randomUUID();
+    await client.query("INSERT INTO searchad_hierarchy_events(event_id,hierarchy_run_id,hierarchy_object_id,customer_id,phase,status,details_json,created_at) VALUES($1,$2,$3,'1001','tree_cleanup_intent','attempt_once',$4::jsonb,now())",[sourceId,root.hierarchyRunId,unresolved.hierarchy_object_id,JSON.stringify({planId:randomUUID()})]);
+    await client.query("INSERT INTO searchad_circuit_events(customer_id,source_kind,source_id,event_json,projected_at) VALUES('1001','hierarchy',$1,$2::jsonb,now())",[sourceId,JSON.stringify({logicalKey:'fixture-pending-cleanup',outcome:'neutral',occurredAt:NOW})]);
+  },'UNRESOLVED_MUTATION');
+
+  await check(client=>client.query("UPDATE searchad_hierarchy_objects SET state='dispatching' WHERE hierarchy_object_id=$1",[unresolved.hierarchy_object_id]),'UNRESOLVED_MUTATION');
+  const sameUnknown=createCircuitDispatch({customerId:'1001',purpose:'ordinary',operationKey:'fixture',entityType:'hierarchy_object',entityId:unresolved.hierarchy_object_id});
+  await check(async()=>{},'UNRESOLVED_MUTATION',sameUnknown);
+  await check(client=>client.query("INSERT INTO searchad_circuit_state(customer_id,manual_paused) VALUES('1001',true) ON CONFLICT(customer_id) DO UPDATE SET manual_paused=true"),'MANUAL_PAUSE');
+  await check(async client=>{
+    for(let i=0;i<2;i++) await client.query("INSERT INTO searchad_circuit_events(customer_id,source_kind,source_id,event_json,projected_at) VALUES('1001','fixture',$1,$2::jsonb,now())",[randomUUID(),JSON.stringify({logicalKey:`fixture-unknown-${i}`,outcome:'unknown',occurredAt:NOW})]);
+  },'UNKNOWN_LIMIT');
+  await check(client=>client.query("INSERT INTO searchad_hierarchy_events(event_id,hierarchy_run_id,hierarchy_object_id,customer_id,phase,status,details_json,created_at) VALUES($1,$2,$3,'1001','fixture_late','unknown_outcome','{}','2000-01-01')",[randomUUID(),root.hierarchyRunId,unresolved.hierarchy_object_id]),'PROJECTION_BACKLOG');
+  assert.equal(calls.length,0,'Circuit probes never initiate a remote request');
   const cleaned=await cleanup.execute({customerId:'1001',hierarchyRunId:root.hierarchyRunId,hierarchyObjectId:known.hierarchy_object_id,planId:cleanupPlan.planId,executionToken:(await approve(cleanupPlan.planId)).executionToken,confirmation:cleanupPlan.requiredConfirmation,secondConfirmation:cleanupPlan.requiredSecondConfirmation},context);
   assert.equal(cleaned.state,'deleted');
   assert.equal(calls.filter(value=>value===`DELETE /ncc/keywords/${partialRemote}`).length,1,'known partial leaf is deleted at most once');

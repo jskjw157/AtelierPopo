@@ -31,7 +31,8 @@ test('application send fence uses native account storage independently of plan s
     process.env[name] = value;
   };
 
-  async function fixture(st, storage = 'sqlite', canary = false) {
+  async function fixture(st, storageMode = 'sqlite', canary = false) {
+    const storage = storageMode === 'shared' ? 'postgres' : storageMode;
     const schema = `app_fence_${randomUUID().replaceAll('-', '')}`;
     const planSchema = `${schema}_plans`;
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'haar-app-fence-'));
@@ -60,7 +61,7 @@ test('application send fence uses native account storage independently of plan s
     }
     const control = await database(schema); pool = control.pool;
     let planUrl;
-    if (storage === 'postgres') {
+    if (storage === 'postgres' && storageMode !== 'shared') {
       const plans = await database(planSchema); planPool = plans.pool; planUrl = plans.url;
       // A deliberately stale mirror cannot overrule the native activation database.
       await planPool.query('INSERT INTO searchad_canary_accounts(customer_id,suspended,updated_at) VALUES($1,false,now())', [customerId]);
@@ -142,14 +143,14 @@ test('application send fence uses native account storage independently of plan s
       if (!passive) assert.equal((await call('admin', 'POST', '/api/v1/searchad/activations', { evidenceId: evidence.evidenceId })).status, 201);
       return evidence.evidenceId;
     };
-    const approve = async () => {
+    const approve = async (dailyBudget = 800) => {
       const registry = current.app.searchAdRegistry, update = registry.get(CANARY_OPERATION_KEYS.updateCampaign);
       const read = registry.findByPath('GET', '/ncc/campaigns/{campaignId}') || registry.findByPath('GET', '/ncc/campaigns/{nccCampaignId}');
       const pathParams = { campaignId: 'cmp-fixture', nccCampaignId: 'cmp-fixture' };
       const descriptor = body => ({ operationKey: update.operationKey, pathParams, query: { fields: 'budget' }, body, confirmation: update.confirmation });
       const planned = await call('admin', 'POST', '/api/v1/searchad/changes/plan', { customerId, reason: 'application send fence fixture',
-        mutation: descriptor({ nccCampaignId: 'cmp-fixture', dailyBudget: 1200, userLock: true }),
-        verification: { read: { operationKey: read.operationKey, pathParams }, expectedPatch: { dailyBudget: 1200 } },
+        mutation: descriptor({ nccCampaignId: 'cmp-fixture', dailyBudget, userLock: true }),
+        verification: { read: { operationKey: read.operationKey, pathParams }, expectedPatch: { dailyBudget } },
         rollback: { mutation: descriptor({ nccCampaignId: 'cmp-fixture', userLock: true }), bodyFromBefore: { dailyBudget: 'dailyBudget' } } });
       assert.equal(planned.status, 201, JSON.stringify(planned));
       const approval = await call('executor', 'POST', `/api/v1/searchad/changes/${planned.body.plan_id}/approve`, { confirmation: 'APPROVE_SEARCHAD_CHANGE' });
@@ -169,7 +170,7 @@ test('application send fence uses native account storage independently of plan s
   }
 
   try {
-    for (const storage of ['sqlite', 'postgres']) {
+    for (const storage of ['sqlite', 'postgres', 'shared']) {
       for (const generic of [false, true]) await t.test(`${storage} / generic=${generic}: suspension committed after real claim prevents HTTP PUT`, async st => {
         const h = await fixture(st, storage); await h.seed(); const input = await h.approve();
         const claim = h.app.searchAdWriteRuntime.approvalService.claim.bind(h.app.searchAdWriteRuntime.approvalService);
@@ -197,7 +198,9 @@ test('application send fence uses native account storage independently of plan s
 
       await t.test(`${storage}: HTTP rollback rechecks native account state after authorization`, async st => {
         const h = await fixture(st, storage); await h.seed(); const input = await h.approve();
-        const applied = await h.execute(input); assert.equal(applied.status, 200, JSON.stringify(applied));
+        const applied = await h.execute(input);
+        if (storage !== 'shared') { assert.ok(applied.status >= 400, JSON.stringify(applied)); assert.equal(h.mutations(), 0); return; }
+        assert.equal(applied.status, 200, JSON.stringify(applied));
         assert.equal(h.mutations(), 1);
         const service = h.app.searchAdWriteRuntime.executionService, authorize = service.assertActivation.bind(service);
         let gapReached = false;
@@ -217,10 +220,72 @@ test('application send fence uses native account storage independently of plan s
         assert.equal(denied.body.error?.code, 'SEARCHAD_ACCOUNT_SUSPENDED', JSON.stringify(denied));
         assert.equal(await h.tokenUsed(input), null); assert.equal(h.mutations(), 0);
         await h.account('resume'); const applied = await h.execute(input);
+        if (storage !== 'shared') { assert.ok(applied.status >= 400, JSON.stringify(applied)); assert.equal(h.mutations(), 0); return; }
         assert.equal(applied.status, 200, JSON.stringify(applied)); assert.equal(h.mutations(), 1);
         assert.ok(await h.tokenUsed(input));
       });
     }
+
+    await t.test('shared production increase denies missing actual Customer net-loss evidence', async st => {
+      const h=await fixture(st,'shared'); await h.seed(); const input=await h.approve(1200);
+      const denied=await h.execute(input);
+      assert.ok(denied.status>=400,JSON.stringify(denied)); assert.equal(h.mutations(),0);
+      assert.ok(JSON.stringify(denied.body).includes('LOSS_EVIDENCE_UNAVAILABLE'),JSON.stringify(denied));
+    });
+
+    await t.test('shared-store production ordinary HTTP send is denied by Circuit pause after projection preflight', async st => {
+      const h = await fixture(st, 'shared'); await h.seed(); const input = await h.approve();
+      const circuit = h.app.searchAdCompletionRuntime.circuitService;
+      const prepare = circuit.prepareDispatch.bind(circuit);
+      circuit.prepareDispatch = async dispatch => { await prepare(dispatch); await circuit.pause({ customerId, reason: 'competitor' }, { principal: { principalId: 'fixture-admin', role: 'admin', customerIds: [customerId] } }); };
+      const outcome = await h.execute(input);
+      assert.ok(outcome.status >= 400, JSON.stringify(outcome)); assert.equal(h.mutations(), 0); assert.ok(await h.tokenUsed(input));
+      assert.equal((await h.pool.query('SELECT status FROM searchad_write_change_plans WHERE plan_id=$1', [input.planId])).rows[0].status, 'failed');
+    });
+    await t.test('shared production rollback survives Circuit pause and concurrent replay has one durable intent', async st => {
+      const h=await fixture(st,'shared'); await h.seed(); const input=await h.approve();
+      assert.equal((await h.execute(input)).status,200);
+      await h.app.searchAdCompletionRuntime.circuitService.pause({customerId,reason:'rollback remains separately gated'},{principal:{principalId:'fixture-admin',role:'admin',customerIds:[customerId]}});
+      const rollback=()=>h.call('executor','POST',`/api/v1/searchad/changes/${input.planId}/rollback`,{confirmation:'ROLLBACK_SEARCHAD_CHANGE',idempotencyKey:randomUUID()});
+      const results=await Promise.all([rollback(),rollback()]);
+      assert.equal(results.filter(r=>r.status===200).length,1,JSON.stringify(results)); assert.equal(h.mutations(),2);
+      assert.equal((await h.pool.query("SELECT count(*)::int AS n FROM searchad_write_attempts WHERE plan_id=$1 AND phase='rollback' AND status='send_intent'",[input.planId])).rows[0].n,1);
+      await h.restart(); assert.ok((await rollback()).status>=400); assert.equal(h.mutations(),2);
+    });
+    await t.test('committed rollback marker with lost acknowledgement never sends or grants restart replay', async st => {
+      const h=await fixture(st,'shared'); await h.seed(); const input=await h.approve();
+      assert.equal((await h.execute(input)).status,200);
+      const repository=h.app.searchAdWriteRuntime.repository, claim=repository.claimRollbackDispatch.bind(repository);
+      repository.claimRollbackDispatch=async input=>{await claim(input);throw new Error('simulated acknowledgement loss after native COMMIT');};
+      const rollback=()=>h.call('executor','POST',`/api/v1/searchad/changes/${input.planId}/rollback`,{confirmation:'ROLLBACK_SEARCHAD_CHANGE',idempotencyKey:randomUUID()});
+      assert.ok((await rollback()).status>=400); assert.equal(h.mutations(),1);
+      assert.equal((await h.pool.query("SELECT count(*)::int AS n FROM searchad_write_attempts WHERE plan_id=$1 AND phase='rollback' AND status='send_intent'",[input.planId])).rows[0].n,1);
+      await h.restart(); assert.ok((await rollback()).status>=400); assert.equal(h.mutations(),1);
+      const next=await h.approve(); assert.ok((await h.execute(next)).status>=400); assert.equal(h.mutations(),1);
+    });
+
+    await t.test('primary PostgreSQL applied outcome survives projection error and next dispatch fails closed', async st => {
+      const h = await fixture(st, 'shared'); await h.seed(); const input = await h.approve();
+      const circuit = h.app.searchAdCompletionRuntime.circuitService;
+      circuit.projectOutcome = async () => { throw new Error('private projection failure'); };
+      const applied = await h.execute(input);
+      assert.equal(applied.status, 200, JSON.stringify(applied)); assert.equal(applied.body.status, 'applied'); assert.equal(h.mutations(), 1);
+      assert.equal((await h.pool.query('SELECT status FROM searchad_write_change_plans WHERE plan_id=$1', [input.planId])).rows[0].status, 'applied');
+      const next = await h.approve(); circuit.projection.catchUp = async () => ({ ready: false, cursors: {} });
+      const denied = await h.execute(next);
+      assert.ok(denied.status >= 400, JSON.stringify(denied)); assert.equal(h.mutations(), 1);
+      assert.equal((await h.pool.query('SELECT status FROM searchad_write_change_plans WHERE plan_id=$1', [input.planId])).rows[0].status, 'applied');
+    });
+
+    await t.test('bootstrapped Canary start observes Circuit pause committed after its own intent projection', async st => {
+      const h = await fixture(st, 'shared', true); const evidenceId = await h.seed(true);
+      const circuit = h.app.searchAdCompletionRuntime.circuitService;
+      const prepare = circuit.prepareDispatch.bind(circuit);
+      circuit.prepareDispatch = async dispatch => { await prepare(dispatch); await circuit.pause({ customerId, reason: 'competitor' }, { principal: { principalId: 'fixture-admin', role: 'admin', customerIds: [customerId] } }); };
+      const outcome = await h.app.searchAdActiveCanaryRuntime.service.start({ customerId, passiveEvidenceId: evidenceId }, { principal: { principalId: 'fixture-admin', role: 'admin', customerIds: [customerId] } }).catch(error => error);
+      assert.ok(outcome instanceof Error); assert.equal(h.mutations(), 0); assert.equal(h.calls.length, 0);
+      assert.equal((await h.pool.query("SELECT count(*)::int AS n FROM searchad_canary_events WHERE status='send_intent'")).rows[0].n, 1);
+    });
 
     await t.test('bootstrapped Canary preserves suspended account on restart and cannot reserve risk or send', async st => {
       const h = await fixture(st, 'sqlite', true); const evidenceId = await h.seed(true);

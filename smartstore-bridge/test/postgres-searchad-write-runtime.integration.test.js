@@ -107,6 +107,8 @@ test('PostgreSQL SearchAd write repository durably persists plans approvals and 
       expires_at: new Date(now + 5 * 60_000).toISOString()
     });
 
+    await pool.query('INSERT INTO searchad_canary_accounts(customer_id) VALUES($1) ON CONFLICT(customer_id) DO NOTHING',[created.customer_id]);
+
     const claimed = await repository.claimApproval({
       planId,
       tokenHash,
@@ -167,8 +169,9 @@ test('production SearchAd runtime uses PostgreSQL repository and async services 
     assert.equal(status.storage.runtime, 'postgres');
     assert.equal(status.storage.postgresRuntimeAdapter, true);
 
+    const planningCustomer = `unregistered-planning-${randomUUID()}`;
     const plan = await runtime.planService.create({
-      customerId: 'customer-postgres-runtime',
+      customerId: planningCustomer,
       reason: 'runtime integration',
       createdBy: 'integration-test',
       mutation: { operationKey: 'fixture.write', body: { userLock: true } },
@@ -177,7 +180,8 @@ test('production SearchAd runtime uses PostgreSQL repository and async services 
         expectedAfter: { userLock: true }
       }
     });
-    assert.equal(plan.customer_id, 'customer-postgres-runtime');
+    assert.equal(plan.customer_id, planningCustomer);
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM searchad_canary_accounts WHERE customer_id=$1',[planningCustomer])).rows[0].n,0,'actual plan service neither requires nor creates an account');
 
     const fetched = await runtime.planService.get(plan.plan_id);
     assert.equal(fetched.plan_id, plan.plan_id);
@@ -242,7 +246,8 @@ test('PostgreSQL production runtime approves and executes a verified one-time-to
     assert.ok(durable.attempts.some(attempt => attempt.phase === 'verify' && attempt.status === 'succeeded'));
   } finally {
     await resetSearchAdWriteTables(pool).catch(() => {});
-    if (customerId) await pool.query('DELETE FROM searchad_canary_accounts WHERE customer_id=$1', [customerId]);
+    // The unique fixture account owns immutable Circuit audit rows. Retain both;
+    // deleting the account would violate their FK and deleting audit is forbidden.
     await closePostgresPool(pool);
   }
 });

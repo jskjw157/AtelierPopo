@@ -18,7 +18,7 @@ test('PostgreSQL Active Canary schema is idempotent, immutable where required, a
   const pool = createPostgresPool({ connectionString: process.env.TEST_DATABASE_URL, sslMode: 'disable' });
   try {
     const first = await runPostgresMigrations({ pool, migrationsDir });
-    assert.equal(first.currentVersion, '0011');
+    assert.equal(first.currentVersion, '0012');
     const second = await runPostgresMigrations({ pool, migrationsDir });
     assert.deepEqual(second.applied, []);
 
@@ -59,6 +59,16 @@ test('PostgreSQL Active Canary schema is idempotent, immutable where required, a
     assert.equal(recovered.remoteId, 'cmp-pg-returned');
     const objects = await restarted.listObjects(runId);
     assert.equal(objects[0].cleanupStatus, 'deleted_verified');
+
+    const intentId = randomUUID();
+    await repo.addEvent({ eventId:intentId,canaryRunId:runId,customerId,phase:'budget_update',status:'send_intent',operationKey:'campaign.update',createdAt:new Date().toISOString() });
+    const outcome = { eventId:intentId,canaryRunId:runId,customerId,phase:'budget_update',status:'unknown_outcome',operationKey:'campaign.update',createdAt:new Date().toISOString() };
+    await assert.rejects(repo.settleMutation(runId,{status:'cleanup_required'},outcome),{code:'23505'});
+    assert.equal((await repo.getRun(runId)).status,'campaign_verified_off','Outcome event failure rolls back the primary state transition');
+    outcome.eventId = randomUUID();
+    await repo.settleMutation(runId,{status:'cleanup_required'},outcome);
+    assert.equal((await repo.getRun(runId)).status,'cleanup_required');
+    assert.equal((await pool.query('SELECT phase,status FROM searchad_canary_events WHERE event_id=$1',[outcome.eventId])).rows[0].phase,'budget_update');
 
     await assert.rejects(() => pool.query("UPDATE searchad_verification_evidence SET result='failed' WHERE evidence_id=$1", [evidenceId]), { code: 'P0001' });
     await assert.rejects(() => pool.query('DELETE FROM searchad_canary_events WHERE canary_run_id=$1', [runId]), { code: 'P0001' });

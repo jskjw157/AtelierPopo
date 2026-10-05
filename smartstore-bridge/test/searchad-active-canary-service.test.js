@@ -56,6 +56,9 @@ function makeRepository({ evidenceOverrides = {}, accountOverrides = {} } = {}) 
       runs.set(runId, next);
       return structuredClone(next);
     },
+    async settleMutation(runId, patch, event) {
+      const result = await this.updateRun(runId, patch); await this.addEvent(event); return result;
+    },
     async addEvent(event) {
       events.push(structuredClone(event));
     },

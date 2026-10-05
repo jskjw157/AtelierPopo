@@ -1,3 +1,4 @@
+import { createCircuitGuard } from '../circuit/service.js';
 import { createPostgresPool, closePostgresPool } from '../../../infrastructure/postgres/pool.js';
 import { SearchAdWriteError } from '../write/errors.js';
 import { createPostgresMutationGateway } from '../lifecycle/postgres-mutation-gateway.js';
@@ -88,6 +89,7 @@ function disabledRuntime(config) {
 
 export async function createProductionActiveCanaryRuntime({
   gateway,
+  circuitGuard = null,
   credentialsRegistry,
   env = process.env,
   pool = null,
@@ -131,7 +133,8 @@ export async function createProductionActiveCanaryRuntime({
     await ensureCustomerRows(postgresPool, credentialsRegistry);
     const { specSha, upstreamBaseUrl } = gatewayContext(gateway);
     const repository = new PostgresActiveCanaryRepository({ pool: postgresPool });
-    const remote = new ActiveCanaryGatewayRemoteAdapter({ gateway: createPostgresMutationGateway({ gateway, pool: postgresPool }) });
+    const guard = circuitGuard || createCircuitGuard({ pool: postgresPool, clock });
+    const remote = new ActiveCanaryGatewayRemoteAdapter({ gateway: createPostgresMutationGateway({ gateway, pool: postgresPool, circuitGuard: guard }) });
     const recipe = createStoppedWebSiteCampaignRecipe({
       dailyBudget: config.dailyBudgetKrw,
       budgetDelta: config.budgetDeltaKrw,
@@ -140,6 +143,7 @@ export async function createProductionActiveCanaryRuntime({
     const credentialFingerprintResolver = customerId => credentialFingerprintForCustomer(credentialsRegistry, customerId);
     const service = new ActiveCanaryService({
       repository,
+      circuitGuard: guard,
       remote,
       recipe,
       config: {

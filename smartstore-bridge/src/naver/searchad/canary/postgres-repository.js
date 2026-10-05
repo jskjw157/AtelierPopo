@@ -1,3 +1,4 @@
+import { SearchAdWriteError } from '../write/errors.js';
 const RUN_COLUMN_MAP = Object.freeze({
   status: 'status',
   beforeSpend: 'before_spend',
@@ -93,6 +94,22 @@ export class PostgresActiveCanaryRepository {
     this.pool = pool;
   }
 
+  async accountTransaction({ customerId, canaryRunId }, action) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const locked = customerId
+        ? await client.query('SELECT customer_id FROM searchad_canary_accounts WHERE customer_id=$1 FOR UPDATE', [customerId])
+        : await client.query('SELECT a.customer_id,r.customer_id AS run_customer_id FROM searchad_canary_accounts a JOIN searchad_canary_runs r ON r.customer_id=a.customer_id WHERE r.canary_run_id=$1 FOR UPDATE OF a', [canaryRunId]);
+      if (locked.rows.length !== 1 || typeof locked.rows[0].customer_id !== 'string' || locked.rows[0].customer_id !== (customerId || locked.rows[0].run_customer_id)) {
+        if (!customerId && !(await client.query('SELECT customer_id FROM searchad_canary_runs WHERE canary_run_id=$1', [canaryRunId])).rows.length) throw new SearchAdWriteError('SEARCHAD_CANARY_RUN_NOT_FOUND', 'Canary run was not found.', {}, 404);
+        throw new SearchAdWriteError('SEARCHAD_SOURCE_ACCOUNT_REQUIRED', 'An existing locked Customer account is required for source persistence.', {}, 503);
+      }
+      const result = await action(client); await client.query('COMMIT'); return result;
+    } catch (error) { try { await client.query('ROLLBACK'); } catch {} throw error; }
+    finally { client.release(); }
+  }
+
   async upsertAccount({ customerId, suspended = false } = {}) {
     const result = await this.pool.query(
       `INSERT INTO searchad_canary_accounts (customer_id, suspended, updated_at)
@@ -174,7 +191,8 @@ export class PostgresActiveCanaryRepository {
   }
 
   async createRun(run = {}) {
-    const result = await this.pool.query(
+    return this.accountTransaction({ customerId: String(run.customerId) }, async client => {
+    const result = await client.query(
       `INSERT INTO searchad_canary_runs (
          canary_run_id, customer_id, passive_evidence_id, recipe_id, status,
          started_by_principal_id, spec_sha, credential_fingerprint, upstream_base_url,
@@ -206,6 +224,7 @@ export class PostgresActiveCanaryRepository {
       ]
     );
     return runRow(result.rows[0]);
+    });
   }
 
   async getRun(canaryRunId) {
@@ -249,8 +268,14 @@ export class PostgresActiveCanaryRepository {
   }
 
   async updateRun(canaryRunId, patch = {}) {
+    // Preserve the repository's null/no-op read contract without issuing a write.
+    const current = await this.getRun(canaryRunId);
+    if (!current || !Object.keys(patch).some(key => Object.hasOwn(RUN_COLUMN_MAP, key))) return current;
+    return this.accountTransaction({ canaryRunId }, client => this.updateRunIn(client, canaryRunId, patch));
+  }
+  async updateRunIn(client, canaryRunId, patch = {}) {
     const entries = Object.entries(patch).filter(([key]) => Object.hasOwn(RUN_COLUMN_MAP, key));
-    if (!entries.length) return this.getRun(canaryRunId);
+    if (!entries.length) return runRow((await client.query('SELECT * FROM searchad_canary_runs WHERE canary_run_id=$1', [canaryRunId])).rows[0]);
     const sets = [];
     const values = [];
     for (const [key, value] of entries) {
@@ -259,7 +284,7 @@ export class PostgresActiveCanaryRepository {
       sets.push(`${RUN_COLUMN_MAP[key]}=$${values.length}${cast}`);
     }
     values.push(canaryRunId);
-    const result = await this.pool.query(
+    const result = await client.query(
       `UPDATE searchad_canary_runs SET ${sets.join(', ')} WHERE canary_run_id=$${values.length} RETURNING *`,
       values
     );
@@ -319,7 +344,10 @@ export class PostgresActiveCanaryRepository {
   }
 
   async addEvent(event = {}) {
-    const result = await this.pool.query(
+    return this.accountTransaction({ customerId: String(event.customerId) }, client => this.addEventIn(client, event));
+  }
+  async addEventIn(client, event) {
+    const result = await client.query(
       `INSERT INTO searchad_canary_events (
          event_id, canary_run_id, customer_id, phase, status,
          operation_key, request_id, error_json, created_at
@@ -339,4 +367,16 @@ export class PostgresActiveCanaryRepository {
     );
     return result.rows[0]?.event_id || null;
   }
+  async settleMutation(canaryRunId, patch, event) {
+    if (event.canaryRunId !== canaryRunId) throw new TypeError('Exact primary mutation scope is required');
+    return this.accountTransaction({ canaryRunId }, async client => {
+      const intent = await client.query("SELECT operation_key FROM searchad_canary_events WHERE canary_run_id=$1 AND customer_id=$2 AND phase=$3 AND status='send_intent'", [canaryRunId,event.customerId,event.phase]);
+      if (intent.rows.length !== 1 || (event.operationKey && event.operationKey !== intent.rows[0].operation_key)) throw new TypeError('One exact phase-linked send intent is required');
+      const run = await this.updateRunIn(client, canaryRunId, patch);
+      if (!run || run.customerId !== event.customerId) throw new TypeError('Customer scope mismatch');
+      await this.addEventIn(client, { ...event, operationKey: intent.rows[0].operation_key });
+      return run;
+    });
+  }
+
 }

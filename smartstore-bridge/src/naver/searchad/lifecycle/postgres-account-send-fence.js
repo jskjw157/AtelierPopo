@@ -33,14 +33,15 @@ export class PostgresAccountSendFence {
     this.#pool = pool; this.#fetch = fetchImpl;
   }
 
-  async run(customerId, validate, task, method = null) {
+  async run(customerId, validate, task, method = null, { dispatch = null, beforeSend = null } = {}) {
     if (typeof customerId !== 'string' || !CUSTOMER.test(customerId) || typeof validate !== 'function' || typeof task !== 'function' ||
-        (method !== null && !['POST', 'PUT', 'DELETE'].includes(method))) {
+        (method !== null && !['POST', 'PUT', 'DELETE'].includes(method)) ||
+        (beforeSend !== null && (typeof beforeSend !== 'function' || !Object.isFrozen(dispatch) || dispatch?.customerId !== customerId))) {
       throw fault('INPUT', 'An internal Customer scope and synchronous validator are required.', 400);
     }
     check(validate);
     // Legacy callers remain POST/DELETE-only. PUT requires an exact binding.
-    const scope = { customerId, validate, method, open: true, attempted: false };
+    const scope = { customerId, validate, method, dispatch, beforeSend, open: true, attempted: false };
     return this.#contexts.run(scope, async () => {
       try {
         const result = await task();
@@ -83,6 +84,11 @@ export class PostgresAccountSendFence {
       const result = await query('SELECT customer_id,suspended FROM searchad_canary_accounts WHERE customer_id=$1 FOR UPDATE', [customerId]);
       if (result.rows.length !== 1 || result.rows[0].customer_id !== customerId || result.rows[0].suspended !== false) {
         throw fault('SUSPENDED', 'An existing, non-suspended account is required.', 403);
+      }
+      const finalValidate = scope.beforeSend ? await scope.beforeSend(client, scope.dispatch) : undefined;
+      if (finalValidate !== undefined) {
+        if (typeof finalValidate !== 'function') throw fault('VALIDATOR', 'A synchronous snapshot validator is required.', 400);
+        check(finalValidate);
       }
       if (lost || !scope.open || request.signal?.aborted) throw fault('ABORTED', 'The request cannot initiate after waiting.');
       check(scope.validate);

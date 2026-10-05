@@ -77,6 +77,7 @@ function disabledRuntime() {
  */
 export async function createProductionSearchAdHierarchyRuntime({
   registry,
+  circuitGuard = null,
   credentialsRegistry,
   searchAdConfig,
   activeCanaryRuntime,
@@ -109,6 +110,7 @@ export async function createProductionSearchAdHierarchyRuntime({
   await assertSchemaReady(pool);
   const common = {
     pool,
+    circuitGuard,
     registry,
     credentialsRegistry,
     config: searchAdConfig,

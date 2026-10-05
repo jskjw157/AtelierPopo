@@ -22,7 +22,10 @@ export function getSearchAdWriteRuntime(context) {
   if (!app.searchAdWriteRuntime) {
     app.searchAdWriteRuntime = createProductionSearchAdWriteRuntime({
       gateway: app.searchAdGateway, env, baseDir: app.config?.workDir || process.cwd(),
-      activationGuard: app.searchAdActivationRuntime?.guard
+      activationGuard: app.searchAdActivationRuntime?.guard,
+      circuitGuard: app.searchAdCompletionRuntime?.circuitService,
+      postgresPool: !env.ATELIER_SEARCHAD_WRITE_DATABASE_URL || env.ATELIER_SEARCHAD_WRITE_DATABASE_URL === env.DATABASE_URL ? app.searchAdActivationRuntime?.repository?.pool : undefined,
+      clock: app.clock
     });
   }
   return app.searchAdWriteRuntime;

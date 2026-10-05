@@ -1,3 +1,4 @@
+import { createCircuitGuard } from '../circuit/service.js';
 import { loadSearchAdWriteConfig } from './config.js';
 import { SearchAdWriteRepository } from './repository.js';
 import { PostgresSearchAdWriteRepository } from './postgres-repository.js';
@@ -12,6 +13,7 @@ import { createPostgresPool, closePostgresPool } from '../../../infrastructure/p
 export function createProductionSearchAdWriteRuntime({
   gateway,
   activationGuard = null,
+  circuitGuard = null,
   env = process.env,
   baseDir,
   database,
@@ -49,9 +51,9 @@ export function createProductionSearchAdWriteRuntime({
   const accountPool = activationGuard?.repository ? activationGuard.repository.pool : mutationPool;
   // Plan storage is not the account-control authority. SQLite plans using native
   // activation must use its fence too; a missing native pool must not fall back.
-  const requiresAccountFence = Boolean(mutationPool || activationGuard?.repository);
+  const guard = circuitGuard || createCircuitGuard({ pool: accountPool, clock });
   const remote = new SafeSearchAdGatewayRemoteAdapter({
-    gateway: requiresAccountFence ? createPostgresMutationGateway({ gateway, pool: accountPool }) : gateway
+    gateway: createPostgresMutationGateway({ gateway, pool: accountPool, circuitGuard: guard, requireWriteOwner: true, ordinaryStoreReady: Boolean(accountPool && repository.pool === accountPool) })
   });
   const approvalService = new SearchAdApprovalService({ repository, config, clock });
   const planService = new SearchAdChangePlanService({ repository, remote, config, clock });
@@ -61,6 +63,7 @@ export function createProductionSearchAdWriteRuntime({
     approvalService,
     config,
     activationGuard,
+    circuitGuard: guard,
     clock
   });
 

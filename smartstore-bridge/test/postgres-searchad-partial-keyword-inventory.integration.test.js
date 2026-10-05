@@ -210,3 +210,27 @@ test('partial keyword remote inventory persists only read-only fail-closed obser
     assert.equal(after,before);assert.deepEqual(await localState(),baseline);
   });
 });
+
+test('legacy partial-keyword inventory reads without an account but commits only under a present even suspended account',async t=>{
+  if(!process.env.TEST_DATABASE_URL){assert.notEqual(process.env.CI,'true');return t.skip('TEST_DATABASE_URL is required');}
+  const {postgresCompletionFixture}=await import('./helpers/postgres-searchad-completion-fixture.js');
+  const {PostgresSearchAdLifecycleRepository}=await import('../src/naver/searchad/lifecycle/postgres-repository.js');
+  const f=await postgresCompletionFixture(t),store=new PostgresSearchAdLifecycleRepository({pool:f.pool}),runId=randomUUID(),at=new Date(NOW).toISOString();
+  await store.createRun({hierarchyRunId:runId,customerId:'1001',recipeId:'legacy-inventory',status:'manual_review',startedByPrincipalId:'fixture',specSha:'fixture',credentialFingerprint:'fixture',upstreamBaseUrl:'https://api.searchad.naver.com',startedAt:at});
+  const objects=[];
+  for(const type of ['campaign','adgroup','keyword']){
+    const object=await store.createObject({hierarchyObjectId:randomUUID(),hierarchyRunId:runId,customerId:'1001',objectType:type,parentObjectId:objects.at(-1)?.hierarchyObjectId||null,createOperationKey:OPS[type].create,readOperationKey:OPS[type].read,deleteOperationKey:OPS[type].delete,remoteId:type==='keyword'?null:`fixture-${type}`,state:type==='keyword'?'manual_review':'owned',createdAt:at,updatedAt:at});objects.push(object);
+    if(object.remoteId)await store.holdOwnership({ownershipId:randomUUID(),customerId:'1001',objectType:type,remoteId:object.remoteId,ownerKind:'hierarchy_canary',ownerRunId:runId,hierarchyObjectId:object.hierarchyObjectId,parentHierarchyObjectId:object.parentObjectId,createdOperationKey:object.createOperationKey,state:'owned',createdAt:at,updatedAt:at});
+  }
+  const repo=new PostgresPartialKeywordInventoryRepository({pool:f.pool}),scope={customerId:'1001',hierarchyRunId:runId,adgroupObjectId:objects[1].hierarchyObjectId};
+  const snapshot=await repo.loadSnapshot(scope);assert.ok(snapshot);
+  const observation={kind:'empty_unproven',count:0,remoteIds:[],completeAbsence:false,observedAt:at};
+  await assert.rejects(repo.recordObservation(snapshot,observation),{code:'SEARCHAD_SOURCE_ACCOUNT_REQUIRED'});
+  assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_hierarchy_events')).rows[0].n,0);
+  assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_canary_accounts')).rows[0].n,0);
+  await f.pool.query("INSERT INTO searchad_canary_accounts(customer_id,suspended) VALUES('1001',true)");
+  await repo.recordObservation(await repo.loadSnapshot(scope),observation);
+  assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_hierarchy_events')).rows[0].n,1);
+  assert.equal((await f.pool.query("SELECT suspended FROM searchad_canary_accounts WHERE customer_id='1001'")).rows[0].suspended,true);
+  assert.equal((await store.getObject(objects[2].hierarchyObjectId,'1001')).remoteId,null);
+});

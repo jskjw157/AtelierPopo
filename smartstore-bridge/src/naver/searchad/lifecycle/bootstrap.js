@@ -9,6 +9,7 @@ function publicStartupError(error) {
 
 export async function bootstrapSearchAdHierarchyRuntime({
   app = {},
+  circuitGuard = null,
   fetchImpl = globalThis.fetch,
   clock = Date.now,
   logger = console
@@ -21,6 +22,7 @@ export async function bootstrapSearchAdHierarchyRuntime({
       activeCanaryRuntime: app.searchAdActiveCanaryRuntime,
       activationRuntime: app.searchAdActivationRuntime,
       fetchImpl,
+      circuitGuard,
       clock,
       logger
     });

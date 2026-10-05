@@ -22,7 +22,7 @@ const keys = {
 const logger = { info() {}, warn() {}, error() {} };
 const createFields = ['campaign.campaignTp','campaign.name','campaign.userLock','campaign.dailyBudget'];
 
-test('public hierarchy root lifecycle composes bootstrap, activation, approval, restart and one bounded create', { timeout: 180_000 }, async t => {
+for (const circuitPause of [false, true]) test(`public hierarchy root lifecycle composes bootstrap, activation, approval, restart and one bounded create; Circuit competitor=${circuitPause}`, { timeout: 180_000 }, async t => {
   const databaseUrl = process.env.TEST_DATABASE_URL;
   if (!databaseUrl) {
     assert.notEqual(process.env.CI, 'true', 'CI requires real PostgreSQL');
@@ -293,9 +293,15 @@ test('public hierarchy root lifecycle composes bootstrap, activation, approval, 
     assert.equal(approved.status, 200, JSON.stringify(approved));
     assert.equal(typeof approved.body.executionToken, 'string');
 
+    if (circuitPause) {
+      const circuit = current.app.searchAdCompletionRuntime.circuitService;
+      const prepare = circuit.prepareDispatch.bind(circuit);
+      circuit.prepareDispatch = async dispatch => { await prepare(dispatch); await circuit.pause({ customerId: CUSTOMER, reason: 'competitor after preflight' }, { principal: { principalId: 'fixture-admin', role: 'admin', customerIds: [CUSTOMER] } }); };
+    }
     const executed = await call('admin', 'POST',
       `/api/v1/searchad/hierarchy/campaigns/${prepared.body.hierarchyRunId}/${prepared.body.hierarchyObjectId}/${prepared.body.planId}/execute`,
       { customerId: CUSTOMER, executionToken: approved.body.executionToken });
+    if (circuitPause) { assert.equal(upstreamCalls.length, 0); assert.notEqual(executed.body.state, 'owned'); assert.equal(forbiddenCalls, 0); return; }
     assert.equal(executed.status, 200, JSON.stringify(executed));
     assert.equal(executed.body.state, 'owned');
     assert.equal(executed.body.remoteId, 'cmp-hierarchy-http');

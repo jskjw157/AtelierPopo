@@ -1,3 +1,4 @@
+import { circuitError } from './naver/searchad/circuit/postgres-repository.js';
 import { bootstrapV04 } from './bootstrap-v04.js';
 import { loadSearchAdConfig } from './naver/searchad/config.js';
 import { SearchAdCredentialsRegistry } from './naver/searchad/auth.js';
@@ -53,12 +54,19 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
     logger.error('Naver SearchAd startup failed', searchAdStartupError);
   }
 
+  let completionCircuit = null;
+  const circuitGuard = Object.freeze(Object.fromEntries(['prepareDispatch', 'assertDispatchAllowed', 'projectOutcome'].map(method => [method, (...args) => {
+    if (!completionCircuit) throw circuitError();
+    return completionCircuit[method](...args);
+  }])));
+
   const {
     runtime: searchAdActiveCanaryRuntime,
     startupError: searchAdActiveCanaryStartupError
   } = await bootstrapActiveCanaryRuntime({
     app: { ...app, searchAdGateway, searchAdCredentials },
     env,
+    circuitGuard,
     clock,
     logger
   });
@@ -86,6 +94,7 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
       searchAdActivationRuntime
     },
     fetchImpl,
+    circuitGuard,
     clock,
     logger
   });
@@ -116,8 +125,10 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
     env, clock, blobStorage, logger
   });
 
+  completionCircuit = searchAdCompletionRuntime?.circuitService || null;
   return {
     ...app,
+    clock,
     searchAdCompletionRuntime,
     searchAdCompletionStartupError,
     searchAdCompletionRequired: searchAdConfig.configured === true && env.ATELIER_SEARCHAD_REPORTING_ENABLED !== 'false',

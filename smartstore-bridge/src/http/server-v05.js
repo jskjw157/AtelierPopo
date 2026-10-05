@@ -25,6 +25,7 @@ import { createProductRoutesV03 } from './routes-products-v03.js';
 import { createLedgerRoutesV03 } from './routes-ledger-v03.js';
 import { createDriveRoutes } from './routes-drive.js';
 import { createCommerceRoutes } from './routes-commerce.js';
+import { createSearchAdCircuitRoutes } from './routes-searchad-circuit.js';
 import { createSearchAdReportingRoutes } from './routes-searchad-reporting.js';
 import { createSearchAdRoutes } from './routes-searchad.js';
 import { createSearchAdWriteRoutesV3 } from './routes-searchad-write-v3.js';
@@ -110,6 +111,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createCommerceRoutes(routeContext),
     ...createSearchAdRoutes(routeContext),
     ...createSearchAdReportingRoutes(routeContext),
+    ...createSearchAdCircuitRoutes(routeContext),
     ...createSearchAdWriteRoutesV3(routeContext),
     ...createSearchAdCanaryRoutes(routeContext),
     ...createSearchAdActivationRoutes(routeContext),

@@ -1,3 +1,4 @@
+import { createCircuitGuard, prepareLifecycleDispatch, preserveCircuitOutcome } from '../circuit/service.js';
 import { isDeepStrictEqual as equal } from 'node:util';
 import { NaverSearchAdClient } from '../client.js';
 import { PostgresAccountSendFence } from './postgres-account-send-fence.js';
@@ -10,14 +11,14 @@ import { adgroupScope, problem } from './adgroup-create-contract.js';
 const ORIGIN = 'https://api.searchad.naver.com';
 /** One internal stopped adgroup under a verified root. Deliberately no HTTP wiring. */
 export class AdgroupCreateService {
-  #enabled; #config; #registry; #credentials; #clock; #gateway; #store; #sendFence;
-  constructor({ pool, registry, credentialsRegistry, config, enabled = false, dailyBudget, riskUnits, dailyCapacityUnits, planTtlSeconds = 300, preflightMaxAgeMs = 5000, clock = Date.now, fetchImpl = globalThis.fetch, logger = console } = {}) {
+  #enabled; #config; #registry; #credentials; #clock; #gateway; #store; #sendFence;#circuitGuard;
+  constructor({ pool, circuitGuard = null, registry, credentialsRegistry, config, enabled = false, dailyBudget, riskUnits, dailyCapacityUnits, planTtlSeconds = 300, preflightMaxAgeMs = 5000, clock = Date.now, fetchImpl = globalThis.fetch, logger = console } = {}) {
     if (typeof pool?.connect !== 'function' || typeof pool?.query !== 'function' || typeof registry?.get !== 'function' || typeof registry?.status !== 'function' || typeof credentialsRegistry?.resolve !== 'function') throw new TypeError('PostgreSQL, pinned registry and current credentials are required');
     if (typeof enabled !== 'boolean' || typeof clock !== 'function' || typeof fetchImpl !== 'function' || config?.baseUrl !== ORIGIN) throw new TypeError('Explicit gate, clock, transport and official origin required');
     for (const value of [dailyBudget, riskUnits, dailyCapacityUnits]) if (!Number.isSafeInteger(value) || value <= 0 || value > 2147483647) throw new TypeError('Positive bounded server policy required');
     if (riskUnits > dailyCapacityUnits || !Number.isSafeInteger(planTtlSeconds) || planTtlSeconds < 60 || planTtlSeconds > 3600 || !Number.isSafeInteger(preflightMaxAgeMs) || preflightMaxAgeMs < 100 || preflightMaxAgeMs > 30000) throw new TypeError('Invalid TTL, observation age or risk policy');
     this.#enabled = enabled; this.#config = config; this.#registry = registry; this.#credentials = credentialsRegistry; this.#clock = clock;
-    this.#sendFence = new PostgresAccountSendFence({pool,fetchImpl});
+    this.#circuitGuard=circuitGuard||createCircuitGuard({pool,clock});this.#sendFence = new PostgresAccountSendFence({pool,fetchImpl});
     const safeFetch = async (url, init) => {
       if (new URL(url).origin !== ORIGIN) throw new Error('Unexpected adgroup origin');
       const response = await this.#sendFence.fetch(url, { ...init, redirect: 'error' });
@@ -47,7 +48,8 @@ export class AdgroupCreateService {
     for (const key of [OPS.campaign.read,OPS.adgroup.read]) this.#gateway.executionCheck(this.#registry.get(key), { customerId: descriptor.customerId });
   }
   async prepare(input = {}, context = {}) { this.#on(); return this.#store.prepare(adgroupScope(input,context)); }
-  async execute(input = {}, context = {}) {
+  async execute(input = {}, context = {}) { return preserveCircuitOutcome(this.#circuitGuard, input.customerId, () => this.#execute(input, context)); }
+  async #execute(input = {}, context = {}) {
     this.#on(); const s = adgroupScope(input,context,true);
     const preflight = await this.#store.executionSnapshot(s);
     let parent;
@@ -56,10 +58,11 @@ export class AdgroupCreateService {
     const handoff = await this.#store.claim(preflight.ticket,parent);
     let result, unavailable = false;
     try {
+      const circuitDispatch = await prepareLifecycleDispatch(this.#circuitGuard, s, handoff.descriptor);
       result = await this.#sendFence.run(s.customerId, () => {
         this.#gate(handoff.descriptor);
         if (!equal(this.#identity(s.customerId),handoff.identity) || this.#clock() >= handoff.validUntil || new Date(this.#clock()).toISOString().slice(0,10) !== handoff.riskDate) throw new Error('Handoff context changed');
-      }, () => this.#gateway.executeCanary(OPS.adgroup.create, { ...handoff.descriptor, confirmation:this.#registry.get(OPS.adgroup.create).confirmation }));
+      }, () => this.#gateway.executeCanary(OPS.adgroup.create, { ...handoff.descriptor, confirmation:this.#registry.get(OPS.adgroup.create).confirmation }), null, { dispatch: circuitDispatch, beforeSend: (client, dispatch) => this.#circuitGuard.assertDispatchAllowed(dispatch, { client, now: this.#clock() }) });
     } catch { unavailable = true; }
     const captured = await this.#store.capture(handoff.ticket,result,unavailable);
     if (!captured.ticket) return captured.projection;

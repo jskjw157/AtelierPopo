@@ -9,6 +9,7 @@ function publicStartupError(error) {
 
 export async function bootstrapActiveCanaryRuntime({
   app = {},
+  circuitGuard = null,
   env = process.env,
   pool = null,
   clock = Date.now,
@@ -20,6 +21,7 @@ export async function bootstrapActiveCanaryRuntime({
       credentialsRegistry: app.searchAdCredentials,
       env,
       pool,
+      circuitGuard,
       clock,
       logger
     });

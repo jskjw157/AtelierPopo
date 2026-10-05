@@ -50,8 +50,16 @@ async function assertGenericRecoveryOwner(client, object) {
 
 async function rawGraph(client, scope, lock = false) {
   const suffix = lock ? ' FOR UPDATE' : '';
-  // Lock order for this reconciliation coordinator: run -> objects -> holds.
-  // Future dispatch must adopt compatible locking; this is NOT a dispatch gate.
+  // Recovery bookkeeping shares account -> run -> objects -> holds ordering.
+  // Suspension does not prohibit GET recovery or its durable observations.
+  if (lock) {
+    const account = await client.query('SELECT customer_id FROM searchad_canary_accounts WHERE customer_id=$1 FOR UPDATE', [scope.customerId]);
+    if (account.rows.length !== 1 || account.rows[0].customer_id !== scope.customerId) {
+      const existing = await client.query('SELECT hierarchy_run_id FROM searchad_hierarchy_canary_runs WHERE hierarchy_run_id=$1 AND customer_id=$2', [scope.hierarchyRunId, scope.customerId]);
+      if (!existing.rows.length) return null;
+      fail('SEARCHAD_SOURCE_ACCOUNT_REQUIRED', 'An existing locked Customer account is required for source persistence.', 503);
+    }
+  }
   const result = await client.query(
     `SELECT *, xmin::text AS row_version FROM searchad_hierarchy_canary_runs
      WHERE hierarchy_run_id=$1 AND customer_id=$2${suffix}`,

@@ -97,6 +97,16 @@ test('unmanaged descendant inventory persists immutable read-only observations o
     repository,remote:{read},contextResolver,clock:()=>NOW
   });
   const baseline=await localState();
+  const absentScope={customerId:'1001',hierarchyRunId:runId,parentObjectId:campaignObjectId,childType:'adgroup'};
+  const absentSnapshot=await repository.loadSnapshot(absentScope);
+  assert.ok(absentSnapshot,'unlocked legacy snapshot is available without an account');
+  await assert.rejects(repository.recordObservation(absentSnapshot,{kind:'empty_unproven',count:0,remoteIds:[],completeAbsence:false,observedAt:at}),{code:'SEARCHAD_SOURCE_ACCOUNT_REQUIRED'});
+  assert.deepEqual(await localState(),baseline);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM searchad_hierarchy_events')).rows[0].n,0);
+  await pool.query("INSERT INTO searchad_canary_accounts(customer_id,suspended) VALUES('1001',true)");
+  // Existing observation positives below now also prove suspended-account reads
+  // and bookkeeping do not acquire mutation authorization or unsuspend it.
+
 
   const cases=[
     {

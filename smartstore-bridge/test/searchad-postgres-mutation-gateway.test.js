@@ -5,7 +5,7 @@ import { NaverSearchAdClient } from '../src/naver/searchad/client.js';
 import { SearchAdOperationGateway } from '../src/naver/searchad/gateway.js';
 import { createPostgresMutationGateway } from '../src/naver/searchad/lifecycle/postgres-mutation-gateway.js';
 const origin = 'https://api.searchad.naver.com';
-function fixture() {
+function fixture(options = {}) {
   const h = { calls: [], sql: [], onLock() {}, suspended: false, spec: 'fixture-spec' };
   const credentials = new SearchAdCredentialsRegistry({
     principals: [{ principalId: 'fixture', accessLicense: 'fixture-license', secretKey: 'fixture-secret', status: 'active' }],
@@ -32,7 +32,7 @@ function fixture() {
     return { rows: [{ customer_id: '1001', suspended: h.suspended }] };
   }, release() {} };
   const pool = { query: db.query, async connect() { return db; } };
-  const gateway = createPostgresMutationGateway({ gateway: source, pool });
+  const gateway = createPostgresMutationGateway({ gateway: source, pool, ...options });
   return Object.assign(h, { source, client, credentials, config, operations, gateway, fetchImpl,
     input: { customerId: '1001', body: { dailyBudget: 1000 }, confirmation: 'UPDATE' } });
 }
@@ -81,4 +81,35 @@ test('input mutation during account acquisition cannot redirect the signed reque
   await h.gateway.execute('update', h.input);
   assert.equal(h.calls[0].init.headers['X-Customer'], '1001');
   assert.equal(JSON.parse(h.calls[0].init.body).dailyBudget, 1000);
+});
+
+test('ordinary production dispatch cannot bypass same-store binding via public purpose/context', async () => {
+  let guardChecks = 0;
+  const h = fixture({ requireWriteOwner: true, ordinaryStoreReady: false, circuitGuard: { async prepareDispatch() {}, async assertDispatchAllowed() { guardChecks++; } } });
+  await assert.rejects(h.gateway.execute('update', { ...h.input, purpose: 'rollback', owner: { planId: 'forged' } }), { code: 'SEARCHAD_CIRCUIT_SOURCE_STORE_REQUIRED' });
+  assert.equal(h.calls.length, 0); assert.equal(guardChecks, 0);
+  assert.ok(h.sql.some(sql => sql.includes('FOR UPDATE')));
+});
+
+// Classification consumes server-owned verified before state, never HTTP hints.
+test('Circuit classifies bid increases, missing prior, batch and unknown changes conservatively', async () => {
+  const { withCircuitWriteContext } = await import('../src/naver/searchad/circuit/service.js');
+  for (const [body, before, expected] of [
+    [{ bidAmt: 500 }, { bidAmt: 300 }, 'increase'],
+    [{ bidAmt: 200 }, { bidAmt: 300 }, 'mutation'],
+    [{ bidAmt: 200 }, {}, 'increase'],
+    [{ bidAmt: -1 }, { bidAmt: 300 }, 'increase'],
+    [{ bidAmt: 1.5 }, { bidAmt: 300 }, 'increase'],
+    [{ bidAmt: Number.MAX_SAFE_INTEGER + 1 }, { bidAmt: Number.MAX_SAFE_INTEGER + 2 }, 'increase'],
+    [{ userLock: true }, { userLock: false }, 'mutation'],
+    [{ userLock: false }, { userLock: true }, 'increase'],
+    [{ useDailyBudget: false }, { useDailyBudget: true }, 'increase'],
+    [[{ bidAmt: 500 }], [{ bidAmt: 300 }], 'increase'],
+    [{ dailyBudget: 800, nccCampaignId: 'fixture' }, { dailyBudget: 1000, nccCampaignId: 'fixture' }, 'mutation']
+  ]) {
+    let observed;
+    const h = fixture({ circuitGuard: { async prepareDispatch(d) { observed = d; }, async assertDispatchAllowed() {} } });
+    await withCircuitWriteContext({ customerId: '1001', planId: 'server-plan', before }, () => h.gateway.execute('update', { ...h.input, body, actionClass: 'mutation' }));
+    assert.equal(observed.actionClass, expected, JSON.stringify({ body, before }));
+  }
 });

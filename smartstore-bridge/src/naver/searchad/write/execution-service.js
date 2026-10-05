@@ -226,6 +226,7 @@ export class SearchAdExecutionService {
     }
     await this.assertActivation(plan, plan.rollback_json.mutation);
     const mutation = { ...plan.rollback_json.mutation, customerId: plan.customer_id };
+    await this.beforeRollbackDispatch?.(plan);
     try {
       const response = await this.remote.mutate(mutation, {
         customerId: plan.customer_id,

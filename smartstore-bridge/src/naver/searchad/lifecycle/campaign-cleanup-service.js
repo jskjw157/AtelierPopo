@@ -1,3 +1,4 @@
+import { createCircuitGuard, prepareLifecycleDispatch, preserveCircuitOutcome } from '../circuit/service.js';
 import { isDeepStrictEqual as equal } from 'node:util';
 import { NaverSearchAdClient } from '../client.js';
 import { PostgresAccountSendFence } from './postgres-account-send-fence.js';
@@ -12,14 +13,14 @@ import { rootCleanupMaintenanceScope } from './campaign-cleanup-plan-lifecycle.j
 const ORIGIN='https://api.searchad.naver.com';
 /** Internal campaign-only cleanup. It intentionally does not expose live HTTP/bootstrap routes. */
 export class CampaignCleanupService {
-  #enabled; #config; #registry; #credentials; #clock; #gateway; #store; #sendFence;
-  constructor({pool,registry,credentialsRegistry,config,enabled=false,dailyBudget,riskUnits,dailyCapacityUnits,planTtlSeconds=300,preflightMaxAgeMs=5000,clock=Date.now,fetchImpl=globalThis.fetch,logger=console}={}) {
+  #enabled; #config; #registry; #credentials; #clock; #gateway; #store; #sendFence;#circuitGuard;
+  constructor({pool,circuitGuard=null,registry,credentialsRegistry,config,enabled=false,dailyBudget,riskUnits,dailyCapacityUnits,planTtlSeconds=300,preflightMaxAgeMs=5000,clock=Date.now,fetchImpl=globalThis.fetch,logger=console}={}) {
     if(typeof pool?.connect!=='function'||typeof pool?.query!=='function'||typeof registry?.get!=='function'||typeof registry?.status!=='function'||typeof credentialsRegistry?.resolve!=='function')throw new TypeError('PostgreSQL and current operation/credential registries are required');
     if(typeof enabled!=='boolean'||typeof clock!=='function'||typeof fetchImpl!=='function'||!record(config)||config.baseUrl!==ORIGIN)throw new TypeError('Explicit gate, clock, transport and fixed official origin required');
     for(const n of [dailyBudget,riskUnits,dailyCapacityUnits])if(!Number.isSafeInteger(n)||n<=0||n>2147483647)throw new TypeError('Bounded positive server limits required');
     if(riskUnits>dailyCapacityUnits||!Number.isSafeInteger(planTtlSeconds)||planTtlSeconds<60||planTtlSeconds>3600||!Number.isSafeInteger(preflightMaxAgeMs)||preflightMaxAgeMs<100||preflightMaxAgeMs>30000)throw new TypeError('Invalid cleanup limits or freshness interval');
     this.#enabled=enabled;this.#config=config;this.#registry=registry;this.#credentials=credentialsRegistry;this.#clock=clock;
-    this.#sendFence=new PostgresAccountSendFence({pool,fetchImpl});
+    this.#circuitGuard=circuitGuard||createCircuitGuard({pool,clock});this.#sendFence=new PostgresAccountSendFence({pool,fetchImpl});
     const safeFetch=async(url,init)=>{
       if(new URL(url).origin!==ORIGIN)throw new Error('Unexpected cleanup origin');
       const r=await this.#sendFence.fetch(url,{...init,redirect:'error'});
@@ -59,7 +60,8 @@ export class CampaignCleanupService {
   // Local maintenance never dispatches, approves or guesses a remote target.
   async retire(input={},context={}) {this.#on();return this.#store.retire(rootCleanupMaintenanceScope(input,context,'retire'));}
   async replan(input={},context={}) {this.#on();return this.#store.replan(rootCleanupMaintenanceScope(input,context,'replan'));}
-  async execute(input={},context={}) {
+  async execute(input = {}, context = {}) { return preserveCircuitOutcome(this.#circuitGuard, input.customerId, () => this.#execute(input, context)); }
+  async #execute(input = {}, context = {}) {
     this.#on();const s=cleanupScope(input,context,'execute');
     const snapshot=await this.#store.executionSnapshot(s);
     let read;
@@ -69,10 +71,11 @@ export class CampaignCleanupService {
     if(!campaignResponse(read,snapshot.expected,false,snapshot.remoteId))fail('SEARCHAD_CAMPAIGN_CLEANUP_PREFLIGHT','Pre-delete response differs from the verified stopped campaign.');
     const handoff=await this.#store.claim(snapshot.ticket);let acknowledged=false;
     try {
+      const circuitDispatch = await prepareLifecycleDispatch(this.#circuitGuard, s, handoff.descriptor);
       const r=await this.#sendFence.run(s.customerId,()=>{
         this.#same(handoff,s.customerId);this.#gate(handoff.descriptor);
         if(this.#clock()>=handoff.validUntil||new Date(this.#clock()).toISOString().slice(0,10)!==handoff.riskDate)throw new Error('Handoff expired');
-      },()=>this.#gateway.executeCanary(OPS.campaign.delete,this.#deleteInput(handoff.descriptor)));
+      },()=>this.#gateway.executeCanary(OPS.campaign.delete,this.#deleteInput(handoff.descriptor)), null, { dispatch: circuitDispatch, beforeSend: (client, dispatch) => this.#circuitGuard.assertDispatchAllowed(dispatch, { client, now: this.#clock() }) });
       acknowledged=r.operation?.operationKey===OPS.campaign.delete&&r.operation.sideEffect===true&&[200,204].includes(r.upstream?.status);
     } catch { /* No retry; a transport acknowledgement is never absence proof. */ }
     await this.#store.recordSend(handoff.ticket,acknowledged);
