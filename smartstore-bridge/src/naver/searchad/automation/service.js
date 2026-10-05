@@ -30,14 +30,19 @@ export class AutomationService {
   async reconcile(input,context) {
     exact(input,['customerId','runId']);authorize(input.customerId,context,'executor');
     const run=await this.getRun(input,context);
-    if(!run.planId)return run;
+    if(!run.planId) {
+      if(!['observed','recommended','blocked','ready'].includes(run.state))throw automationError('PRIMARY_OUTCOME_UNRESOLVED');
+      return run;
+    }
     const runtime=await this.getWriteRuntime();
     if(runtime.repository.pool!==this.repository.pool)throw automationError('STORE_MISMATCH',503);
     const plan=await runtime.repository.getPlan(run.planId);
     if(!plan || plan.customer_id!==input.customerId)throw automationError('PLAN_BINDING');
-    // A completed primary reconciliation is immutable recovery history. A retry
-    // returns that run without another read, plan, approval or execution token.
-    if(['applied','applied_reconciled','not_applied'].includes(plan.status))return run;
+    if(['applied','applied_reconciled','not_applied'].includes(plan.status)) {
+      const completed=await this.repository.completedPrimaryRun({...input,planId:run.planId});
+      if(!completed)throw automationError('PRIMARY_OUTCOME_UNRESOLVED');
+      return completed;
+    }
     await runtime.executionService.reconcile(run.planId,{},context);
     return this.getRun(input,context);
   }

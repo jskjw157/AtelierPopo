@@ -60,8 +60,15 @@ export function createWorkerHandlers({repository,completion,principal,clock=Date
       return {state:'succeeded',result:{runId:run.runId,code:'SOURCE_LINKED'}};
     },
     async reconcile_automation(job) {
-      const context=await guard(job),run=await completion.automationService.reconcile({customerId:job.customerId,runId:job.payload.runId},context);
-      return {state:['manual_review','executing','unknown'].includes(run.state)?'manual_review':'succeeded',result:{runId:run.runId}};
+      const context=await guard(job);let run;
+      try { run=await completion.automationService.reconcile({customerId:job.customerId,runId:job.payload.runId},context); }
+      catch(error) {
+        if(error?.code!=='SEARCHAD_AUTOMATION_PRIMARY_OUTCOME_UNRESOLVED')throw error;
+        return {state:'manual_review',result:{runId:job.payload.runId,code:'SOURCE_UNRESOLVED'}};
+      }
+      const completed=['applied','applied_reconciled','not_applied'].includes(run.state) ||
+        (!run.planId && ['observed','recommended','blocked','ready'].includes(run.state));
+      return {state:completed?'succeeded':'manual_review',result:{runId:run.runId,...(completed?{}:{code:'SOURCE_UNRESOLVED'})}};
     }
   };
 }

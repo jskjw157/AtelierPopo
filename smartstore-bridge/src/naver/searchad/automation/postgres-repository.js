@@ -153,5 +153,21 @@ export class PostgresAutomationRepository {
     });
   }
   async getRun({customerId,runId,client=this.pool}) { if (!UUID.test(runId || '')) return null; return publicRun((await client.query('SELECT * FROM searchad_automation_runs WHERE customer_id=$1 AND run_id=$2',[customerId,runId])).rows[0]); }
+  async completedPrimaryRun({customerId,runId,planId}) {
+    if(!UUID.test(runId || '') || !UUID.test(planId || ''))return null;
+    // Plan status alone is not durable completion: updatePlan and addAttempt
+    // commit separately. Match the latest accepted primary outcome and its exact
+    // phase-linked source attempt, consumed approval and settled owned run.
+    const row=(await this.pool.query(`SELECT r.* FROM searchad_automation_runs r
+      JOIN searchad_write_change_plans p ON p.customer_id=r.customer_id AND p.plan_id=r.plan_id
+      JOIN searchad_write_execution_claims c ON c.customer_id=r.customer_id AND c.plan_id=p.plan_id AND c.approval_id=r.approval_id AND c.rule_id=r.rule_id
+      JOIN searchad_write_approvals approval ON approval.plan_id=p.plan_id AND approval.approval_id=c.approval_id AND approval.used_at IS NOT NULL
+      JOIN LATERAL(SELECT source_attempt_id,outcome FROM searchad_write_execution_outcomes o WHERE o.customer_id=c.customer_id AND o.ordinal=c.ordinal ORDER BY version DESC LIMIT 1) terminal ON true
+      JOIN searchad_write_attempts attempt ON attempt.attempt_id=terminal.source_attempt_id AND attempt.plan_id=p.plan_id
+      WHERE r.customer_id=$1 AND r.run_id=$2 AND r.plan_id=$3 AND r.state=p.status AND terminal.outcome=p.status
+      AND ((p.status='applied' AND attempt.phase='verify' AND attempt.status='succeeded')
+        OR (p.status IN('applied_reconciled','not_applied') AND attempt.phase='reconcile' AND attempt.status=p.status))`,[customerId,runId,planId])).rows[0];
+    return publicRun(row);
+  }
   async listRuns({customerId}) { return (await this.pool.query('SELECT * FROM searchad_automation_runs WHERE customer_id=$1 ORDER BY created_at DESC,run_id LIMIT 100',[customerId])).rows.map(publicRun); }
 }

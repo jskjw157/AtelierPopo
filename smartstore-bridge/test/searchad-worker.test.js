@@ -35,3 +35,22 @@ test('shutdown_leaves_recoverable_history and does not finish before active serv
   const worker=new SearchAdWorker({repository,clock:()=>Date.parse('2026-10-05T03:00:00Z'),handlers:{async collect_stats(){entered();await waiting;return {state:'succeeded',result:{}};}}});
   const run=worker.runOnce();await started;assert.equal(await worker.stop({drainTimeoutMs:1}),false);assert.equal(finished,0);assert.equal(await worker.runOnce(),null);release();await run;assert.equal(await worker.stop(),true);assert.equal(finished,1);
 });
+test('fix1 exact producer unresolved states cannot be a successful recovery',async()=>{
+  const {AutomationService}=await import('../src/naver/searchad/automation/service.js'),{createWorkerHandlers}=await import('../src/naver/searchad/worker/handlers.js');
+  const runId='00000000-0000-0000-0000-000000000001',principal={principalId:'worker',role:'executor',customerIds:['1001']};
+  for(const state of ['unknown_outcome','executing','manual_review','preparing','approval_pending','claim_pending','prepared','approved','applied','applied_reconciled','not_applied','failed','unknown','unrecognized',undefined]) {
+    const service=new AutomationService({repository:{async getRun(){return {runId,customerId:'1001',state,planId:null};}}});
+    const handlers=createWorkerHandlers({repository:{async owns(){return true;}},completion:{automationService:service},principal});
+    const result=await handlers.reconcile_automation({customerId:'1001',scheduleId:'recovery',kind:'reconcile_automation',payload:{runId}});
+    assert.equal(result.state,'manual_review',state ?? 'missing state');assert.equal(result.result.runId,runId);
+  }
+});
+test('fix1 observed and recommendation decisions without plans remain no-write recovery no-ops',async()=>{
+  const {AutomationService}=await import('../src/naver/searchad/automation/service.js'),{createWorkerHandlers}=await import('../src/naver/searchad/worker/handlers.js');
+  const runId='00000000-0000-0000-0000-000000000001',principal={principalId:'worker',role:'executor',customerIds:['1001']};
+  for(const state of ['observed','recommended','blocked','ready']) {
+    const service=new AutomationService({repository:{async getRun(){return {runId,customerId:'1001',state,planId:null};}},getWriteRuntime(){throw new Error('No write runtime should be resolved');}});
+    const handlers=createWorkerHandlers({repository:{async owns(){return true;}},completion:{automationService:service},principal});
+    assert.equal((await handlers.reconcile_automation({customerId:'1001',scheduleId:'no-write',kind:'reconcile_automation',payload:{runId}})).state,'succeeded');
+  }
+});
