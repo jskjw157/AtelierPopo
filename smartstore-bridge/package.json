@@ -35,7 +35,9 @@
     "searchad:status": "node scripts/searchad-status.mjs",
     "test:searchad:remote": "node scripts/searchad-remote-smoke.mjs",
     "catalog:sources:status": "node scripts/multi-source-status.mjs",
-    "searchad:worker": "node src/searchad-worker.js"
+    "searchad:worker": "node src/searchad-worker.js",
+    "searchad:validation:coverage": "node scripts/searchad-validation-coverage.mjs",
+    "searchad:execution:safety": "node scripts/searchad-execution-safety.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",
@@ -43,5 +45,8 @@
     "bcryptjs": "^3.0.3",
     "pg": "^8.16.0",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "acorn": "8.15.0"
   }
 }

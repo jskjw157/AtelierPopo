@@ -1,3 +1,5 @@
+import { ValidationService } from './validation/service.js';
+import { loadValidationRegistry } from './validation/registry.js';
 import { createWorkerRuntime } from './worker/runtime.js';
 import { loadWorkerConfig } from './worker/config.js';
 import { AutomationService } from './automation/service.js';
@@ -22,11 +24,13 @@ async function assertSchema(pool) {
 export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = process.env, clock = Date.now, blobStorage = null, getWriteRuntime, logger = console } = {}) {
   let ownedPool = null, partialRuntime = null;
   try {
+    const validationService = new ValidationService({registry:loadValidationRegistry({manifest:app.searchAdRegistry?.manifest})});
     const workerConfig = loadWorkerConfig(env);
     const reportingConfig = loadSearchAdReportingConfig(env);
     if (!app.searchAdConfig?.configured) {
       if(workerConfig.enabled)throw Object.assign(new Error(),{code:'SEARCHAD_WORKER_DEPENDENCIES'});
       const runtime=await createReportingRuntime({ reportingConfig: { ...reportingConfig, enabled: false } });
+      runtime.validationService=validationService;
       const status=runtime.status.bind(runtime);runtime.status=()=>({...status(),worker:{required:false,initialized:false,ready:false}});
       return {runtime,startupError:null};
     }
@@ -46,6 +50,7 @@ export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = proce
     const storage = blobStorage || configuredReportStorage(env);
     const runtime = await createReportingRuntime({ pool, blobStorage: storage, gateway: app.searchAdGateway, registry: app.searchAdRegistry, credentialsRegistry: app.searchAdCredentials, config: app.searchAdConfig, reportingConfig, clock, closeOwnedResources: async () => { if (!blobStorage) storage?.client?.destroy?.(); await closePostgresPool(ownedPool); } });
 
+    runtime.validationService=validationService;
     partialRuntime=runtime;
     const spendEvidence = reportingConfig.enabled && runtime.repository ? { async select(dispatch, { client, now }) {
       // Producer order is Customer advisory -> report date advisory -> job row.

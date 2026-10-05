@@ -197,6 +197,15 @@ jobs:
           set -o pipefail
           node --test test/searchad-worker.test.js test/postgres-searchad-worker.integration.test.js | tee /tmp/searchad-worker-pg.tap
           node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-worker-pg.tap','utf8'), /^# skipped 0$/m, 'Worker PostgreSQL acceptance requires zero skips');"
+      - name: Descriptive validation registry, Reader HTTP and expanded AST mutation controls
+        working-directory: smartstore-bridge
+        run: |
+          set -euo pipefail
+          test -n "$TEST_DATABASE_URL"
+          node --test --test-reporter=tap test/searchad-validation.test.js test/searchad-execution-safety.test.js | tee /tmp/searchad-validation.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-validation.tap','utf8'), /^# skipped 0$/m, 'Validation Reader PostgreSQL acceptance requires zero skips');"
+          node scripts/searchad-execution-safety.mjs
+          node scripts/searchad-validation-coverage.mjs
       - name: Full regression test suite
         working-directory: smartstore-bridge
         run: npm test
@@ -217,6 +226,8 @@ jobs:
           npm run check
           git ls-files -z -- 'src/*.js' 'src/**/*.js' 'scripts/*.mjs' | xargs -0 -r -n 1 node --check
           node scripts/searchad-write-safety.mjs
+          node scripts/searchad-execution-safety.mjs
+          node scripts/searchad-validation-coverage.mjs
           npm run commerce:coverage
           npm run searchad:coverage
       - name: PostgreSQL migrations remain idempotent after full regression

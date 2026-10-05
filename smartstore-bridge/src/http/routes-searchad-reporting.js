@@ -1,3 +1,4 @@
+import { VALIDATION_STATES } from '../naver/searchad/validation/registry.js';
 import { HttpError } from './errors.js';
 import { sendJson } from './runtime.js';
 import { searchAdCompletionOpenApi } from './openapi-searchad-completion.js';
@@ -21,6 +22,13 @@ function queryInput(url, allowed) {
 }
 export function createSearchAdReportingRoutes(context) {
   return [
+    { method:'GET', pattern:/^\/api\/v1\/searchad\/validation\/operations$/, auth:true, write:false, searchAdRole:'reader', handler:async({req,res,url,principal})=>{
+      const query=queryInput(url,['customerId','state']);customerScope(principal,query.customerId);
+      if(query.state!==undefined&&!VALIDATION_STATES.includes(query.state))throw new HttpError(400,'SEARCHAD_VALIDATION_STATE_INVALID','SearchAd validation state is invalid.');
+      const runtime=context.app.searchAdCompletionRuntime;
+      if(!runtime?.validationService||runtime.isClosing())throw new HttpError(503,'SEARCHAD_VALIDATION_NOT_READY','SearchAd validation registry is unavailable.');
+      sendJson(req,res,200,runtime.validationService.list({state:query.state}));
+    } },
     ...['reader','operator','executor','admin'].map(role => ({ method: 'GET', pattern: new RegExp(`^/openapi-searchad-completion-${role}\\.json$`), auth: false, write: false, handler: async ({ req, res }) => sendJson(req, res, 200, searchAdCompletionOpenApi({ role })) })),
     { method: 'POST', pattern: /^\/api\/v1\/searchad\/reporting\/jobs$/, auth: true, write: true, searchAdRole: 'operator', handler: async ({ req, res, body, url, principal, requestId }) => {
       customerScope(principal, body?.customerId); queryInput(url, []);
