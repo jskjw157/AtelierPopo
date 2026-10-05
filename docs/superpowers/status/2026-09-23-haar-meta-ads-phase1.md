@@ -82,3 +82,50 @@ Resume from source d59bc2bc10f7588b012a228d389c1dd3737c55e1 and this report; do 
 The production Compose manifest differs from the source only by an explicit immutable app image tag: haar-social-studio:meta-ads-d59bc2bc10f7. Keep project app, loopback port 3100, and the existing named database/upload volumes. The guarded rollout preserved existing environment settings except the explicit ads/MCP safety gates. Previous application location: /opt/haar-social-studio/rollouts/meta-ads-35807809868/previous-app. Do not delete that rollback or its adjacent private database backup as routine cleanup.
 
 Design rulings retained: strict supported-currency budgets rather than rounding, advertising OAuth separate from publishing, missing purchase metrics kept unavailable, existing post content cloned explicitly, single-image creation first, no claim of perfect network exactly-once, and read-only/unconfigured MCP until actual client authorization is verified. Costs: unsupported formats/currencies and direct ChatGPT write operations remain deferred; unknown provider results require explicit reconciliation rather than automatic retry.
+
+
+## 2026-10-05 live read-only validation checkpoint
+
+The user completed Meta advertising reauthorization. Live production verification then confirmed:
+
+- Selected account: HAAR 광고 계정; KRW; Asia/Seoul; active advertising permissions.
+- Meta advertising execution master gate remains disabled.
+- A HAAR Meta pixel is accessible and has a recent event timestamp.
+- Current live Meta hierarchy remains 0 campaigns / 0 ad sets / 0 ads.
+- Orbit Silver Earring was restored into the local product table at 120000 KRW and mapped to the published Instagram post "차분한 룩에, 선명한 디테일.".
+- One local-only traffic draft exists for that product/post at 20000 KRW daily. Before/after live Meta hierarchy counts were identical and no external campaign/ad-set/ad IDs were created.
+
+### Live MCP E2E
+
+Run 37280639255 passed against live HAAR production data using an ephemeral loopback-only MCP router inside the production application container. Production MCP configuration was not changed.
+
+Verified read-only tool surface:
+
+- haar_ads_status
+- haar_ads_accounts
+- haar_ads_campaigns
+- haar_ads_insights
+- haar_ads_drafts
+- haar_ads_pending_actions
+
+The selected HAAR account, zero live Meta delivery objects, local Orbit draft and zero pending approval requests were readable through MCP. All tools declared readOnlyHint=true / destructiveHint=false. No create/approve/execute mutation tool was exposed.
+
+### Live insights roundtrip
+
+Run 37280810132 passed. Meta account insights for 2026-09-29 through 2026-10-05 were fetched read-only, stored in the local snapshot table and read back through haar_ads_insights over MCP. The live account returned zero insight rows because no ads are currently running; the system preserved this as an empty result rather than inventing zero-valued purchase or ROAS metrics.
+
+### MCP security boundary
+
+Run 37280985758 passed using the production code path in an ephemeral loopback-only test endpoint:
+
+- missing bearer credential -> HTTP 401
+- incorrect bearer credential -> HTTP 401
+- foreign Origin -> HTTP 403
+- valid scoped credential -> HTTP 200
+- unsupported GET -> HTTP 405
+- credential was not returned in responses
+- no write-like tools were exposed
+- paid-delivery execution remained disabled
+- the public production /mcp endpoint remains HTTP 503 because HAAR_TOOL_BEARER_TOKEN and HAAR_TOOL_ACTOR_ID are still intentionally unconfigured
+
+Next security-sensitive step: enabling the public production read-only MCP endpoint and registering/authenticating it with the user's ChatGPT client. Do not perform that exposure/configuration without explicit user approval. Paid-ad execution remains a separate later approval and must stay disabled.
