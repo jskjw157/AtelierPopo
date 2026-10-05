@@ -1,0 +1,79 @@
+name: HAAR Meta Ads Draft Candidate Read
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/meta-ads-draft-candidate-read.yml']
+permissions:
+  contents: read
+concurrency:
+  group: haar-social-studio-hostinger
+  cancel-in-progress: false
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Read eligible local draft source candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_PRIVATE_KEY"
+          mkdir -p ~/.ssh /tmp/haar-draft-candidates
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/haar_hostinger
+          chmod 600 ~/.ssh/haar_hostinger
+          ssh -i ~/.ssh/haar_hostinger -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" 'if [ "$(id -u)" = 0 ]; then exec bash -s; else exec sudo -n bash -s; fi' <<'REMOTE' > /tmp/haar-draft-candidates/report.json
+          set -euo pipefail
+          APP_DIR=/opt/haar-social-studio/app
+          APP_ID=$(docker ps -q --filter label=com.docker.compose.service=app | while read -r id; do
+            wd=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$id")
+            [ "$wd" = "$APP_DIR" ] && echo "$id"
+          done)
+          test "$(printf '%s\n' "$APP_ID" | sed '/^$/d' | wc -l)" -eq 1
+          docker exec -i "$APP_ID" node --input-type=module - <<'NODE'
+          import { pool } from './server/db.js';
+
+          const rows=(await pool.query(`
+            SELECT p.name,p.product_url,p.price,
+                   pv.platform,pv.publish_state,pv.updated_at,
+                   jsonb_array_length(pv.media_asset_ids) AS media_count
+              FROM products p
+              JOIN campaigns c ON c.product_id=p.id
+              JOIN post_variants pv ON pv.campaign_id=c.id
+             WHERE p.active=TRUE
+               AND p.product_url IS NOT NULL
+               AND p.product_url <> ''
+               AND pv.publish_state='published'
+               AND pv.platform='instagram'
+             ORDER BY CASE WHEN lower(p.name)=lower('Orbit Silver Earring') THEN 0 ELSE 1 END,
+                      pv.updated_at DESC
+             LIMIT 20
+          `)).rows;
+
+          console.log(JSON.stringify({
+            count:rows.length,
+            candidates:rows.map(r=>({
+              name:r.name,
+              productUrl:r.product_url,
+              price:r.price,
+              platform:r.platform,
+              mediaCount:Number(r.media_count),
+              updatedAt:r.updated_at
+            }))
+          },null,2));
+          await pool.end();
+          NODE
+          REMOTE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haar-meta-ads-draft-candidates
+          path: /tmp/haar-draft-candidates/report.json
+          retention-days: 7
+      - name: Remove SSH material
+        if: always()
+        run: rm -f ~/.ssh/haar_hostinger
