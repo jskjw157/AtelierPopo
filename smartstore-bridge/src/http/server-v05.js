@@ -1,3 +1,5 @@
+import { disposeApplicationV05 } from '../bootstrap-v05.js';
+import { createSearchAdWorkerRoutes } from './routes-searchad-worker.js';
 import { createSearchAdAutomationRoutes } from './routes-searchad-automation.js';
 import http from 'node:http';
 import path from 'node:path';
@@ -84,7 +86,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
   const routes = [
     // Override only v0.5 readiness; legacy servers keep their existing contract.
     route('GET', /^\/health\/ready$/, async ({ req, res }) => {
-      const { ready, searchAdActivation, searchAdHierarchy, searchAdCompletion } = api.readiness();
+      const { ready, searchAdActivation, searchAdHierarchy, searchAdCompletion, searchAdWorker } = api.readiness();
       sendJson(req, res, ready ? 200 : 503, {
         ok: ready,
         status: ready ? 'ready' : 'not_ready',
@@ -95,6 +97,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
           initialized: searchAdActivation.initialized,
           ready: searchAdActivation.ready
         },
+        searchAdWorker,
         searchAdCompletion: {
           required: searchAdCompletion.required, initialized: searchAdCompletion.initialized, ready: searchAdCompletion.ready
         },
@@ -114,6 +117,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createSearchAdReportingRoutes(routeContext),
     ...createSearchAdCircuitRoutes(routeContext),
     ...createSearchAdAutomationRoutes(routeContext),
+    ...createSearchAdWorkerRoutes(routeContext),
     ...createSearchAdWriteRoutesV3(routeContext),
     ...createSearchAdCanaryRoutes(routeContext),
     ...createSearchAdActivationRoutes(routeContext),
@@ -240,19 +244,11 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
           code: 'HTTP_SHUTDOWN_PENDING'
         });
       }
-      const errors = [];
-      const resources = new Set([
-        app.searchAdWriteRuntime, app.searchAdActiveCanaryRuntime,
-        app.searchAdCompletionRuntime, app.searchAdHierarchyRuntime, app.searchAdActivationRuntime, app.ledger
-      ]);
-      for (const resource of resources) {
-        try { await resource?.close?.(); } catch (error) { errors.push(error); }
-      }
-      if (errors.length) throw new AggregateError(errors, 'HTTP runtime shutdown failed.');
+      await disposeApplicationV05(app,{drainTimeoutMs:httpConfig.shutdownTimeoutMs});
       return true;
     })().catch(error => {
       // A drain timeout is retryable; no pool or ledger has been closed yet.
-      if (error?.code === 'HTTP_SHUTDOWN_PENDING') closePromise = null;
+      if (['HTTP_SHUTDOWN_PENDING','SEARCHAD_WORKER_SHUTDOWN_PENDING'].includes(error?.code)) closePromise = null;
       throw error;
     });
     return closePromise;
@@ -273,6 +269,9 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       const hierarchyStatus = app.searchAdHierarchyRuntime?.status?.() || null;
       const hierarchyRequired = app.searchAdConfig?.allowActiveCanary === true;
       const hierarchyReady = hierarchyStatus?.ready === true;
+      const workerRequired=env.ATELIER_SEARCHAD_WORKER_ENABLED==='true';
+      const workerStatus=app.searchAdCompletionRuntime?.status?.().worker;
+      const searchAdWorker={required:workerRequired,initialized:workerStatus?.initialized===true,ready:workerStatus?.ready===true};
       const completionRequired = app.searchAdCompletionRequired === true;
       const completionReady = app.searchAdCompletionRuntime?.status?.().ready === true;
       // Infrastructure readiness is not permission to mutate any Customer.
@@ -282,7 +281,8 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       ready: base.readyForRead === true &&
         (!activationRequired || activationReady) &&
         (!hierarchyRequired || hierarchyReady) &&
-        (!completionRequired || completionReady),
+        (!completionRequired || completionReady) && (!workerRequired || searchAdWorker.ready),
+      searchAdWorker,
       searchAdCompletion: { required: completionRequired, initialized: Boolean(app.searchAdCompletionRuntime), ready: completionReady },
       searchAd: {
         configured: Boolean(app.searchAdConfig?.configured),

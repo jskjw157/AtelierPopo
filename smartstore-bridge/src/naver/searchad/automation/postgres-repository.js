@@ -1,3 +1,4 @@
+import { currentWorkerSource } from '../worker/postgres-repository.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { contentHash } from '../write/canonical.js';
 import { randomUUID } from 'node:crypto';
@@ -145,7 +146,10 @@ export class PostgresAutomationRepository {
       const current=await this.findPolicy({...input,client});
       if (!current || current.revision!==input.policyRevision) throw automationError('REVISION_CONFLICT');
       const row=(await client.query(`INSERT INTO searchad_automation_runs(run_id,customer_id,policy_id,policy_revision,rule_id,decision_key,input_hash,state,decision_json,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) ON CONFLICT(customer_id,decision_key) DO NOTHING RETURNING *`,[randomUUID(),input.customerId,input.policyId,input.policyRevision,current.ruleId,input.decisionKey,input.inputHash,input.state,input.decision,iso(input.now)])).rows[0];
-      return publicRun(row || (await client.query('SELECT * FROM searchad_automation_runs WHERE customer_id=$1 AND decision_key=$2',[input.customerId,input.decisionKey])).rows[0]);
+      const run=publicRun(row || (await client.query('SELECT * FROM searchad_automation_runs WHERE customer_id=$1 AND decision_key=$2',[input.customerId,input.decisionKey])).rows[0]);
+      const source=currentWorkerSource();
+      if(source) { if(source.pool!==this.pool || source.customerId!==input.customerId)throw automationError('STORE_MISMATCH',503);await source.persist(client,run); }
+      return run;
     });
   }
   async getRun({customerId,runId,client=this.pool}) { if (!UUID.test(runId || '')) return null; return publicRun((await client.query('SELECT * FROM searchad_automation_runs WHERE customer_id=$1 AND run_id=$2',[customerId,runId])).rows[0]); }

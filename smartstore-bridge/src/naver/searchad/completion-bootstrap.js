@@ -1,3 +1,5 @@
+import { createWorkerRuntime } from './worker/runtime.js';
+import { loadWorkerConfig } from './worker/config.js';
 import { AutomationService } from './automation/service.js';
 import { PostgresAutomationRepository } from './automation/postgres-repository.js';
 import { createCircuitGuard } from './circuit/service.js';
@@ -18,10 +20,16 @@ async function assertSchema(pool) {
 /** Completion borrows the activation pool when available. Any injected storage
  * is borrowed; future ingestion services reuse this same resource owner. */
 export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = process.env, clock = Date.now, blobStorage = null, getWriteRuntime, logger = console } = {}) {
-  let ownedPool = null;
+  let ownedPool = null, partialRuntime = null;
   try {
+    const workerConfig = loadWorkerConfig(env);
     const reportingConfig = loadSearchAdReportingConfig(env);
-    if (!app.searchAdConfig?.configured) return { runtime: await createReportingRuntime({ reportingConfig: { ...reportingConfig, enabled: false } }), startupError: null };
+    if (!app.searchAdConfig?.configured) {
+      if(workerConfig.enabled)throw Object.assign(new Error(),{code:'SEARCHAD_WORKER_DEPENDENCIES'});
+      const runtime=await createReportingRuntime({ reportingConfig: { ...reportingConfig, enabled: false } });
+      const status=runtime.status.bind(runtime);runtime.status=()=>({...status(),worker:{required:false,initialized:false,ready:false}});
+      return {runtime,startupError:null};
+    }
     if (!app.searchAdGateway || !app.searchAdCredentials || !app.searchAdRegistry) throw reportingError('SEARCHAD_REPORTING_DEPENDENCIES_REQUIRED', 503);
     let pool = app.searchAdActivationRuntime?.repository?.pool;
     if (!pool) {
@@ -38,6 +46,7 @@ export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = proce
     const storage = blobStorage || configuredReportStorage(env);
     const runtime = await createReportingRuntime({ pool, blobStorage: storage, gateway: app.searchAdGateway, registry: app.searchAdRegistry, credentialsRegistry: app.searchAdCredentials, config: app.searchAdConfig, reportingConfig, clock, closeOwnedResources: async () => { if (!blobStorage) storage?.client?.destroy?.(); await closePostgresPool(ownedPool); } });
 
+    partialRuntime=runtime;
     const spendEvidence = reportingConfig.enabled && runtime.repository ? { async select(dispatch, { client, now }) {
       // Producer order is Customer advisory -> report date advisory -> job row.
       // The final account fence holds this shared producer lock through initiation.
@@ -52,13 +61,16 @@ export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = proce
     runtime.automationRepository = new PostgresAutomationRepository({pool,clock,identityResolver:runtime.identityResolver});
     runtime.circuitService.automationRepository = runtime.automationRepository;
     const automationService = new AutomationService({repository:runtime.automationRepository,evidenceSelector:{select:input=>runtime.repository?.selectAutomationEvidence(input) || {stats:null,spend:null}},circuit:runtime.circuitService,getWriteRuntime,identityResolver:runtime.identityResolver,clock});
-    runtime.automationService = Object.fromEntries(['createPolicy','listPolicies','listRuns','getRun','evaluate','prepare','executeApproved'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>automationService[method](input,context))]));
+    runtime.automationService = Object.fromEntries(['createPolicy','listPolicies','listRuns','getRun','evaluate','prepare','executeApproved','reconcile'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>automationService[method](input,context))]));
     const reportingStatus = runtime.status.bind(runtime);
-    runtime.status = () => ({ ...reportingStatus(), circuit: { ready: !runtime.isClosing(), mode: 'observe', automationEnabled: false }, automation: { ready: !runtime.isClosing(), defaultMode: 'observe', autoAvailable: false } });
+    runtime.workerRuntime=await createWorkerRuntime({completion:runtime,pool,env,clock,logger});
+    const closeReporting=runtime.close.bind(runtime);
+    runtime.close=async()=>{await runtime.workerRuntime?.close();await closeReporting();};
+    runtime.status = () => ({ ...reportingStatus(), worker:runtime.workerRuntime?.status() || {required:false,initialized:false,ready:false}, circuit: { ready: !runtime.isClosing(), mode: 'observe', automationEnabled: false }, automation: { ready: !runtime.isClosing(), defaultMode: 'observe', autoAvailable: false } });
     return { runtime, startupError: null };
   } catch (error) {
-    await closePostgresPool(ownedPool);
-    const code = /^SEARCHAD_REPORTING_[A-Z_]+$/.test(error?.code || '') ? error.code : 'SEARCHAD_REPORTING_STARTUP_FAILED';
+    if(partialRuntime)await partialRuntime.close();else await closePostgresPool(ownedPool);
+    const code = /^SEARCHAD_(?:REPORTING|WORKER)_[A-Z_]+$/.test(error?.code || '') ? error.code : 'SEARCHAD_REPORTING_STARTUP_FAILED';
     const startupError = { code, message: 'SearchAd completion startup failed; reporting remains unavailable.' };
     logger.error?.('SearchAd completion startup failed', { code });
     return { runtime: null, startupError };

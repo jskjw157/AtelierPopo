@@ -153,5 +153,23 @@ export async function bootstrapV05(configPath, { env = process.env, fetchImpl = 
     multiSourceCatalogStartupErrors,
     multiSourceCatalogStartupError
   };
+  completedApp.close=()=>disposeApplicationV05(completedApp);
   return completedApp;
+}
+
+const disposal=new WeakMap();
+/** Shared headless/HTTP resource owner; never opens an HTTP listener. */
+export function disposeApplicationV05(app,{drainTimeoutMs=30000}={}) {
+  if(disposal.has(app))return disposal.get(app);
+  const pending=(async()=>{
+    // A worker must drain before any shared writer, pool or ledger is closed.
+    await app.searchAdCompletionRuntime?.workerRuntime?.close({drainTimeoutMs});
+    const errors=[];
+    for(const resource of new Set([app.searchAdCompletionRuntime,app.searchAdWriteRuntime,app.searchAdActiveCanaryRuntime,app.searchAdHierarchyRuntime,app.searchAdActivationRuntime,app.ledger])) {
+      try { await resource?.close?.(); } catch(error) { errors.push(error); }
+    }
+    if(errors.length)throw new AggregateError(errors,'Application runtime shutdown failed.');
+    return true;
+  })().catch(error=>{if(error?.code==='SEARCHAD_WORKER_SHUTDOWN_PENDING')disposal.delete(app);throw error;});
+  disposal.set(app,pending);return pending;
 }

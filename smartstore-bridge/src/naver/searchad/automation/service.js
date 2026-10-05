@@ -27,6 +27,20 @@ export class AutomationService {
     await runtime.executionService.execute(run.planId,{customerId:input.customerId,executionToken:input.executionToken,idempotencyKey:run.decisionKey},context);
     return this.getRun({customerId:input.customerId,runId:input.runId},context);
   }
+  async reconcile(input,context) {
+    exact(input,['customerId','runId']);authorize(input.customerId,context,'executor');
+    const run=await this.getRun(input,context);
+    if(!run.planId)return run;
+    const runtime=await this.getWriteRuntime();
+    if(runtime.repository.pool!==this.repository.pool)throw automationError('STORE_MISMATCH',503);
+    const plan=await runtime.repository.getPlan(run.planId);
+    if(!plan || plan.customer_id!==input.customerId)throw automationError('PLAN_BINDING');
+    // A completed primary reconciliation is immutable recovery history. A retry
+    // returns that run without another read, plan, approval or execution token.
+    if(['applied','applied_reconciled','not_applied'].includes(plan.status))return run;
+    await runtime.executionService.reconcile(run.planId,{},context);
+    return this.getRun(input,context);
+  }
   async evaluate(input,context) {
     exact(input,['customerId','policyId','slotAt']); authorize(input.customerId,context,'operator');
     const policy=await this.repository.findPolicy(input); if (!policy) throw automationError('POLICY_NOT_FOUND',404);

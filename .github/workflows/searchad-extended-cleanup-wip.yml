@@ -53,18 +53,18 @@ jobs:
           try {
             const migrationsDir = path.resolve('migrations/postgres');
             const files = listMigrationFiles(migrationsDir);
-            assert.deepEqual(files.map(file => file.version), ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012', '0013']);
+            assert.deepEqual(files.map(file => file.version), ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012', '0013', '0014']);
             assert.equal((await pool.query('SELECT current_schema() AS name')).rows[0].name, 'public');
             const existing = await pool.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
             assert.deepEqual(existing.rows, [], 'Migration acceptance must start before any test populates the fresh CI database');
             const first = await runPostgresMigrations({ pool, migrationsDir });
             assert.deepEqual(first.applied, files.map(file => file.fileName));
-            assert.equal(first.currentVersion, '0013');
+            assert.equal(first.currentVersion, '0014');
             const metadata = () => pool.query('SELECT version, file_name, checksum FROM schema_migrations ORDER BY version');
             const before = (await metadata()).rows;
             assert.deepEqual(before, files.map(file => ({ version: file.version, file_name: file.fileName, checksum: file.checksum })));
             const second = await runPostgresMigrations({ pool, migrationsDir });
-            assert.deepEqual(second, { applied: [], currentVersion: '0013' });
+            assert.deepEqual(second, { applied: [], currentVersion: '0014' });
             assert.deepEqual((await metadata()).rows, before);
             console.log(JSON.stringify({ cleanDatabase: true, first, second, checksumsVerified: true }, null, 2));
           } finally {
@@ -190,6 +190,13 @@ jobs:
           node --test test/searchad-automation.test.js test/searchad-activation-guard.test.js
           node --test --test-reporter=tap test/postgres-searchad-automation.integration.test.js | tee /tmp/searchad-automation-pg.tap
           node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-automation-pg.tap','utf8'), /^# skipped 0$/m, 'Automation PostgreSQL acceptance requires zero skips');"
+      - name: Durable worker leases, scoped schedules and headless restart
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          set -o pipefail
+          node --test test/searchad-worker.test.js test/postgres-searchad-worker.integration.test.js | tee /tmp/searchad-worker-pg.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-worker-pg.tap','utf8'), /^# skipped 0$/m, 'Worker PostgreSQL acceptance requires zero skips');"
       - name: Full regression test suite
         working-directory: smartstore-bridge
         run: npm test

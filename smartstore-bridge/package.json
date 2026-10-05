@@ -34,7 +34,8 @@
     "searchad:coverage": "node scripts/searchad-coverage.mjs",
     "searchad:status": "node scripts/searchad-status.mjs",
     "test:searchad:remote": "node scripts/searchad-remote-smoke.mjs",
-    "catalog:sources:status": "node scripts/multi-source-status.mjs"
+    "catalog:sources:status": "node scripts/multi-source-status.mjs",
+    "searchad:worker": "node src/searchad-worker.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",
