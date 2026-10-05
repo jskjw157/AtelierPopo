@@ -1,0 +1,112 @@
+name: HAAR Meta Ads Live Read Verification
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/meta-ads-live-read-verify.yml']
+permissions:
+  contents: read
+concurrency:
+  group: haar-social-studio-hostinger
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Read live Meta ads connection without enabling delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_PRIVATE_KEY"
+          mkdir -p ~/.ssh /tmp/haar-ads-live
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/haar_hostinger
+          chmod 600 ~/.ssh/haar_hostinger
+          ssh -i ~/.ssh/haar_hostinger -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" 'if [ "$(id -u)" = 0 ]; then exec bash -s; else exec sudo -n bash -s; fi' <<'REMOTE' > /tmp/haar-ads-live/report.json
+          set -euo pipefail
+          APP_DIR=/opt/haar-social-studio/app
+          APP_ID=$(docker ps -q --filter label=com.docker.compose.service=app | while read -r id; do
+            wd=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$id")
+            [ "$wd" = "$APP_DIR" ] && echo "$id"
+          done)
+          test "$(printf '%s\n' "$APP_ID" | sed '/^$/d' | wc -l)" -eq 1
+          docker exec -i "$APP_ID" node --input-type=module - <<'NODE'
+          import { pool } from './server/db.js';
+          import { adsServices } from './server/meta/ads/instance.js';
+
+          const mask = value => {
+            const s=String(value||'');
+            if(!s) return null;
+            return s.length<=6 ? '***' : s.slice(0,4)+'…'+s.slice(-3);
+          };
+          const safeAccount = a => a ? {
+            id: mask(a.external_account_id),
+            name: a.name || null,
+            currency: a.currency || null,
+            timezone: a.timezone_name || null,
+            accountStatus: a.account_status ?? null,
+            selected: Boolean(a.selected),
+            tasks: Array.isArray(a.user_tasks) ? a.user_tasks : []
+          } : null;
+
+          const owner=(await pool.query("SELECT id FROM users WHERE role='owner' AND status='active' ORDER BY created_at LIMIT 1")).rows[0];
+          if(!owner) throw new Error('No active owner');
+          let status=await adsServices.status(owner.id);
+          let accounts=await adsServices.auth.accounts(owner.id);
+          let discoveryError=null;
+          if(status.connected && status.readable && accounts.length===0){
+            try { accounts=await adsServices.auth.discover(owner.id); }
+            catch(e){ discoveryError={code:e.code||'ERROR',message:String(e.message||'').slice(0,300)}; }
+          }
+          status=await adsServices.status(owner.id);
+          accounts=await adsServices.auth.accounts(owner.id);
+          if(status.executionEnabled) throw new Error('Paid delivery gate unexpectedly enabled');
+
+          let hierarchy=null, tracking=null, connectionTest=null, liveError=null;
+          if(status.selectedAccount){
+            try{
+              const h=await adsServices.hierarchy(owner.id);
+              hierarchy={campaigns:h.campaigns?.length||0,adsets:h.adsets?.length||0,ads:h.ads?.length||0};
+              const pixels=await adsServices.tracking(owner.id);
+              tracking={pixelCount:pixels.length,pixels:pixels.slice(0,10).map(p=>({id:mask(p.id),name:p.name||null,lastFiredTime:p.last_fired_time||null}))};
+              const t=await adsServices.testConnection(owner.id);
+              connectionTest={readTestPassed:Boolean(t.readTestPassed),writePreflightPassed:Boolean(t.writePreflightPassed)};
+            }catch(e){ liveError={code:e.code||'ERROR',message:String(e.message||'').slice(0,300),metaCode:e.metaCode??null}; }
+          }
+
+          const result={
+            connected:Boolean(status.connected),
+            readable:Boolean(status.readable),
+            managementGranted:Boolean(status.managementGranted),
+            executionEnabled:Boolean(status.executionEnabled),
+            scopes:Array.isArray(status.scopes)?status.scopes:[],
+            selectedAccount:safeAccount(status.selectedAccount),
+            accountCount:accounts.length,
+            accounts:accounts.slice(0,20).map(safeAccount),
+            hierarchy,tracking,connectionTest,discoveryError,liveError,
+            verifiedAt:new Date().toISOString()
+          };
+          console.log(JSON.stringify(result,null,2));
+          await pool.end();
+          NODE
+          REMOTE
+          python3 - <<'PY'
+          import json
+          p='/tmp/haar-ads-live/report.json'
+          data=json.load(open(p))
+          assert data['executionEnabled'] is False
+          print('Live Meta ads read verification captured; paid-delivery gate is closed.')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haar-meta-ads-live-read-verification
+          path: /tmp/haar-ads-live/report.json
+          retention-days: 7
+      - name: Remove SSH material
+        if: always()
+        run: rm -f ~/.ssh/haar_hostinger
