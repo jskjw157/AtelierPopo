@@ -79,3 +79,84 @@ test('scanner_rejects_exported_network_aliases_and_missing_source_tree',t=>{
     write(root,file,source);assert.ok(scanExecutionSources({root,transportAllowlist:[]}).violations.some(v=>v.kind==='network_export'),source);
   }
 });
+
+const fenceFile='src/naver/searchad/lifecycle/postgres-account-send-fence.js';
+function copyFence(root){
+  for(const name of [fenceFile,'src/naver/searchad/write/errors.js'])write(root,name,fs.readFileSync(name,'utf8'));
+  fs.writeFileSync(path.join(root,'package.json'),'{"type":"module"}');
+  return fs.readFileSync(path.join(root,fenceFile),'utf8');
+}
+test('T7_I1_reviewed_context_rejects_fence_predicate_bypass_with_real_runtime_control',async t=>{
+  const root=fixture(t),original=copyFence(root);
+  assert.deepEqual(scanExecutionSources({root}).violations,[]);
+  let calls=0;const pool={query(){throw new Error('unexpected DB access');},connect(){throw new Error('unexpected DB access');}};
+  const {pathToFileURL}=await import('node:url');
+  const load=async label=>(await import(pathToFileURL(path.join(root,fenceFile)).href+'?'+label)).PostgresAccountSendFence;
+  const Before=await load('before');
+  await assert.rejects(new Before({pool,fetchImpl:async()=>{calls++;return new Response();}}).fetch('https://api.searchad.naver.com/ncc/campaigns',{method:'POST'}),error=>error.code==='SEARCHAD_SEND_FENCE_SCOPE');assert.equal(calls,0);
+  const changed=original.replace("if (method === 'GET' || method === 'HEAD')","if (true)");assert.notEqual(changed,original);write(root,fenceFile,changed);
+  const After=await load('after');await new After({pool,fetchImpl:async()=>{calls++;return new Response();}}).fetch('https://api.searchad.naver.com/ncc/campaigns',{method:'POST'});assert.equal(calls,1);
+  assert.ok(scanExecutionSources({root}).violations.some(v=>v.file===fenceFile),'unchanged invocation text must not approve weakened GET/HEAD guard');
+});
+test('T7_I1_moving_identical_invocation_outside_guarded_method_fails',t=>{
+  const root=fixture(t),original=copyFence(root);
+  const changed=original.replace("if (method === 'GET' || method === 'HEAD') return this.#fetch(address, request);","if (method === 'GET' || method === 'HEAD') return this.unguarded(address, request);").replace('  async fetch(url, init = {}) {','  unguarded(address, request) { return this.#fetch(address, request); }\n  async fetch(url, init = {}) {');
+  assert.equal(changed.match(/this\.#fetch\(address, request\)/g).length,2);write(root,fenceFile,changed);
+  assert.ok(scanExecutionSources({root}).violations.some(v=>v.file===fenceFile),'same call count in another method must not retain approval');
+  write(root,fenceFile,original);assert.deepEqual(scanExecutionSources({root}).violations,[]);
+});
+test('T7_I2_callback_capability_transfer_and_container_module_exports_fail',async t=>{
+  for(const source of [
+    'function run(transport){return transport("https://unapproved.invalid");}run(globalThis.fetch);',
+    'function run(transport){return transport("https://unapproved.invalid");}const send=fetch;run(send);',
+    'function run(io){return io.send("https://unapproved.invalid");}run({nested:{send:globalThis.fetch}});'
+  ])await t.test(source,()=>{const root=fixture(t);write(root,file,source);assert.ok(scanExecutionSources({root,transportAllowlist:[]}).violations.length>0);});
+  await t.test('two-file exported object capability',()=>{const root=fixture(t);write(root,'src/transport.js','export const io={send:globalThis.fetch};');write(root,'src/service.js','import {io} from "./transport.js";io.send("https://unapproved.invalid");');const result=scanExecutionSources({root,transportAllowlist:[]});assert.deepEqual(result.scannedFiles,['src/service.js','src/transport.js']);assert.ok(result.violations.some(v=>v.file==='src/transport.js'&&v.kind==='network_export'));});
+});
+test('T7_I2_harmless_callbacks_and_object_exports_pass',t=>{
+  const root=fixture(t);write(root,'src/transport.js','export const io={send:value=>String(value),nested:{count:2}};export const marker="fetch";');write(root,'src/service.js','import {io} from "./transport.js";function run(callback){return callback("hello");}run(value=>value.toUpperCase());io.send("hello");');assert.deepEqual(scanExecutionSources({root,transportAllowlist:[]}).violations,[]);
+});
+test('T7_I3_local_and_unrelated_imported_constructor_namesakes_fail',async t=>{
+  await t.test('local namesake',()=>{const root=fixture(t);write(root,file,'class PostgresAccountSendFence{constructor(){this.fetch=globalThis.fetch;}}const fence=new PostgresAccountSendFence();fence.fetch("https://unapproved.invalid");');assert.ok(scanExecutionSources({root,transportAllowlist:[]}).violations.some(v=>v.file===file));});
+  await t.test('unrelated imported namesake',()=>{const root=fixture(t);write(root,'src/unrelated.js','export class PostgresAccountSendFence{constructor(){this.fetch=globalThis.fetch;}}');write(root,'src/service.js','import {PostgresAccountSendFence} from "./unrelated.js";const fence=new PostgresAccountSendFence();fence.fetch("https://unapproved.invalid");');assert.ok(scanExecutionSources({root,transportAllowlist:[]}).violations.some(v=>v.file==='src/service.js'));});
+});
+test('T7_I3_exact_fence_import_aliases_pass_but_shadowing_reassignment_and_tampering_fail',async t=>{
+  const root=fixture(t);copyFence(root);
+  const prefix='import {PostgresAccountSendFence as ActualFence} from "./naver/searchad/lifecycle/postgres-account-send-fence.js";';
+  write(root,'src/service.js',prefix+'const Alias=ActualFence;const fence=new Alias();const alias=fence;alias.fetch("https://api.searchad.naver.com/stats");');
+  assert.deepEqual(scanExecutionSources({root}).violations,[]);
+  write(root,'src/service.js','import * as module from "./naver/searchad/lifecycle/postgres-account-send-fence.js";const fence=new module.PostgresAccountSendFence();fence.fetch("https://api.searchad.naver.com/stats");');assert.deepEqual(scanExecutionSources({root}).violations,[]);
+  for(const source of [
+    prefix+'function run(ActualFence){const fence=new ActualFence();fence.fetch("https://unapproved.invalid");}',
+    prefix+'function run(){class ActualFence{constructor(){this.fetch=globalThis.fetch;}}const fence=new ActualFence();fence.fetch("https://unapproved.invalid");}',
+    prefix+'let Alias=ActualFence;Alias=class{};const fence=new Alias();fence.fetch("https://unapproved.invalid");',
+    prefix+'const fence=new ActualFence();fence.fetch=globalThis.fetch;fence.fetch("https://unapproved.invalid");'
+  ])await t.test(source,()=>{write(root,'src/service.js',source);assert.ok(scanExecutionSources({root}).violations.some(v=>v.file==='src/service.js'));});
+});
+test('T7_I2_returned_capability_and_request_data_are_distinguished',t=>{
+  const root=fixture(t);write(root,file,'function give(){return globalThis.fetch;}const send=give();send("https://unapproved.invalid");');
+  assert.ok(scanExecutionSources({root,transportAllowlist:[]}).violations.some(v=>v.kind==='network_capability_return'));
+  write(root,file,'export function describe({request={}}={}){return JSON.stringify({request});}const metadata={request:{path:"/record"}};describe(metadata);');
+  assert.deepEqual(scanExecutionSources({root,transportAllowlist:[]}).violations,[]);
+});
+test('T7_I2_arrow_capability_return_is_an_escape',t=>{
+  const root=fixture(t);write(root,file,'export const getTransport=()=>({send:globalThis.fetch});');
+  assert.ok(scanExecutionSources({root,transportAllowlist:[]}).violations.some(v=>v.kind==='network_capability_return'));
+});
+test('T7_I3_destructuring_reassignments_invalidate_constructor_provenance',async t=>{
+  for(const assignment of ['[Alias]=[class{}];','({replacement:Alias}=value);'])await t.test(assignment,()=>{
+    const root=fixture(t);copyFence(root);
+    write(root,'src/service.js','import {PostgresAccountSendFence as ActualFence} from "./naver/searchad/lifecycle/postgres-account-send-fence.js";let Alias=ActualFence;'+assignment+'const fence=new Alias();fence.fetch("https://unapproved.invalid");');
+    assert.ok(scanExecutionSources({root}).violations.some(v=>v.file==='src/service.js'));
+  });
+});
+test('T7_I3_destructured_values_are_not_constructor_identity_aliases',t=>{
+  const root=fixture(t);copyFence(root);
+  write(root,'src/service.js','import {PostgresAccountSendFence as ActualFence} from "./naver/searchad/lifecycle/postgres-account-send-fence.js";function run(Factory){ActualFence.Factory=Factory;const {Factory:Alias}=ActualFence;const fence=new Alias();fence.fetch("https://unapproved.invalid");}');
+  assert.ok(scanExecutionSources({root}).violations.some(v=>v.file==='src/service.js'));
+});
+test('T7_I3_destructured_fetch_member_overwrite_invalidates_instance',t=>{
+  const root=fixture(t);copyFence(root);
+  write(root,'src/service.js','import {PostgresAccountSendFence as ActualFence} from "./naver/searchad/lifecycle/postgres-account-send-fence.js";const fence=new ActualFence();({replacement:fence.fetch}=source);fence.fetch("https://unapproved.invalid");');
+  assert.ok(scanExecutionSources({root}).violations.some(v=>v.file==='src/service.js'));
+});

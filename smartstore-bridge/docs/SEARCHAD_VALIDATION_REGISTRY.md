@@ -58,25 +58,54 @@ fail closed. The root itself is canonicalized for macOS `/var`/`/private/var`.
 It detects direct/global/computed fetch, alias chains, destructured fetch/raw
 request, injected fetch aliases, bound/object-carried aliases, network imports
 and dynamic imports/requires, HTTP/HTTPS/undici/axios/WebSocket and raw client
-request/send calls. Unresolved dynamic imports and exported network aliases are
-rejected. Calls to approved gateway methods and actual account-fence `fetch`
-delegation are not represented as raw initiation.
+request/send calls. Unresolved dynamic imports, direct or object-contained
+network capability exports, capability returns (including arrow returns), and
+known capabilities passed as call/constructor arguments are rejected unless the
+exact injection site is reviewed. This conservatively rejects capability
+escape at its source; it does not claim general cross-module data-flow analysis.
+Harmless callbacks, data objects and ordinary request metadata remain valid.
 
-`REVIEWED_TRANSPORT_BOUNDARIES` in the scanner contains 36 explicit records for
-38 existing AST nodes. A record pins the file, node kind, SHA256 of the exact
-node text, occurrence count, rationale and test references. No record exempts a
-whole file or directory, and a new call in an approved file still fails. Existing
-adapter raw-client delegations are reported as `raw_client_delegation`, separate
-from raw `network_initiation`; module imports are `network_import`.
+`REVIEWED_TRANSPORT_BOUNDARIES` contains **55 explicit contextual records for
+56 AST findings**: the original 38 call/import findings plus 18 exact existing
+capability injection sites. A record pins file, kind, invocation-node SHA256,
+**enclosing function/method context SHA256**, context name/type, occurrence
+count, rationale and test references. Nested callbacks bind to their outer
+function/method, including the existing guard and delegation setup. Module
+imports bind to their exact import declaration. Changed guard predicates or
+moving identical calls to another method invalidate the record. Additional
+calls are still detected independently; no whole file/directory is exempted.
+The two original identical fence invocations retain one count-2 record in the
+same guarded method, while identical Drive calls in different methods now have
+separate context records.
 
-Reviewed boundaries are the SearchAd client request entry; four gateway raw
+Gateway/client wrappers are `raw_client_delegation`, actual outbound entries
+are `network_initiation`, module imports are `network_import`, and explicit
+transport injection sites are `network_capability_transfer`. Existing approved
+gateway methods and authentic account-fence fetch delegation are not labeled as
+raw initiation.
+
+The fence delegation exception requires an import of the exact named export
+from `src/naver/searchad/lifecycle/postgres-account-send-fence.js` and a pinned
+integrity digest of that reviewed module. This integrity check establishes
+constructor provenance only: the module and its calls are still scanned and
+must match their separate contextual records. Constructor/instance aliases and
+namespace imports are supported. Ambiguous or shadowed declarations,
+reassignments (including destructuring), method tampering, unrelated imports,
+and local namesake classes receive no trusted delegation exception. Ambiguity
+is conservatively rejected across the current module rather than guessed safe
+from a spelling or neighboring scope.
+
+Reviewed boundaries remain the SearchAd client request entry; four gateway raw
 client delegations; two account-fence entries; the private mutation-gateway
 captured transport entry; the inventory origin/redirect wrapper; signed report
 download delegation; report archive SDK import and put/get delegations; pinned
 spec-maintenance download; existing Commerce/Cafe24/Drive auth and client
-transport/delegations; and four inbound HTTP server imports. Exact node hashes
-and current line locations are emitted by the scanner. Existing fence behavior
-and compatibility import paths are unchanged.
+transport/delegations; and four inbound HTTP server imports. The 18 newly
+explicit injection records are unchanged application/bootstrap, hierarchy
+constructor/factory, report/write client, Drive token-provider and pinned-spec
+maintenance argument transfers. All hashes, enclosing context names and current
+line locations are emitted by the scanner. No production transport, fence,
+constructor, authority or compatibility-import behavior was changed.
 
 The older `searchad-write-safety.mjs` remains a **legacy narrow check** of 16
 immediate write-directory JS files plus its historical required-file/evidence
@@ -89,6 +118,12 @@ Tests mutate disposable source copies with fetch aliases and dynamic imports,
 require nonzero CLI exit status, and restore the copy to a passing scan. They
 also add new nested sources, change an approved file, exercise alias forms,
 reject exported network aliases and test immutable registry/Reader behavior.
+Additional review regressions replace the real copied fence GET/HEAD predicate
+with true and move its identical invocation to an unguarded method; both must
+fail scanning. A fake-transport control demonstrates the copied predicate bug's
+unscoped POST effect without network/DB I/O. Callback/two-file object-export
+escapes, local/unrelated fence namesakes, shadowing and reassignment negatives
+have harmless callback/object and authentic constructor-alias positive controls.
 CI names both new test files explicitly, requires PostgreSQL with zero skips,
 and runs the two new scripts in its static acceptance step.
 
