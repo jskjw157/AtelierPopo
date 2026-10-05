@@ -1,0 +1,159 @@
+name: HAAR Meta Ads Live MCP Read E2E
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/meta-ads-live-mcp-read-e2e.yml']
+permissions:
+  contents: read
+concurrency:
+  group: haar-social-studio-hostinger
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Exercise read-only MCP against live HAAR data inside production container
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_PRIVATE_KEY"
+          mkdir -p ~/.ssh /tmp/haar-mcp-live
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/haar_hostinger
+          chmod 600 ~/.ssh/haar_hostinger
+          ssh -i ~/.ssh/haar_hostinger -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" 'if [ "$(id -u)" = 0 ]; then exec bash -s; else exec sudo -n bash -s; fi' <<'REMOTE' > /tmp/haar-mcp-live/report.json
+          set -euo pipefail
+          APP_DIR=/opt/haar-social-studio/app
+          APP_ID=$(docker ps -q --filter label=com.docker.compose.service=app | while read -r id; do
+            wd=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$id")
+            [ "$wd" = "$APP_DIR" ] && echo "$id"
+          done)
+          test "$(printf '%s\n' "$APP_ID" | sed '/^$/d' | wc -l)" -eq 1
+          docker exec -i "$APP_ID" node --input-type=module - <<'NODE'
+          import express from 'express';
+          import http from 'node:http';
+          import { randomBytes } from 'node:crypto';
+          import { pool } from './server/db.js';
+          import { adsServices } from './server/meta/ads/instance.js';
+          import { createAdsMcpRouter } from './server/meta/ads/mcp.js';
+
+          const owner=(await pool.query("SELECT id FROM users WHERE role='owner' AND status='active' ORDER BY created_at LIMIT 1")).rows[0];
+          if(!owner) throw new Error('No active owner');
+          const secret=randomBytes(32).toString('hex');
+
+          const app=express();
+          app.use(express.json({limit:'2mb'}));
+          app.use('/mcp',createAdsMcpRouter({
+            bearerToken:secret,
+            actorId:owner.id,
+            appBaseUrl:'https://social.haarapp.tech',
+            services:adsServices
+          }));
+          const server=await new Promise((resolve,reject)=>{
+            const s=app.listen(3001,'127.0.0.1',()=>resolve(s));
+            s.on('error',reject);
+          });
+
+          const rpc=body=>new Promise((resolve,reject)=>{
+            const data=JSON.stringify(body);
+            const req=http.request({
+              hostname:'127.0.0.1',port:3001,path:'/mcp',method:'POST',
+              headers:{
+                host:'social.haarapp.tech',
+                authorization:'Bearer '+secret,
+                accept:'application/json, text/event-stream',
+                'content-type':'application/json',
+                'content-length':Buffer.byteLength(data)
+              }
+            },res=>{
+              let chunks='';
+              res.setEncoding('utf8');
+              res.on('data',c=>chunks+=c);
+              res.on('end',()=>{
+                if(res.statusCode!==200) return reject(new Error('MCP HTTP '+res.statusCode+': '+chunks.slice(0,300)));
+                try{resolve(JSON.parse(chunks));}catch(e){reject(e);}
+              });
+            });
+            req.on('error',reject);req.end(data);
+          });
+
+          const call=async(name,args={})=>{
+            const r=await rpc({jsonrpc:'2.0',id:Math.floor(Math.random()*1e9),method:'tools/call',params:{name,arguments:args}});
+            if(r.error) throw new Error(name+' RPC error');
+            if(r.result?.isError) throw new Error(name+' tool error: '+r.result.content?.[0]?.text);
+            return JSON.parse(r.result.content[0].text);
+          };
+
+          try{
+            const listed=await rpc({jsonrpc:'2.0',id:1,method:'tools/list',params:{}});
+            const tools=listed.result?.tools||[];
+            const names=tools.map(t=>t.name).sort();
+            const expected=['haar_ads_accounts','haar_ads_campaigns','haar_ads_drafts','haar_ads_insights','haar_ads_pending_actions','haar_ads_status'].sort();
+            if(JSON.stringify(names)!==JSON.stringify(expected)) throw new Error('Unexpected MCP tool surface: '+names.join(','));
+            if(!tools.every(t=>t.annotations?.readOnlyHint===true && t.annotations?.destructiveHint===false)) throw new Error('Non-read-only MCP annotation found');
+
+            const status=await call('haar_ads_status');
+            const accounts=await call('haar_ads_accounts');
+            const hierarchy=await call('haar_ads_campaigns');
+            const drafts=await call('haar_ads_drafts');
+            const actions=await call('haar_ads_pending_actions');
+
+            if(status.executionEnabled!==false) throw new Error('Paid delivery gate unexpectedly enabled');
+            if(status.selectedAccount?.name!=='HAAR 광고 계정') throw new Error('Unexpected selected account');
+            if(!Array.isArray(accounts)||!accounts.some(a=>a.name==='HAAR 광고 계정'&&a.selected===true)) throw new Error('Selected HAAR account missing from MCP');
+            if((hierarchy.campaigns?.length||0)!==0 || (hierarchy.adsets?.length||0)!==0 || (hierarchy.ads?.length||0)!==0) throw new Error('Unexpected live Meta delivery objects');
+            const orbit=drafts.find(d=>d.campaign_name==='HAAR TEST - Orbit Silver Earring - LOCAL DRAFT ONLY');
+            if(!orbit || orbit.status!=='draft' || orbit.landing_url!=='https://haar.co.kr/product/orbit-silver-earring/43/category/72/display/1/') throw new Error('Orbit local draft missing or changed');
+            if(orbit.external_campaign_id||orbit.external_adset_id||orbit.external_ad_id) throw new Error('Orbit draft unexpectedly has Meta delivery IDs');
+
+            console.log(JSON.stringify({
+              protocol:'MCP Streamable HTTP JSON response',
+              toolCount:tools.length,
+              tools:names,
+              allToolsReadOnly:true,
+              selectedAccount:{name:status.selectedAccount.name,currency:status.selectedAccount.currency,timezone:status.selectedAccount.timezone_name},
+              executionEnabled:false,
+              liveMetaCounts:{campaigns:hierarchy.campaigns?.length||0,adsets:hierarchy.adsets?.length||0,ads:hierarchy.ads?.length||0},
+              localDrafts:drafts.length,
+              orbitDraft:{status:orbit.status,landingUrl:orbit.landing_url,budgetType:orbit.budget_type,budgetAmountMinor:Number(orbit.budget_amount_minor),currency:orbit.currency},
+              pendingActions:Array.isArray(actions)?actions.length:null,
+              secretExposed:false,
+              productionMcpConfigChanged:false
+            },null,2));
+          } finally {
+            await new Promise(resolve=>server.close(resolve));
+            await pool.end();
+          }
+          NODE
+          REMOTE
+
+          PUBLIC_CODE=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 20 https://social.haarapp.tech/mcp)
+          test "$PUBLIC_CODE" = "503"
+          python3 - <<'PY'
+          import json
+          p='/tmp/haar-mcp-live/report.json'
+          d=json.load(open(p))
+          assert d['toolCount']==6
+          assert d['allToolsReadOnly'] is True
+          assert d['executionEnabled'] is False
+          assert d['liveMetaCounts']=={'campaigns':0,'adsets':0,'ads':0}
+          assert d['orbitDraft']['status']=='draft'
+          assert d['productionMcpConfigChanged'] is False
+          d['publicMcpWithoutConfiguredCredentialHttp']=503
+          open(p,'w').write(json.dumps(d,ensure_ascii=False,indent=2)+'\n')
+          print('Live read-only MCP E2E passed; production /mcp remains disabled.')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haar-meta-ads-live-mcp-read-e2e
+          path: /tmp/haar-mcp-live/report.json
+          retention-days: 7
+      - name: Remove SSH material
+        if: always()
+        run: rm -f ~/.ssh/haar_hostinger
