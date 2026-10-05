@@ -4,6 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createPostgresPool, closePostgresPool } from '../src/infrastructure/postgres/pool.js';
 import { runPostgresMigrations } from '../src/infrastructure/postgres/migrator.js';
+import { PostgresActiveCanaryRepository } from '../src/naver/searchad/canary/postgres-repository.js';
 import { PostgresSearchAdLifecycleRepository } from '../src/naver/searchad/lifecycle/postgres-repository.js';
 import { DescendantInventoryService } from '../src/naver/searchad/lifecycle/descendant-inventory-service.js';
 import { PostgresDescendantInventoryRepository } from '../src/naver/searchad/lifecycle/postgres-descendant-inventory-repository.js';
@@ -44,6 +45,7 @@ test('remote-only changes cannot turn inventory observations into parent deletio
   scoped.searchParams.set('options', `-csearch_path=${schema} -ctimezone=UTC`);
   pool = createPostgresPool({ connectionString: scoped.toString(), sslMode: 'disable', logger });
   await runPostgresMigrations({ pool, migrationsDir: path.resolve('migrations/postgres'), logger });
+  await new PostgresActiveCanaryRepository({ pool }).upsertAccount({ customerId: '1001', suspended: true });
   const storage = new PostgresSearchAdLifecycleRepository({ pool });
   const runId = randomUUID(), rootId = randomUUID(), groupId = randomUUID();
   const at = new Date(NOW).toISOString();
