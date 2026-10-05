@@ -96,6 +96,7 @@ test('application send fence uses native account storage independently of plan s
       env[`ATELIER_SEARCHAD_${role.toUpperCase()}_PRINCIPAL_ID`] = `fixture-${role}`;
     }
     let state = { nccCampaignId: 'cmp-fixture', dailyBudget: 1000, userLock: true };
+    let nextPutResponseLoss = null;
     const calls = [], transportFailures = [];
     const simulatedUpstream = async (url, init) => {
       try {
@@ -106,7 +107,13 @@ test('application send fence uses native account storage independently of plan s
         assert.ok(['GET', 'PUT'].includes(init.method));
       } catch (error) { transportFailures.push(error.message); throw error; }
       calls.push(init.method);
-      if (init.method === 'PUT') state = { ...state, ...JSON.parse(init.body) };
+      if (init.method === 'PUT') {
+        const responseLoss = nextPutResponseLoss; nextPutResponseLoss = null;
+        if (responseLoss !== false) state = { ...state, ...JSON.parse(init.body) };
+        // Fail only after the real signer, client and native send fence entered
+        // this closed upstream. The service cannot know whether it applied.
+        if (responseLoss !== null) throw Object.assign(new Error('simulated response loss after PUT initiation'), { code: 'ECONNRESET' });
+      }
       return new Response(JSON.stringify(state), { status: 200, headers: { 'content-type': 'application/json' } });
     };
     async function start() {
@@ -166,6 +173,7 @@ test('application send fence uses native account storage independently of plan s
     st.after(() => assert.deepEqual(transportFailures, [], 'transport contract failures cannot be swallowed by production error handling'));
     return { get app() { return current.app; }, pool, planPool, call, account, seed, approve, tokenUsed, execute, calls,
       mutations: () => calls.filter(method => method !== 'GET').length,
+      loseNextPutResponse: ({ applied }) => { nextPutResponseLoss = applied; },
       async restart(overrides = {}) { await current.api.close(); env = { ...env, ...overrides }; await start(); } };
   }
 
@@ -181,18 +189,36 @@ test('application send fence uses native account storage independently of plan s
         const denied = await h.execute(input, generic);
         assert.equal(gapReached, true, JSON.stringify(denied));
         assert.equal(h.mutations(), 0, 'APPLICATION_SENT_AFTER_COMMITTED_SUSPENSION');
-        assert.ok(denied.status >= 400, JSON.stringify(denied));
-        assert.ok(await h.tokenUsed(input));
+        assert.equal(denied.status, 403, JSON.stringify(denied));
+        assert.equal(denied.body.error.code, 'SEARCHAD_SEND_FENCE_SUSPENDED');
+        const usedAt = await h.tokenUsed(input); assert.ok(usedAt);
+        assert.equal((await h.app.searchAdWriteRuntime.repository.getPlan(input.planId)).status, 'failed');
         const oldRuntime = h.app.searchAdActivationRuntime;
         await h.restart({ ATELIER_HTTP_ALLOW_WRITES: 'false', ATELIER_SEARCHAD_ALLOW_WRITES: 'false' });
         assert.notEqual(h.app.searchAdActivationRuntime, oldRuntime);
         await assert.rejects(() => oldRuntime.repository.listEvidence({ customerIds: [customerId] }));
-        const recovered = await h.call('executor', 'POST', `/api/v1/searchad/changes/${input.planId}/reconcile`, {});
-        assert.equal(recovered.status, 200, JSON.stringify(recovered));
-        assert.equal(recovered.body.status, 'not_applied');
-        assert.ok(await h.tokenUsed(input));
+        const callsBeforeReads = h.calls.length;
+        const detail = await h.call('executor', 'GET', `/api/v1/searchad/changes/${input.planId}`);
+        assert.equal(detail.status, 200, JSON.stringify(detail));
+        assert.equal(detail.body.status, 'failed');
+        assert.equal(detail.body.last_error_json.code, 'SEARCHAD_SEND_FENCE_SUSPENDED');
+        assert.deepEqual(detail.body.attempts.filter(a => a.phase === 'execute').map(a => [a.status, a.error_json?.code]),
+          [['failed', 'SEARCHAD_SEND_FENCE_SUSPENDED']]);
+        const listed = await h.call('executor', 'GET', `/api/v1/searchad/changes?customerId=${customerId}`);
+        assert.equal(listed.status, 200, JSON.stringify(listed));
+        assert.equal(listed.body.items.find(p => p.plan_id === input.planId)?.status, 'failed');
+        const rejected = await h.call('executor', 'POST', `/api/v1/searchad/changes/${input.planId}/reconcile`, {});
+        assert.equal(rejected.status, 409, JSON.stringify(rejected));
+        assert.equal(rejected.body.error.code, 'SEARCHAD_CHANGE_PLAN_NOT_RECONCILABLE');
+        assert.deepEqual(rejected.body.error.details, { planId: input.planId, status: 'failed' });
+        assert.equal(h.calls.length, callsBeforeReads, 'known local failure needs no remote recovery');
+        assert.equal(await h.tokenUsed(input), usedAt);
         await h.account('resume'); await h.restart({ ATELIER_HTTP_ALLOW_WRITES: 'true', ATELIER_SEARCHAD_ALLOW_WRITES: 'true' });
-        assert.ok((await h.execute(input, !generic)).status >= 400);
+        const replay = await h.execute(input, !generic);
+        assert.equal(replay.status, 409, JSON.stringify(replay));
+        assert.equal(replay.body.error.code, 'SEARCHAD_CHANGE_PLAN_NOT_EXECUTABLE');
+        assert.equal(replay.body.error.details.status, 'failed');
+        assert.equal(await h.tokenUsed(input), usedAt);
         assert.equal(h.mutations(), 0);
       });
 
@@ -225,6 +251,68 @@ test('application send fence uses native account storage independently of plan s
         assert.ok(await h.tokenUsed(input));
       });
     }
+
+    for (const applied of [false, true]) await t.test(`shared signed PUT response loss / applied=${applied}: restart recovery is GET-only with writes OFF, Circuit paused and account suspended`, async st => {
+      const h = await fixture(st, 'shared'); await h.seed(); const input = await h.approve();
+      h.loseNextPutResponse({ applied });
+      const unknown = await h.execute(input);
+      assert.equal(unknown.status, 409, JSON.stringify(unknown));
+      assert.equal(unknown.body.error.code, 'SEARCHAD_UNKNOWN_OUTCOME');
+      assert.equal(unknown.body.error.details.original.code, 'SEARCHAD_NETWORK_ERROR');
+      assert.deepEqual(h.calls, ['GET', 'GET', 'PUT'], 'one real signed initiation, no retry or inferred verification');
+      const usedAt = await h.tokenUsed(input); assert.ok(usedAt);
+      assert.equal((await h.app.searchAdWriteRuntime.repository.getPlan(input.planId)).status, 'unknown_outcome');
+      const paused = await h.call('admin', 'POST', '/api/v1/searchad/circuit/pause', { customerId, reason: 'read recovery must remain available' });
+      assert.equal(paused.status, 200, JSON.stringify(paused));
+      await h.account('suspend');
+      await h.restart({ ATELIER_HTTP_ALLOW_WRITES: 'false', ATELIER_SEARCHAD_ALLOW_WRITES: 'false' });
+      const detail = await h.call('executor', 'GET', `/api/v1/searchad/changes/${input.planId}`);
+      assert.equal(detail.status, 200, JSON.stringify(detail));
+      assert.equal(detail.body.status, 'unknown_outcome');
+      assert.equal(h.app.searchAdWriteRuntime.status().allowWrites, false);
+      const before = await h.call('executor', 'GET', `/api/v1/searchad/circuit?customerId=${customerId}`);
+      assert.equal(before.status, 200, JSON.stringify(before));
+      assert.equal(before.body.state.manualPaused, true);
+      assert.equal(before.body.state.unknownCount, 1);
+      const authoritySnapshot = async () => {
+        const tables = ['searchad_daily_risk_capacity', 'searchad_risk_reservations', 'searchad_canary_runs', 'searchad_verification_evidence'];
+        return Promise.all(tables.map(table => h.pool.query(`SELECT * FROM ${table} WHERE customer_id=$1`, [customerId]).then(r => r.rows)));
+      };
+      const authorityBefore = await authoritySnapshot();
+      const callsBeforeRecovery = h.calls.length;
+      const recovered = await h.call('executor', 'POST', `/api/v1/searchad/changes/${input.planId}/reconcile`, {});
+      const status = applied ? 'applied_reconciled' : 'not_applied';
+      assert.equal(recovered.status, 200, JSON.stringify(recovered));
+      assert.equal(recovered.body.status, status);
+      assert.deepEqual(h.calls.slice(callsBeforeRecovery), ['GET']);
+      const stored = await h.call('executor', 'GET', `/api/v1/searchad/changes/${input.planId}`);
+      assert.equal(stored.status, 200, JSON.stringify(stored));
+      assert.equal(stored.body.status, status);
+      assert.deepEqual(stored.body.attempts.filter(a => a.phase !== 'plan').map(a => [a.phase, a.status]),
+        [['execute', 'unknown_outcome'], ['reconcile', status]]);
+      assert.equal(await h.tokenUsed(input), usedAt);
+      assert.deepEqual(await authoritySnapshot(), authorityBefore, 'read recovery cannot restore risk or mint Canary PASS/evidence');
+      const after = await h.call('executor', 'GET', `/api/v1/searchad/circuit?customerId=${customerId}`);
+      assert.equal(after.status, 200, JSON.stringify(after));
+      assert.equal(after.body.state.manualPaused, true);
+      assert.equal(after.body.state.unknownCount, 0, 'exact linked read proof settles only this mutation');
+      assert.equal((await h.pool.query('SELECT suspended FROM searchad_canary_accounts WHERE customer_id=$1', [customerId])).rows[0].suspended, true);
+      const gated = await h.execute(input, true);
+      assert.equal(gated.status, 403, JSON.stringify(gated));
+      assert.equal(gated.body.error.code, 'HTTP_WRITES_DISABLED');
+      await h.account('resume');
+      await h.restart({ ATELIER_HTTP_ALLOW_WRITES: 'true', ATELIER_SEARCHAD_ALLOW_WRITES: 'true' });
+      const replay = await h.execute(input, true);
+      assert.equal(replay.status, 409, JSON.stringify(replay));
+      assert.equal(replay.body.error.code, 'SEARCHAD_CHANGE_PLAN_NOT_EXECUTABLE');
+      assert.equal(replay.body.error.details.status, status);
+      const reapproval = await h.call('executor', 'POST', `/api/v1/searchad/changes/${input.planId}/approve`, { confirmation: 'APPROVE_SEARCHAD_CHANGE' });
+      assert.equal(reapproval.status, 409, JSON.stringify(reapproval));
+      assert.equal(reapproval.body.error.code, 'SEARCHAD_CHANGE_PLAN_NOT_APPROVABLE');
+      assert.equal(await h.tokenUsed(input), usedAt);
+      assert.deepEqual(h.calls.slice(callsBeforeRecovery), ['GET'], 'recovery and restart never repeat the PUT');
+      assert.equal(h.mutations(), 1);
+    });
 
     await t.test('shared production increase denies missing actual Customer net-loss evidence', async st => {
       const h=await fixture(st,'shared'); await h.seed(); const input=await h.approve(1200);
