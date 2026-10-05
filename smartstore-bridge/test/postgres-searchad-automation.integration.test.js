@@ -453,3 +453,132 @@ test('recommend mode records a reviewable recommendation without a plan token or
   assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_write_change_plans')).rows[0].n,0);
   assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_write_approvals')).rows[0].n,0);
 });
+
+for(const lateUnknown of [false,true])test(`fix1 complete legacy unknown to not_applied history stays known across recovery and restart${lateUnknown?' with late unknown projection':''}`,async t=>{
+  if(!native(t))return;
+  const f=await automationFixture(t),run=await f.service.evaluate({customerId:'1001',policyId:f.policy.policyId},f.context);
+  const prepared=await f.service.prepare({customerId:'1001',runId:run.runId},f.context);
+  const token=await f.runtime.approvalService.approve(prepared.planId,{actor:'executor',confirmation:'APPROVE_SEARCHAD_CHANGE'});
+  await f.runtime.approvalService.claim(prepared.planId,token.executionToken);
+  await terminal({...f,writer:f.runtime.repository},prepared.planId,'failed');
+  // A separate ordinary pre-protocol plan has a consumed approval but no ordinal.
+  const legacy=await f.runtime.planService.create({...run.decision.recipe,createdBy:'legacy-executor'});
+  await f.runtime.approvalService.approve(legacy.plan_id,{actor:'legacy-executor',confirmation:'APPROVE_SEARCHAD_CHANGE'});
+  await f.pool.query('UPDATE searchad_write_approvals SET used_at=$2 WHERE plan_id=$1',[legacy.plan_id,iso(at)]);
+  await f.writer.updatePlan(legacy.plan_id,{status:'unknown_outcome'});
+  const unknownId=randomUUID();
+  await f.writer.addAttempt({attempt_id:unknownId,plan_id:legacy.plan_id,phase:'execute',status:'unknown_outcome',created_at:iso(at)});
+  const common={logicalKey:`write:${legacy.plan_id}:execute`,entityType:'nccCampaign',entityId:'cmp-1',ownerId:legacy.plan_id,occurredAt:at};
+  if(!lateUnknown){
+    await f.circuit.repository.projectOnce({customerId:'1001',sourceKind:'write',sourceId:unknownId,event:{...common,outcome:'unknown'},now:at});
+    assert.equal((await f.circuit.repository.getState({customerId:'1001'})).unknownCount,1);
+  }
+  // Use the real existing GET-only reconciliation, then project its 0012 JSON shape.
+  f.runtime.executionService.circuitGuard=null;
+  assert.equal((await f.runtime.executionService.reconcile(legacy.plan_id,{},f.context)).status,'not_applied');
+  const terminalAttempt=(await f.pool.query("SELECT attempt_id FROM searchad_write_attempts WHERE plan_id=$1 AND phase='reconcile'",[legacy.plan_id])).rows[0];
+  await f.circuit.repository.projectOnce({customerId:'1001',sourceKind:'write',sourceId:terminalAttempt.attempt_id,event:{...common,outcome:'succeeded',occurredAt:at+1000},now:at});
+  if(lateUnknown)await f.circuit.repository.projectOnce({customerId:'1001',sourceKind:'write',sourceId:unknownId,event:{...common,outcome:'unknown'},now:at});
+  const unrelated=await f.service.createPolicy({...revisionInput(f),policyId:undefined,expectedRevision:undefined,entityId:'cmp-2'},f.context);
+  const other=await approved(f,'cmp-2');await terminal(f,other.planId,'failed');
+  await f.pool.query("INSERT INTO searchad_daily_risk_capacity(customer_id,risk_date,capacity_units,reserved_units,consumed_units,updated_at) VALUES('1001','2026-10-05',10,2,3,$1)",[iso(at)]);
+  await f.pool.query("UPDATE searchad_canary_accounts SET suspended=true WHERE customer_id='1001'");
+  await f.circuit.pause({customerId:'1001',reason:'independent manual hold'},f.context);
+  await f.circuit.repository.projectOnce({customerId:'1001',sourceKind:'legacy-drift',sourceId:'manual',event:{logicalKey:'manual',outcome:'manual_drift',entityType:'campaign',entityId:'cmp-1',occurredAt:at-1000},now:at});
+  await f.circuit.projectOutcome('1001');
+  const sourceSnapshot=async()=>({attempts:(await f.pool.query('SELECT * FROM searchad_write_attempts ORDER BY attempt_id')).rows,events:(await f.pool.query('SELECT * FROM searchad_circuit_events ORDER BY event_id')).rows,approvals:(await f.pool.query('SELECT * FROM searchad_write_approvals ORDER BY approval_id')).rows,reservations:(await f.pool.query('SELECT * FROM searchad_automation_reservations ORDER BY reservation_id')).rows,risk:(await f.pool.query('SELECT * FROM searchad_daily_risk_capacity')).rows,account:(await f.pool.query("SELECT * FROM searchad_canary_accounts WHERE customer_id='1001'")).rows});
+  const preserved=await sourceSnapshot();
+  let circuit=createCircuitGuard({pool:f.connect(),clock:f.clock});
+  const state=await circuit.repository.getState({customerId:'1001',entityType:'campaign',entityId:'cmp-1'});
+  assert.equal(state.unknownCount,0);assert.equal(state.legacyFailures[f.policy.ruleId],1);
+  assert.equal(state.legacyFailures[unrelated.ruleId],1);assert.equal(state.changedAt,null);
+  const recovered=await circuit.recoverRule({customerId:'1001',policyId:f.policy.policyId,expectedRevision:1,reason:'verified legacy absence',confirmation:'RECOVER_SEARCHAD_KNOWN_FAILURES'},f.context);
+  const terminalEvent=preserved.events.find(event=>event.source_id===terminalAttempt.attempt_id);
+  assert.deepEqual(recovered.selected.legacyEventIds,[String(terminalEvent.event_id)]);
+  circuit=createCircuitGuard({pool:f.connect(),clock:f.clock});
+  const after=await circuit.repository.getState({customerId:'1001',entityType:'campaign',entityId:'cmp-1'});
+  assert.equal(after.unknownCount,0,'audited terminal exemption must never resurrect the earlier unknown');
+  assert.equal(after.legacyFailures[f.policy.ruleId] || 0,0);assert.equal(after.consecutiveFailures[f.policy.ruleId] || 0,0);
+  assert.equal(after.legacyFailures[unrelated.ruleId],1);assert.equal(after.changedAt,null);
+  assert.equal(after.manualPaused,true);assert.equal(after.manualChangedAt,at-1000);
+  assert.deepEqual(await sourceSnapshot(),preserved);
+  assert.ok((await f.service.getRun({customerId:'1001',runId:run.runId},f.context)).revokedAt);
+  assert.equal(f.calls.filter(method=>method==='PUT').length,0);
+});
+
+test('fix1 arbitrary failed legacy events cannot resolve an earlier unknown',async t=>{
+  if(!native(t))return;
+  const f=await automationFixture(t),p=await approved(f);
+  await f.writer.updatePlan(p.planId,{status:'unknown_outcome'});
+  for(const [phase,status] of [['execute','unknown_outcome'],['execute','failed'],['reconcile','failed'],['execute','not_applied']])await f.writer.addAttempt({attempt_id:randomUUID(),plan_id:p.planId,phase,status,created_at:iso(at)});
+  await f.circuit.projectOutcome('1001');
+  const state=await f.circuit.repository.getState({customerId:'1001'});
+  assert.equal(state.unknownCount,1);
+  await assert.rejects(f.circuit.recoverRule({customerId:'1001',policyId:f.policy.policyId,expectedRevision:1,reason:'cannot clear unknown',confirmation:'RECOVER_SEARCHAD_KNOWN_FAILURES'},f.context),{code:'SEARCHAD_CIRCUIT_RECOVERY_UNRESOLVED'});
+});
+
+for(const failure of ['begin','before-commit','after-commit','rollback-failure','settlement-failure'])test(`fix1 max1 pool releases failed claim before settlement: ${failure}`,async t=>{
+  if(!native(t))return;
+  const {createPostgresPool}=await import('../src/infrastructure/postgres/pool.js');
+  const f=await automationFixture(t),run=await f.service.evaluate({customerId:'1001',policyId:f.policy.policyId},f.context),prepared=await f.service.prepare({customerId:'1001',runId:run.runId},f.context);
+  await f.runtime.approvalService.approve(prepared.planId,{actor:'executor',confirmation:'APPROVE_SEARCHAD_CHANGE'});
+  const approval=(await f.pool.query('SELECT * FROM searchad_write_approvals WHERE plan_id=$1',[prepared.planId])).rows[0];
+  const small=createPostgresPool({connectionString:f.databaseUrl,max:1,sslMode:'disable',logger:{error(){}}});
+  const primary=new Error(`injected ${failure}`),held=new Set(),trace=[],discards=[];let acquisitions=0,injected=false,timer;
+  const pool={query:small.query.bind(small),async connect(){
+    const client=await small.connect(),index=++acquisitions;trace.push(`acquire:${index}`);
+    let released=false;
+    const wrapped={release(discard){if(released)return;released=true;held.delete(wrapped);trace.push(`release:${index}`);if(index===2)discards.push(Boolean(discard));client.release(discard);},async query(sql,args){
+      if(index===2 && failure==='rollback-failure' && sql==='ROLLBACK')throw new Error('secondary rollback failure');
+      if(index===3 && failure==='settlement-failure' && sql==='BEGIN')throw new Error('secondary retirement failure');
+      if(index===2 && !injected && (['begin','rollback-failure','settlement-failure'].includes(failure)?sql==='BEGIN':sql==='COMMIT')){
+        injected=true;
+        if(['after-commit','rollback-failure'].includes(failure))await client.query(sql,args);
+        throw primary;
+      }
+      return client.query(sql,args);
+    }};held.add(wrapped);return wrapped;
+  }};
+  f.runtime.repository.pool=pool;f.runtime.repository.automation.pool=pool;
+  try {
+    const operation=f.runtime.repository.claimApproval({planId:prepared.planId,tokenHash:approval.token_hash,now:iso(at)}).then(value=>({type:'fulfilled',value}),error=>({type:'rejected',error}));
+    const result=await Promise.race([operation,new Promise(resolve=>{timer=setTimeout(()=>resolve({type:'deadline'}),2000);})]);
+    clearTimeout(timer);
+    if(result.type==='deadline'){
+      // Cleanup only: release the rolled-back client so the failing test can drain.
+      // The deadline remains an assertion failure, never a successful fallback.
+      for(const client of [...held])client.release(new Error('watchdog test cleanup'));
+      await operation;
+    }
+    assert.equal(result.type,'rejected',`claim deadlocked at max1: ${trace.join(',')}`);
+    assert.equal(result.error,primary,'best-effort settlement must preserve the original error');
+    assert.ok(trace.indexOf('release:2')<trace.indexOf('acquire:3'));
+    assert.deepEqual(discards,[failure==='rollback-failure']);
+    assert.equal((await small.query('SELECT 1 AS available')).rows[0].available,1);
+    assert.equal((await f.service.getRun({customerId:'1001',runId:run.runId},f.context)).state,failure==='settlement-failure'?'claim_pending':'manual_review');
+    const committed=failure==='after-commit';
+    assert.equal((await small.query('SELECT count(*)::int AS n FROM searchad_write_execution_claims')).rows[0].n,Number(committed));
+    assert.equal(Boolean((await small.query('SELECT used_at FROM searchad_write_approvals WHERE approval_id=$1',[approval.approval_id])).rows[0].used_at),committed);
+    assert.equal((await small.query('SELECT state FROM searchad_automation_reservations WHERE run_id=$1',[run.runId])).rows[0].state,committed?'consumed':'reserved');
+    assert.equal(f.calls.filter(method=>method==='PUT').length,0);
+  } finally {clearTimeout(timer);for(const client of [...held])client.release(new Error('test cleanup'));await small.end();}
+});
+
+for(const after of [false,true])test(`fix1 current insert acknowledgment loss ${after?'after':'before'} persistence cannot select nonexistent authority`,async t=>{
+  if(!native(t))return;
+  const f=await automationFixture(t),append=f.repository.appendCurrent.bind(f.repository);
+  f.repository.appendCurrent=async row=>{if(after)await append(row);throw new Error('injected current observation persistence error');};
+  const input={customerId:'1001',policyId:f.policy.policyId};
+  const failed=await f.service.evaluate(input,f.context);
+  assert.equal(failed.state,'blocked');assert.equal(failed.decision.selected.current,null);
+  assert.ok(failed.decision.reasons.includes('CURRENT_VALUE_UNAVAILABLE'));
+  assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_automation_current_observations')).rows[0].n,Number(after));
+  await assert.rejects(f.service.prepare({customerId:'1001',runId:failed.runId},f.context));
+  f.repository.appendCurrent=append;
+  const recovered=await f.service.evaluate(input,f.context),repeat=await f.service.evaluate(input,f.context);
+  assert.equal(recovered.state,'ready');assert.equal(recovered.runId,repeat.runId);
+  const prepared=await f.service.prepare({customerId:'1001',runId:recovered.runId},f.context);
+  assert.equal((await f.service.prepare({customerId:'1001',runId:repeat.runId},f.context)).planId,prepared.planId);
+  assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_write_change_plans')).rows[0].n,1);
+  assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_write_approvals')).rows[0].n,0);
+});

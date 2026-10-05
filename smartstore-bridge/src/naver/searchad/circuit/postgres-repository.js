@@ -40,9 +40,12 @@ function sourceEvent(kind, row) {
 const LEGACY_SOURCE_COLUMNS = `
   (SELECT a.phase FROM searchad_write_attempts a WHERE c.source_kind='write' AND a.attempt_id::text=c.source_id) AS legacy_phase,
   (SELECT a.status FROM searchad_write_attempts a WHERE c.source_kind='write' AND a.attempt_id::text=c.source_id) AS legacy_status,
-  EXISTS(SELECT 1 FROM searchad_write_attempts a JOIN searchad_write_execution_claims claim USING(plan_id) WHERE c.source_kind='write' AND a.attempt_id::text=c.source_id) AS protocol_claim`;
+  EXISTS(SELECT 1 FROM searchad_write_attempts a JOIN searchad_write_execution_claims claim USING(plan_id) WHERE c.source_kind='write' AND a.attempt_id::text=c.source_id) AS protocol_claim,
+  EXISTS(SELECT 1 FROM searchad_write_attempts a JOIN searchad_write_change_plans p USING(plan_id)
+    WHERE c.source_kind='write' AND a.attempt_id::text=c.source_id AND p.customer_id=c.customer_id
+    AND a.phase='reconcile' AND a.status='not_applied' AND p.status='not_applied') AS proved_not_applied`;
 function projectedEvent(row) {
-  const event={...row.event_json,eventId:row.event_id};
+  const event={...row.event_json,eventId:row.event_id,provedNotApplied:row.proved_not_applied===true};
   if(!event.ordinal){
     event.entityType=event.entityType?.replace(/^ncc/,'').toLowerCase();
     if(row.legacy_status==='not_applied')event.outcome='failed';
@@ -50,6 +53,21 @@ function projectedEvent(row) {
     if(row.protocol_claim)event.counterEligible=false;
   }
   return event;
+}
+/** Resolve the exact logical terminal before applying any failure exemption.
+ * Proved not_applied is known but unsuccessful. An arbitrary failed event cannot
+ * clear unknown, and an older unknown cannot reappear after terminal recovery. */
+function reduceLegacyEvents(events) {
+  const logical = new Map();
+  for (const event of events) {
+    if (!['failed','unknown','succeeded'].includes(event.outcome)) continue;
+    const prior = logical.get(event.logicalKey);
+    if (!prior || event.provedNotApplied || (!prior.provedNotApplied &&
+        (event.outcome === 'succeeded' || (prior.outcome !== 'succeeded' && event.outcome === 'unknown')))) {
+      logical.set(event.logicalKey, event);
+    }
+  }
+  return logical;
 }
 /** All mutable primary outcome writers use account-first transactions. Projection
  * takes the same lock. Final fence reads never mutate these ledgers. */
@@ -94,7 +112,7 @@ export class PostgresCircuitRepository {
       const mapped=policyRules.find(row=>row.policy_id===event.ruleId)?.rule_id || rules.find(row=>row.entity_type===event.entityType && row.entity_id===event.entityId)?.rule_id;
       if(mapped)event.ruleId=mapped;
     }
-    const logical = new Map(); const state = { manualPaused: row?.manual_paused === true, reason: row?.reason || null, unknownCount: 0, counterBasis: 'unresolved_logical_failure_upper_bound', consecutiveFailures: {}, orderedConsecutiveFailures: {}, legacyFailures: {}, changedAt: null, manualChangedAt: null, dailyLossNetKrw: null };
+    const logical = reduceLegacyEvents(events.filter(event => !event.ordinal)); const state = { manualPaused: row?.manual_paused === true, reason: row?.reason || null, unknownCount: 0, counterBasis: 'unresolved_logical_failure_upper_bound', consecutiveFailures: {}, orderedConsecutiveFailures: {}, legacyFailures: {}, changedAt: null, manualChangedAt: null, dailyLossNetKrw: null };
     const ordered = new Map();
     const recovered = (await client.query('SELECT selected_json FROM searchad_circuit_failure_recoveries WHERE customer_id=$1', [customerId])).rows;
     const recoveredOutcomes = new Set(recovered.flatMap(row => row.selected_json?.outcomeIds || []));
@@ -102,11 +120,6 @@ export class PostgresCircuitRepository {
     for (const event of events) {
       if (event.ordinal) { const prior = ordered.get(event.ordinal); if (!prior || event.version > prior.version) ordered.set(event.ordinal,event); continue; }
       if (event.outcome === 'manual_drift' && event.entityType === entityType && event.entityId === entityId) state.manualChangedAt = Math.max(state.manualChangedAt || 0, event.occurredAt);
-      if (!['failed','unknown','succeeded'].includes(event.outcome)) continue;
-      const prior = logical.get(event.logicalKey);
-      // A verified outcome for this exact one-shot mutation resolves ambiguity.
-      // Neutral intent/acceptance and unlinked read events cannot resolve it.
-      if (!prior || event.outcome === 'succeeded' || (prior.outcome !== 'succeeded' && event.outcome === 'unknown')) logical.set(event.logicalKey, event);
     }
     for (const event of logical.values()) {
       if (event.outcome === 'unknown') state.unknownCount++;
@@ -194,9 +207,8 @@ export class PostgresCircuitRepository {
       const outcomes=(await client.query(`SELECT terminal.outcome_id FROM searchad_write_execution_claims c JOIN LATERAL(SELECT outcome_id,outcome FROM searchad_write_execution_outcomes o WHERE o.customer_id=c.customer_id AND o.ordinal=c.ordinal ORDER BY version DESC LIMIT 1) terminal ON true WHERE c.customer_id=$1 AND c.rule_id=$2 AND terminal.outcome IN('failed','not_applied')`,[customerId,policy.rule_id])).rows.map(row=>row.outcome_id).filter(id=>!recoveredOutcomes.has(id));
       const events=(await client.query(`SELECT c.event_id::text,c.event_json,${LEGACY_SOURCE_COLUMNS} FROM searchad_circuit_events c WHERE c.customer_id=$1 AND NOT(c.event_json ? 'ordinal')
         AND NOT EXISTS(SELECT 1 FROM searchad_write_execution_outcomes o WHERE c.source_kind='write' AND o.source_attempt_id::text=c.source_id) ORDER BY c.event_id`,[customerId])).rows;
-      const logical=new Map();
-      for(const row of events){const event=projectedEvent(row);row.event_json=event;if(!['failed','unknown','succeeded'].includes(event.outcome))continue;const previous=logical.get(event.logicalKey);if(!previous || event.outcome==='succeeded' || (previous.event_json.outcome!=='succeeded' && event.outcome==='unknown'))logical.set(event.logicalKey,row);}
-      const legacy=[...logical.values()].filter(row=>row.event_json.counterEligible!==false && row.event_json.outcome==='failed' && !recoveredLegacy.has(row.event_id) && (row.event_json.ruleId===policy.rule_id || row.event_json.ruleId===policy.policy_id || (row.event_json.entityType===policy.entity_type && row.event_json.entityId===policy.entity_id))).map(row=>row.event_id);
+      const logical=reduceLegacyEvents(events.map(projectedEvent));
+      const legacy=[...logical.values()].filter(event=>event.counterEligible!==false && event.outcome==='failed' && !recoveredLegacy.has(event.eventId) && (event.ruleId===policy.rule_id || event.ruleId===policy.policy_id || (event.entityType===policy.entity_type && event.entityId===policy.entity_id))).map(event=>event.eventId);
       if(!outcomes.length && !legacy.length)throw circuitError('RECOVERY_EMPTY',409);
       const revision=(await client.query('UPDATE searchad_automation_rules SET recovery_revision=recovery_revision+1 WHERE customer_id=$1 AND rule_id=$2 RETURNING recovery_revision',[customerId,policy.rule_id])).rows[0].recovery_revision;
       const recoveryId=randomUUID(), selected={outcomeIds:outcomes,legacyEventIds:legacy};

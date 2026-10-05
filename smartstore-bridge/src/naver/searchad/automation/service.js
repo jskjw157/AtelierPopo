@@ -32,7 +32,11 @@ export class AutomationService {
     const policy=await this.repository.findPolicy(input); if (!policy) throw automationError('POLICY_NOT_FOUND',404);
     const now=this.clock(),slotAt=logicalSlot(input.slotAt,now),identity=await this.identityResolver(input.customerId);
     let current=null;
-    try { current=await observeCurrent({policy,runtime:await this.getWriteRuntime(),identity,identityResolver:this.identityResolver,clock:this.clock}); await this.repository.appendCurrent(current); }
+    try {
+      const observed=await observeCurrent({policy,runtime:await this.getWriteRuntime(),identity,identityResolver:this.identityResolver,clock:this.clock});
+      await this.repository.appendCurrent(observed);
+      current=observed; // Select only an acknowledged immutable observation.
+    }
     catch(error) { if (error?.code === 'SEARCHAD_AUTOMATION_IDENTITY_CHANGED') throw error; }
     const selected={...(await this.evidenceSelector.select({...policy,identity,now})),identity,current};
     const recipe=buildRecipe(policy,current),reasons=[...recipe.reasons];

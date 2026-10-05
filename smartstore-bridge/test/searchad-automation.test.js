@@ -42,3 +42,19 @@ test('role OpenAPI exposes complete automation inputs and explicit recovery with
   const body=operator.paths['/api/v1/searchad/automation/evaluate'].post.requestBody.content['application/json'].schema;
   assert.deepEqual(Object.keys(body.properties).sort(),['customerId','policyId','slotAt']);
 });
+
+test('fix1 current observation persistence failure cannot produce a ready decision',async()=>{
+  const currentPolicy={...validatePolicy({...policy,mode:'approve',enabled:true}),policyId:'00000000-0000-0000-0000-000000000001',revision:1,ruleId:'rule'};
+  const identity={customerId:'1001'},context={principal:{principalId:'operator',role:'operator',customerIds:['1001']}};
+  const service=new AutomationService({
+    repository:{async findPolicy(){return currentPolicy;},async appendCurrent(){throw new Error('injected storage failure');},async createDecisionOnce(input){return input;}},
+    evidenceSelector:{async select(){return {stats:{responseSha:'fixture'}};}},
+    circuit:{async evaluate(){return {allowed:true,reasons:[]};}},
+    getWriteRuntime:()=>({remote:{async read(){return {value:{nccCampaignId:'c1',dailyBudget:1000,userLock:false}};}}}),
+    identityResolver:()=>identity,clock:()=>Date.parse('2026-10-05T03:00:00Z')
+  });
+  const result=await service.evaluate({customerId:'1001',policyId:currentPolicy.policyId},context);
+  assert.equal(result.state,'blocked');assert.equal(result.decision.allowed,false);
+  assert.equal(result.decision.selected.current,null);
+  assert.ok(result.decision.reasons.includes('CURRENT_VALUE_UNAVAILABLE'));
+});

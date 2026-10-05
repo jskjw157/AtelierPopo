@@ -234,8 +234,10 @@ export class PostgresSearchAdWriteRepository {
       if(row.used_at)throw new SearchAdWriteError('SEARCHAD_EXECUTION_TOKEN_USED','Execution token is consumed.',{},409);
       if(Date.parse(row.expires_at)<=Date.parse(now))throw new SearchAdWriteError('SEARCHAD_EXECUTION_TOKEN_EXPIRED','Execution token is expired.',{},409);
     });
-    const client = await this.pool.connect();
+    let client, claimError;
+    let discardClient = false;
     try {
+      client = await this.pool.connect();
       await client.query('BEGIN');
       await this.lockAccountForPlan(client, planId);
       if(pending)await this.automation.planAuthority(planId,{client,states:['claim_pending']});
@@ -286,12 +288,22 @@ export class PostgresSearchAdWriteRepository {
       await client.query('COMMIT');
       return { ...hydrate(claimed.rows[0]), execution_ordinal: ordinal };
     } catch (error) {
-      await rollbackQuietly(client);
-      if(pending)try{await this.automation.settleRun({customerId:pending.run.customerId,runId:pending.run.runId,state:'manual_review'});}catch{}
-      throw error;
+      claimError = error;
+      if (client) {
+        try { await client.query('ROLLBACK'); }
+        catch { discardClient = true; }
+      }
     } finally {
-      client.release();
+      // Retirement opens another transaction. Release this slot first, even
+      // when COMMIT acknowledgement was lost or rollback could not complete.
+      try { client?.release(discardClient); }
+      catch (error) { if (!claimError) throw error; }
     }
+    if (pending) {
+      try { await this.automation.settleRun({customerId:pending.run.customerId,runId:pending.run.runId,state:'manual_review'}); }
+      catch { /* Preserve the primary claim error and durable pending authority. */ }
+    }
+    throw claimError;
   }
 
   async addAttempt(attempt) {
