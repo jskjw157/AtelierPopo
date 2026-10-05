@@ -1,0 +1,189 @@
+name: HAAR Orbit Product Mapping And Local Draft Once
+on:
+  push:
+    branches: [feat/haar-meta-ads-phase1]
+    paths: ['.github/workflows/haar-orbit-map-and-local-draft-once.yml']
+permissions:
+  contents: read
+concurrency:
+  group: haar-social-studio-hostinger
+  cancel-in-progress: false
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+      SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
+      SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Map Orbit product and create one non-spending local draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_PRIVATE_KEY"
+          mkdir -p ~/.ssh /tmp/haar-orbit-draft
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/haar_hostinger
+          chmod 600 ~/.ssh/haar_hostinger
+          ssh -i ~/.ssh/haar_hostinger -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" 'if [ "$(id -u)" = 0 ]; then exec bash -s; else exec sudo -n bash -s; fi' <<'REMOTE' > /tmp/haar-orbit-draft/report.json
+          set -euo pipefail
+          APP_DIR=/opt/haar-social-studio/app
+          APP_ID=$(docker ps -q --filter label=com.docker.compose.service=app | while read -r id; do
+            wd=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$id")
+            [ "$wd" = "$APP_DIR" ] && echo "$id"
+          done)
+          test "$(printf '%s\n' "$APP_ID" | sed '/^$/d' | wc -l)" -eq 1
+          docker exec -i "$APP_ID" node --input-type=module - <<'NODE'
+          import { randomUUID } from 'node:crypto';
+          import { pool } from './server/db.js';
+          import { adsServices } from './server/meta/ads/instance.js';
+
+          const PRODUCT_NAME='Orbit Silver Earring';
+          const PRODUCT_URL='https://haar.co.kr/product/orbit-silver-earring/43/category/72/display/1/';
+          const POST_ID='17960008077192527';
+          const CAMPAIGN_TITLE='차분한 룩에, 선명한 디테일.';
+
+          const owner=(await pool.query("SELECT id FROM users WHERE role='owner' AND status='active' ORDER BY created_at LIMIT 1")).rows[0];
+          if(!owner) throw new Error('No active owner');
+
+          const status=await adsServices.status(owner.id);
+          if(!status.selectedAccount || status.selectedAccount.name!=='HAAR 광고 계정') throw new Error('HAAR ad account is not selected');
+          if(status.executionEnabled) throw new Error('Paid delivery gate unexpectedly enabled');
+
+          const sourceRows=(await pool.query(`
+            SELECT c.id AS campaign_id,c.product_id,pv.id AS post_variant_id,pv.media_asset_ids
+              FROM campaigns c
+              JOIN post_variants pv ON pv.campaign_id=c.id
+             WHERE c.title=$1
+               AND pv.platform='instagram'
+               AND pv.publish_state='published'
+               AND pv.external_post_id=$2
+               AND jsonb_array_length(pv.media_asset_ids)=1
+          `,[CAMPAIGN_TITLE,POST_ID])).rows;
+          if(sourceRows.length!==1) throw new Error(`Expected one Orbit source post, found ${sourceRows.length}`);
+          const source=sourceRows[0];
+          const assetId=source.media_asset_ids?.[0];
+          const asset=(await pool.query("SELECT id,status,media_type FROM media_assets WHERE id=$1",[assetId])).rows[0];
+          if(!asset || asset.status!=='ready' || asset.media_type!=='image') throw new Error('Orbit source media is not a ready image');
+
+          const existingProducts=(await pool.query(
+            "SELECT * FROM products WHERE product_url=$1 OR lower(name)=lower($2) ORDER BY created_at",
+            [PRODUCT_URL,PRODUCT_NAME]
+          )).rows;
+          let product;
+          if(existingProducts.length===0){
+            const id=randomUUID();
+            product=(await pool.query(`
+              INSERT INTO products(id,name,category,confirmed_material,variant,price,product_url,key_points,active)
+              VALUES($1,$2,'Earring','925 Silver',NULL,120000,$3,'[]'::jsonb,TRUE)
+              RETURNING *
+            `,[id,PRODUCT_NAME,PRODUCT_URL])).rows[0];
+          } else {
+            const ids=[...new Set(existingProducts.map(p=>p.id))];
+            if(ids.length!==1) throw new Error('Ambiguous Orbit product rows');
+            product=(await pool.query(`
+              UPDATE products
+                 SET name=$2,category='Earring',confirmed_material='925 Silver',price=120000,
+                     product_url=$3,active=TRUE,updated_at=NOW()
+               WHERE id=$1
+               RETURNING *
+            `,[ids[0],PRODUCT_NAME,PRODUCT_URL])).rows[0];
+          }
+
+          if(source.product_id && source.product_id!==product.id) throw new Error('Campaign is already mapped to a different product');
+          await pool.query("UPDATE campaigns SET product_id=$1,updated_at=NOW() WHERE id=$2",[product.id,source.campaign_id]);
+
+          const before=await adsServices.hierarchy(owner.id);
+          const beforeCounts={campaigns:before.campaigns?.length||0,adsets:before.adsets?.length||0,ads:before.ads?.length||0};
+
+          const existingDraft=(await pool.query(`
+            SELECT * FROM meta_ad_drafts
+             WHERE created_by=$1
+               AND product_id=$2
+               AND post_variant_id=$3
+               AND campaign_name=$4
+             ORDER BY created_at DESC
+             LIMIT 1
+          `,[owner.id,product.id,source.post_variant_id,'HAAR TEST - Orbit Silver Earring - LOCAL DRAFT ONLY'])).rows[0];
+
+          let draft=existingDraft;
+          if(!draft){
+            const start=new Date(Date.now()+24*60*60*1000);
+            const end=new Date(start.getTime()+7*24*60*60*1000);
+            draft=await adsServices.drafts.create(owner.id,{
+              clientRequestId:randomUUID(),
+              sourceType:'post',
+              productId:product.id,
+              postVariantId:source.post_variant_id,
+              mediaAssetIds:[],
+              campaignName:'HAAR TEST - Orbit Silver Earring - LOCAL DRAFT ONLY',
+              objective:'TRAFFIC',
+              landingUrl:'',
+              primaryText:'',
+              headline:'',
+              callToAction:'SHOP_NOW',
+              budgetType:'daily',
+              budgetAmount:'20000',
+              totalSpendLimit:null,
+              startAt:start.toISOString(),
+              endAt:end.toISOString(),
+              countries:['KR'],
+              ageMin:25,
+              ageMax:39,
+              placements:['instagram'],
+              pixelId:null
+            });
+          }
+
+          const after=await adsServices.hierarchy(owner.id);
+          const afterCounts={campaigns:after.campaigns?.length||0,adsets:after.adsets?.length||0,ads:after.ads?.length||0};
+          if(JSON.stringify(beforeCounts)!==JSON.stringify(afterCounts)) throw new Error('Meta hierarchy changed during local-only draft creation');
+          if(draft.status!=='draft' || draft.external_campaign_id || draft.external_adset_id || draft.external_ad_id) throw new Error('Local draft unexpectedly has Meta delivery IDs');
+          if(draft.landing_url!==PRODUCT_URL) throw new Error('Product URL did not propagate into draft');
+
+          const mapping=(await pool.query(`
+            SELECT c.product_id,p.id,p.name,p.price,p.product_url
+              FROM campaigns c JOIN products p ON p.id=c.product_id
+             WHERE c.id=$1
+          `,[source.campaign_id])).rows[0];
+          if(!mapping || mapping.id!==product.id) throw new Error('Campaign-product mapping verification failed');
+
+          console.log(JSON.stringify({
+            product:{name:product.name,price:Number(product.price),url:product.product_url,active:product.active},
+            source:{campaignTitle:CAMPAIGN_TITLE,instagramPostId:POST_ID,mediaCount:1},
+            mappingRestored:true,
+            draft:{
+              id:draft.id,status:draft.status,objective:draft.objective,landingUrl:draft.landing_url,
+              budgetType:draft.budget_type,budgetAmountMinor:Number(draft.budget_amount_minor),currency:draft.currency,
+              startAt:draft.start_at,endAt:draft.end_at,audience:draft.audience,placements:draft.placements
+            },
+            metaHierarchyBefore:beforeCounts,
+            metaHierarchyAfter:afterCounts,
+            noMetaObjectsCreated:true,
+            executionEnabled:false
+          },null,2));
+          await pool.end();
+          NODE
+          REMOTE
+          python3 - <<'PY'
+          import json
+          p='/tmp/haar-orbit-draft/report.json'
+          d=json.load(open(p))
+          assert d['mappingRestored'] is True
+          assert d['draft']['status']=='draft'
+          assert d['draft']['landingUrl']=='https://haar.co.kr/product/orbit-silver-earring/43/category/72/display/1/'
+          assert d['metaHierarchyBefore']==d['metaHierarchyAfter']
+          assert d['noMetaObjectsCreated'] is True
+          assert d['executionEnabled'] is False
+          print('Orbit mapping restored and local draft verified; no Meta objects created.')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haar-orbit-local-draft-verification
+          path: /tmp/haar-orbit-draft/report.json
+          retention-days: 7
+      - name: Remove SSH material
+        if: always()
+        run: rm -f ~/.ssh/haar_hostinger
