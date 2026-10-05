@@ -219,7 +219,8 @@ export class ActiveCanaryService {
       return result;
     } catch (error) {
       if (isAmbiguousSearchAdWriteError(error)) {
-        return this.markUnknown(run, phase, descriptor, error);
+        // Observe the primary rejection before finally awaits projection.
+        return await this.markUnknown(run, phase, descriptor, error);
       }
       await this.settleMutation(run, { status: 'failed', lastError: safeError(error) }, { phase, status: 'failed', operationKey: descriptor?.operationKey, error });
       throw error;
