@@ -1,3 +1,6 @@
+import { ProfitabilityService } from './profitability/service.js';
+import { RecommendationService } from './profitability/recommendation-service.js';
+import { SearchAdRecommendationToolAdapter } from './profitability/tool-adapter.js';
 import { createCommerceEvidenceProviders } from './profitability/commerce-provider.js';
 import { ProductMappingService } from './profitability/mapping-service.js';
 import { ProductEvidenceService } from './profitability/product-evidence-service.js';
@@ -14,7 +17,7 @@ import { createPostgresPool, closePostgresPool } from '../../infrastructure/post
 import { loadSearchAdReportingConfig } from './reporting/config.js';
 import { createReportingRuntime } from './reporting/runtime.js';
 import { reportingError } from './reporting/contracts.js';
-const TABLES = ['searchad_customer_channel_bindings','searchad_commerce_observations','searchad_product_cost_inputs','searchad_stats_observations', 'searchad_report_blobs', 'searchad_report_ingestions', 'searchad_report_rows_staging', 'searchad_daily_metrics', 'searchad_conversion_metrics', 'searchad_search_terms', 'searchad_master_snapshots', 'searchad_spend_evidence', 'searchad_circuit_policies', 'searchad_circuit_state', 'searchad_circuit_events', 'searchad_circuit_projection_cursors', 'searchad_automation_reservations', 'searchad_automation_policy_revisions', 'searchad_write_execution_claims', 'searchad_write_execution_outcomes'];
+const TABLES = ['searchad_profitability_snapshots','searchad_recommendations','searchad_customer_channel_bindings','searchad_commerce_observations','searchad_product_cost_inputs','searchad_stats_observations', 'searchad_report_blobs', 'searchad_report_ingestions', 'searchad_report_rows_staging', 'searchad_daily_metrics', 'searchad_conversion_metrics', 'searchad_search_terms', 'searchad_master_snapshots', 'searchad_spend_evidence', 'searchad_circuit_policies', 'searchad_circuit_state', 'searchad_circuit_events', 'searchad_circuit_projection_cursors', 'searchad_automation_reservations', 'searchad_automation_policy_revisions', 'searchad_write_execution_claims', 'searchad_write_execution_outcomes'];
 async function assertSchema(pool) {
   try {
     const result = await pool.query('SELECT name,to_regclass(name)::text AS relation FROM unnest($1::text[]) AS name', [TABLES]);
@@ -62,6 +65,11 @@ export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = proce
     const evidenceService=new ProductEvidenceService({repository:runtime.productRepository,mappingService,providers:runtime.commerceProviders,identityResolver:runtime.identityResolver,clock});
     runtime.productMappingService=Object.fromEntries(['bindCustomerChannel','createRevision','appendCost'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>mappingService[method](input,context))]));
     runtime.productEvidenceService=Object.fromEntries(['collect','summary'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>evidenceService[method](input,context))]));
+    const profitabilityService=new ProfitabilityService({repository:runtime.productRepository,productEvidenceService:evidenceService,reportingRepository:runtime.repository,identityResolver:runtime.identityResolver,clock});
+    runtime.recommendationToolAdapter=new SearchAdRecommendationToolAdapter({gateway:app.searchAdGateway,identityResolver:runtime.identityResolver});
+    const recommendationService=new RecommendationService({repository:runtime.productRepository,profitabilityService,toolAdapter:runtime.recommendationToolAdapter,clock});
+    runtime.profitabilityService=Object.fromEntries(['calculate','getLatest'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>profitabilityService[method](input,context))]));
+    runtime.recommendationService=Object.fromEntries(['generate','list'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>recommendationService[method](input,context))]));
     const spendEvidence = reportingConfig.enabled && runtime.repository ? { async select(dispatch, { client, now }) {
       // Producer order is Customer advisory -> report date advisory -> job row.
       // The final account fence holds this shared producer lock through initiation.
@@ -75,7 +83,7 @@ export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = proce
     runtime.circuitRepository = runtime.circuitService.repository;
     runtime.automationRepository = new PostgresAutomationRepository({pool,clock,identityResolver:runtime.identityResolver});
     runtime.circuitService.automationRepository = runtime.automationRepository;
-    const automationService = new AutomationService({repository:runtime.automationRepository,evidenceSelector:{select:input=>runtime.repository?.selectAutomationEvidence(input) || {stats:null,spend:null}},circuit:runtime.circuitService,getWriteRuntime,identityResolver:runtime.identityResolver,clock});
+    const automationService = new AutomationService({repository:runtime.automationRepository,evidenceSelector:{select:async input=>({...(await runtime.repository?.selectAutomationEvidence(input)||{stats:null,spend:null}),profitability:await profitabilityService.selectForAutomation(input)})},circuit:runtime.circuitService,getWriteRuntime,identityResolver:runtime.identityResolver,clock});
     runtime.automationService = Object.fromEntries(['createPolicy','listPolicies','listRuns','getRun','evaluate','prepare','executeApproved','reconcile'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>automationService[method](input,context))]));
     const reportingStatus = runtime.status.bind(runtime);
     runtime.workerRuntime=await createWorkerRuntime({completion:runtime,pool,env,clock,logger});

@@ -272,7 +272,7 @@ function inspect(source, ast, {root,file}) {
   // Conservative fixed-point alias propagation; never assume name shadowing
   // makes a suspicious call safe. Approved gateway methods are not raw clients.
   for(let pass=0;pass<=nodes.length;pass++){
-    const before=JSON.stringify([...bindings])+JSON.stringify([...constants]);
+    const before=JSON.stringify([...bindings])+JSON.stringify([...constants],(_,value)=>typeof value==='bigint'?{bigint:String(value)}:value);
     for(const node of nodes){
       if(node.type==='ImportDeclaration'){
         if(networkModule.test(node.source.value))for(const spec of node.specifiers)bindings.set(spec.local.name,spec.type==='ImportNamespaceSpecifier'||spec.type==='ImportDefaultSpecifier' ? 'network_module' : spec.imported?.name==='createServer' ? 'inbound_server' : node.source.value==='@aws-sdk/client-s3' ? 'sdk_constructor' : 'network');
@@ -284,7 +284,7 @@ function inspect(source, ast, {root,file}) {
       if(['FunctionExpression','FunctionDeclaration','ArrowFunctionExpression'].includes(node.type))for(const param of node.params)bind(param,null);
       if(node.type==='AssignmentExpression')bind(node.left,signature(node.right));
     }
-    if(before===JSON.stringify([...bindings])+JSON.stringify([...constants]))break;
+    if(before===JSON.stringify([...bindings])+JSON.stringify([...constants],(_,value)=>typeof value==='bigint'?{bigint:String(value)}:value))break;
   }
   function finding(node,kind,detail,requestDataCandidate=false){
     const ancestors=parents.get(node)||[];

@@ -263,3 +263,8 @@ test('T7_F2_I1_stringify_bare_candidate_and_plain_request_field_do_not_invoke_fa
     assert.deepEqual(scanExecutionSources({root,transportAllowlist:[],requestDataAllowlist:[]}).violations,[]);
   });
 });
+
+test('exact money BigInt constants are analyzed and do not disable forbidden-call checks',()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'searchad-bigint-'));
+  try{fs.mkdirSync(path.join(dir,'src'),{recursive:true});fs.writeFileSync(path.join(dir,'src','money.js'),'const scale=10000n; export const amount=x=>BigInt(x)*scale;');assert.equal(scanExecutionSources({root:dir,transportAllowlist:[],requestDataAllowlist:[]}).violations.length,0);fs.appendFileSync(path.join(dir,'src','money.js'),' export const bad=()=>fetch("https://example.invalid");');assert.ok(scanExecutionSources({root:dir,transportAllowlist:[],requestDataAllowlist:[]}).violations.some(v=>v.kind!=="parse_error"));}finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
