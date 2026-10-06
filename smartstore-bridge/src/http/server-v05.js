@@ -41,6 +41,15 @@ import { HttpError } from './errors.js';
 
 const SERVICE_VERSION = '0.5.1';
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const LOG_METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
+// Exception codes can originate upstream. Log only fixed boundary diagnostics;
+// other failures still retain their static route, HTTP status and generic code.
+const LOG_ERROR_CODES = new Set([
+  'CORS_ORIGIN_NOT_ALLOWED', 'METHOD_NOT_ALLOWED', 'ROUTE_NOT_FOUND', 'UNAUTHORIZED',
+  'RATE_LIMITED', 'API_AUTH_NOT_CONFIGURED', 'SEARCHAD_HTTP_AUTH_NOT_CONFIGURED',
+  'SEARCHAD_ROLE_FORBIDDEN', 'SEARCHAD_CUSTOMER_FORBIDDEN', 'PAYLOAD_TOO_LARGE',
+  'UNSUPPORTED_MEDIA_TYPE', 'INVALID_JSON', 'SEARCHAD_REPORTING_QUERY_INVALID', 'INTERNAL_ERROR'
+]);
 
 export function createHttpApiV05({ app, env = process.env, logger = defaultLogger, version = SERVICE_VERSION } = {}) {
   if (!app) throw new Error('createHttpApiV05에는 bootstrap 결과 app이 필요합니다.');
@@ -129,6 +138,9 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
 
   const server = http.createServer(async (req, res) => {
     const requestId = String(req.headers['x-request-id'] || randomUUID()).slice(0, 128);
+    const logRequestId = randomUUID();
+    const logMethod = LOG_METHODS.has(req.method) ? req.method : 'OTHER';
+    let logRoute = null;
     res.setHeader('X-Request-Id', requestId);
     applyCors(req, res, httpConfig);
     if (res.hasHeader('Access-Control-Allow-Methods')) {
@@ -156,6 +168,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
         }
         throw new HttpError(404, 'ROUTE_NOT_FOUND', '요청한 API 경로를 찾을 수 없습니다.');
       }
+      logRoute = selected.pattern.source;
       selected.pattern.lastIndex = 0;
       const match = selected.pattern.exec(pathname);
       let authenticatedToken = '';
@@ -186,9 +199,9 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       const bodyLimit = Math.max(httpConfig.maxBodyBytes, Number(selected.maxBodyBytes || 0));
       const body = BODY_METHODS.has(req.method || '') ? await readJsonBody(req, bodyLimit) : {};
       logger.info('HTTP request', {
-        requestId,
-        method: req.method,
-        pathname,
+        requestId: logRequestId,
+        method: logMethod,
+        route: logRoute,
         authenticated: selected.auth,
         write: selected.write,
         searchAdRole: selected.searchAdRole || null,
@@ -198,8 +211,8 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     } catch (error) {
       const { status, body } = errorPayloadV05(error, requestId, { exposeInternal: httpConfig.exposeInternalErrors });
       logger.error('HTTP request failed', {
-        requestId, method: req.method, url: req.url, status,
-        name: error.name, code: error.code, message: error.message
+        requestId: logRequestId, method: logMethod, route: logRoute, status,
+        code: LOG_ERROR_CODES.has(body.error.code) ? body.error.code : 'HTTP_REQUEST_FAILED'
       });
       if (!res.headersSent) {
         if (status === 401) res.setHeader('WWW-Authenticate', 'Bearer realm="atelier-popo"');

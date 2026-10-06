@@ -13,6 +13,7 @@ import { autoFacts } from './helpers/searchad-limited-auto-fixture.js';
 import { autoWindow } from '../src/naver/searchad/automation/eligibility.js';
 import { CAMPAIGN_WRITE } from '../src/naver/searchad/automation/recipes.js';
 import { main as startHeadlessWorker } from '../src/searchad-worker.js';
+import { logger as applicationLogger } from '../src/infrastructure/logger.js';
 
 const adminKey = 'completion-acceptance-admin-'.repeat(4);
 const executorKey = 'completion-acceptance-executor-'.repeat(4);
@@ -126,14 +127,25 @@ test('actual bootstrap missing database or required storage is unready and headl
 test('one composed Customer workflow crosses HTTP, native sources, standalone worker and restart', { timeout: 180_000 }, async t => {
   if (!native(t)) return;
   const f = await postgresCompletionFixture(t), root = fs.mkdtempSync(path.join(os.tmpdir(), 'completion-acceptance-'));
-  const storage = new LocalReportStorage({ root }), nativeFetch = globalThis.fetch, logs = [], responses = [], tokens = [];
+  const storage = new LocalReportStorage({ root }), nativeFetch = globalThis.fetch, logs = [], loggerEvents = [], responses = [], tokens = [];
+  const privateQuery = 'completion-rejected-private-token', privateUrl = `https://api.searchad.naver.com/report-download?authtoken=${privateQuery}`;
+  const recordingLogger = origin => Object.fromEntries(['info', 'warn', 'error'].map(level => [level, (message, context) => {
+    loggerEvents.push({ origin, level, message, context: structuredClone(context) }); applicationLogger[level](message, context);
+  }]));
   const originalWrite = process.stderr.write; let forbidden = 0, time = now, server, workerProcess, loseVerification = false;
   const jobs = new Map(), commerceCalls = [], cafeCalls = [], state = { nccCampaignId: 'cmp-1', dailyBudget: 1000, userLock: false };
   globalThis.fetch = async (url, init) => {
     if (new URL(url).origin.startsWith('http://127.0.0.1:')) return nativeFetch(url, init);
     forbidden++; throw new Error('Uninjected outbound call rejected');
   };
-  process.stderr.write = function (chunk, ...args) { logs.push(String(chunk)); return originalWrite.call(this, chunk, ...args); };
+  process.stderr.write = function (chunk, ...args) {
+    logs.push(String(chunk));
+    // Keep the raw emitted event for assertions; only redact private fixture
+    // markers in TAP diagnostics so a failing RED cannot print a usable token.
+    let displayed = String(chunk);
+    for (const value of [privateQuery, ...tokens]) displayed = displayed.replaceAll(value, '[fixture-private]');
+    return originalWrite.call(this, displayed, ...args);
+  };
   t.after(async () => {
     await workerProcess?.close(); globalThis.fetch = nativeFetch; process.stderr.write = originalWrite;
     fs.rmSync(root, { recursive: true, force: true });
@@ -147,7 +159,7 @@ test('one composed Customer workflow crosses HTTP, native sources, standalone wo
     CAFE24_MALL_ID: 'fixturemall', CAFE24_CLIENT_ID: 'completion-cafe-app', CAFE24_CLIENT_SECRET: 'completion-cafe-secret',
     CAFE24_ACCESS_TOKEN: 'completion-cafe-token', CAFE24_ACCESS_TOKEN_EXPIRES_AT: '2030-01-01T00:00:00Z',
     CAFE24_TOKEN_STORE_PATH: path.join(root, 'unused-cafe-token.json') };
-  const options = { appEnv, clock: () => time, blobStorage: storage,
+  const options = { appEnv, clock: () => time, blobStorage: storage, httpLogger: recordingLogger('http'),
     allowedPaths: ['/stats', '/keywordstool', '/ncc/campaigns/cmp-1', '/stat-reports', '/report-download', ...Array.from({ length: 40 }, (_, i) => `/stat-reports/${i + 1}`)],
     allowedMethods: { '/ncc/campaigns/cmp-1': ['GET', 'PUT'] },
     response: ({ target, init }) => {
@@ -292,7 +304,7 @@ test('one composed Customer workflow crosses HTTP, native sources, standalone wo
     const before = f.calls.filter(call => call.path === '/stats').length;
     workerProcess = await startHeadlessWorker({ env: { ...f.env, ...appEnv }, clock: () => time,
       bootstrap: async () => { const result = await f.start({ ...options, headless: true }); attachCommerce(result.app); return result.app; },
-      logger: { info() {}, warn() {}, error() {} } });
+      logger: recordingLogger('worker') });
     assert.notEqual(workerProcess.app, server.app); assert.equal(workerProcess.app.searchAdWriteRuntime, undefined);
     await workerProcess.worker.runOnce(); await workerProcess.close();
     assert.equal(f.calls.filter(call => call.path === '/stats').length, before + 1);
@@ -316,6 +328,20 @@ test('one composed Customer workflow crosses HTTP, native sources, standalone wo
     assert.equal(server.app.searchAdHierarchyRuntime.status().scope.cleanup, false);
     for (const parent of ['campaigns', 'adgroups']) assert.equal((await call(adminKey, 'DELETE', `/api/v1/searchad/hierarchy/${parent}/cmp-1`, scoped)).status, 404);
     assert.equal((await f.pool.query('SELECT count(*)::int n FROM searchad_hierarchy_objects')).rows[0].n, 0, 'empty local inventory establishes no parent deletion authority');
+  });
+  await t.test('rejected scoped credential-bearing queries log safe diagnostics through the actual HTTP logger', async () => {
+    const before = f.calls.length;
+    for (const query of [`authtoken=${privateQuery}`, `executionToken=${encodeURIComponent(tokens[0])}`, `downloadUrl=${encodeURIComponent(privateUrl)}`]) {
+      const result = await call(completionReaderKey, 'GET', `/api/v1/searchad/reporting/jobs/${latestJob.reportJobId}?customerId=1001&${query}`);
+      assert.equal(result.status, 400); assert.equal(result.body.error.code, 'SEARCHAD_REPORTING_QUERY_INVALID');
+    }
+    const denied = await call(privateQuery, 'GET', `/api/v1/searchad/reporting/jobs/${latestJob.reportJobId}?customerId=1001&authtoken=${privateQuery}`);
+    assert.equal(denied.status, 401);
+    assert.equal((await call(completionReaderKey, 'GET', `/private/${privateQuery}?downloadUrl=${encodeURIComponent(privateUrl)}`)).status, 404);
+    assert.equal(f.calls.length, before);
+    const events = loggerEvents.filter(event => event.origin === 'http' && event.level === 'error');
+    assert.ok(events.some(event => event.context.code === 'SEARCHAD_REPORTING_QUERY_INVALID'));
+    for (const value of [privateQuery, privateUrl, encodeURIComponent(privateUrl), tokens[0]]) assert.equal(JSON.stringify(loggerEvents).includes(value), false, 'private request value absent from real logger events');
   });
   await t.test('Circuit pause keeps GET reconciliation and original rollback gate across full restart', async () => {
     const paused = ok(await call(adminKey, 'POST', '/api/v1/searchad/circuit/pause', { ...scoped, reason: 'offline recovery review' })); assert.ok(paused);
@@ -345,7 +371,8 @@ test('one composed Customer workflow crosses HTTP, native sources, standalone wo
     const rows = [];
     for (const { tablename } of tables) rows.push((await f.pool.query(`SELECT row_to_json(r) value FROM "${tablename}" r`)).rows);
     const contents = [JSON.stringify(responses), logs.join(''), JSON.stringify(rows)];
-    for (const secret of ['completion-secret', 'completion-license', 'completion-cafe-secret', 'completion-cafe-token', 'completion-commerce-token', 'temporary-completion-token', 'authtoken=', 'PRIVATE_BUYER', '01012345678', ...tokens]) {
+    assert.ok(loggerEvents.some(event => event.origin === 'worker' && event.message === 'SearchAd worker started'));
+    for (const secret of ['completion-secret', 'completion-license', 'completion-cafe-secret', 'completion-cafe-token', 'completion-commerce-token', 'temporary-completion-token', privateQuery, privateUrl, 'authtoken=', 'PRIVATE_BUYER', '01012345678', ...tokens]) {
       for (const content of contents) assert.equal(content.includes(secret), false, 'private fixture value absent');
     }
     assert.equal(forbidden, 0);

@@ -36,7 +36,7 @@ export async function postgresCompletionFixture(t) {
   for (const [key, value] of Object.entries(settings)) { saved.set(key, process.env[key]); process.env[key] = value; }
   const env = { ...settings, ATELIER_API_KEY: 'completion-pg-generic-'.repeat(4), ATELIER_SEARCHAD_READER_API_KEY: completionReaderKey, ATELIER_SEARCHAD_READER_CUSTOMERS: '1001', ATELIER_SEARCHAD_READER_PRINCIPAL_ID: 'completion-reader', ATELIER_SEARCHAD_OPERATOR_API_KEY: completionOperatorKey, ATELIER_SEARCHAD_OPERATOR_CUSTOMERS: '1001', ATELIER_SEARCHAD_OPERATOR_PRINCIPAL_ID: 'completion-operator', NAVER_SEARCHAD_ACCESS_LICENSE: 'completion-license', NAVER_SEARCHAD_SECRET_KEY: 'completion-secret', NAVER_SEARCHAD_CUSTOMER_ID: '1001', ATELIER_CATALOG_PROVIDER: 'local', ATELIER_POSTGRES_SSL_MODE: 'disable', ATELIER_HTTP_ALLOW_WRITES: 'false', ATELIER_SEARCHAD_ALLOW_WRITES: 'false', ATELIER_SEARCHAD_ALLOW_CREATES: 'false', ATELIER_SEARCHAD_ALLOW_DELETES: 'false', ATELIER_SEARCHAD_ALLOW_ACTIVE_CANARY: 'false', DATABASE_URL: url.toString() };
   const calls = [];
-  async function start({ response = responseFixture(), appEnv = {}, allowedPaths = ['/stats'], allowedMethods = {}, clock = () => now, blobStorage = null, beforeResponse = async () => {}, headless = false } = {}) {
+  async function start({ response = responseFixture(), appEnv = {}, allowedPaths = ['/stats'], allowedMethods = {}, clock = () => now, blobStorage = null, beforeResponse = async () => {}, headless = false, httpLogger = logger } = {}) {
     const effectiveEnv = { ...env, ...appEnv };
     const app = await bootstrapV05(configPath, { env: effectiveEnv, clock, blobStorage, fetchImpl: async (requestUrl, init) => {
       const target = new URL(requestUrl); assert.equal(target.origin, 'https://api.searchad.naver.com'); assert.ok(allowedPaths.includes(target.pathname), 'closed fixture rejects unlisted paths'); assert.ok((allowedMethods[target.pathname] || (['/stat-reports','/master-reports'].includes(target.pathname) ? ['GET','POST'] : ['GET'])).includes(init.method), 'closed fixture rejects unlisted methods'); assert.equal(init.redirect, 'error'); assert.equal(init.headers['X-Customer'], '1001'); assert.equal(init.headers['X-Timestamp'], String(clock())); assert.equal(init.headers['X-Signature'], createHmac('sha256', 'completion-secret').update(`${clock()}.${init.method}.${target.pathname}`).digest('base64'));
@@ -47,7 +47,7 @@ export async function postgresCompletionFixture(t) {
       return new Response(JSON.stringify(response), { status: 200, headers: { 'content-type': 'application/json', 'x-request-id': 'completion-pg-upstream' } });
     } });
     if(headless) {apps.add(app);return {app};}
-    const api = createHttpApiV05({ app, env: effectiveEnv, logger }); apps.add(api); await api.listen({ host: '127.0.0.1', port: 0 });
+    const api = createHttpApiV05({ app, env: effectiveEnv, logger: httpLogger }); apps.add(api); await api.listen({ host: '127.0.0.1', port: 0 });
     const call = async (token, method, route, body, raw = false) => { const result = await fetch(`http://127.0.0.1:${api.server.address().port}${route}`, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); return { status: result.status, body: raw && result.ok ? await result.text() : await result.json() }; };
     return { app, api, call };
   }
