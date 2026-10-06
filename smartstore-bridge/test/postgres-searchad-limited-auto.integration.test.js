@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { postgresCompletionFixture, completionOperatorKey, completionReaderKey } from './helpers/postgres-searchad-completion-fixture.js';
-import { autoNow, autoFacts } from './helpers/searchad-limited-auto-fixture.js';
+import { autoNow, autoFacts, autoSourceGraph } from './helpers/searchad-limited-auto-fixture.js';
 import { responseFixture } from './helpers/searchad-completion-fixture.js';
 import { credentialFingerprintForCustomer } from '../src/naver/searchad/canary/credential-fingerprint.js';
 import { CAMPAIGN_WRITE } from '../src/naver/searchad/automation/recipes.js';
@@ -12,10 +12,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { LocalReportStorage } from '../src/naver/searchad/reporting/blob-storage.js';
 import { autoWindow, evaluateAutoEligibility } from '../src/naver/searchad/automation/eligibility.js';
+import { PostgresAutomationRepository } from '../src/naver/searchad/automation/postgres-repository.js';
 const key='limited-auto-native-admin-'.repeat(4),iso=n=>new Date(n).toISOString();
 const context={principal:{principalId:'fixture-admin',role:'admin',customerIds:['1001']},requestId:'synthetic-auto-test'};
 function native(t){if(process.env.TEST_DATABASE_URL)return true;assert.notEqual(process.env.CI,'true');t.skip('TEST_DATABASE_URL required');return false;}
-async function fixture(t,{gate=true,activation=true,activationTtl=3600000,worker=false,nativeSources=false,syntheticIncrease=false,limits={},recipe={kind:'campaign_budget',dailyBudgetKrw:800}}={}){
+async function fixture(t,{gate=true,activation=true,activationTtl=3600000,worker=false,nativeSources=false,syntheticIncrease=false,mappingDeadline=null,capabilityDeadline=null,limits={},recipe={kind:'campaign_budget',dailyBudgetKrw:800}}={}){
   const f=await postgresCompletionFixture(t);let time=autoNow,failVerify=false,mutations=0;
   const state={nccCampaignId:'cmp-1',dailyBudget:1000,userLock:false};
   const jobs=new Map(),root=nativeSources?fs.mkdtempSync(path.join(os.tmpdir(),'auto-report-sources-')):null;
@@ -39,7 +40,7 @@ async function fixture(t,{gate=true,activation=true,activationTtl=3600000,worker
     if(!nativeSources)completion.circuitService.spendEvidence={async select(){return {spendGrossKrw:100,baselineGrossKrw:100,validUntil:autoNow+86400000};}};
     // Explicit synthetic source selector: no eligible/allowed/approval result.
     if(syntheticIncrease)completion.circuitService.lossEvidence={async select(){return {customerId:'1001',quality:'actual',completeCustomerDay:true,identityVerified:true,observedAt:autoNow,statDateKst:'2026-10-05',amountNetKrw:0};}};
-    if(!nativeSources)completion.automationRepository.autoEvidenceSelector={async select(input){const value=autoFacts(autoNow);value.policy=input;value.evidence.identity=completion.identityResolver('1001');value.capability.automationEnabled=gate;if(syntheticIncrease){value.capability.estimate={verified:true,observedAt:iso(autoNow),identity:value.evidence.identity};value.capability.balance={verified:true,observedAt:iso(autoNow),identity:value.evidence.identity,availableKrw:'30000'};}return value;}};
+    if(!nativeSources)completion.automationRepository.autoEvidenceSelector={async select(input){const value=autoFacts(autoNow);value.mapping.validUntil=mappingDeadline;value.policy=input;value.evidence.identity=completion.identityResolver('1001');value.capability.automationEnabled=gate;if(syntheticIncrease){value.capability.estimate={verified:true,observedAt:iso(autoNow),identity:value.evidence.identity,...(capabilityDeadline?{expiresAt:capabilityDeadline}:{})};value.capability.balance={verified:true,observedAt:iso(autoNow),identity:value.evidence.identity,availableKrw:'30000'};}return value;}};
     return server;
   }
   await start();
@@ -161,13 +162,13 @@ test('reservation cannot transfer its KST daily limits across midnight',async t=
   assert.notEqual((await f.execute(run.body.runId)).status,200);assert.equal(f.mutations,0);
 });
 
-async function sourceProduct(f){
+async function sourceProduct(f,{validTo=null}={}){
   const id=randomUUID();await f.pool.query("INSERT INTO haar_products(haar_product_id,product_name) VALUES($1,'synthetic source product')",[id]);
   await f.pool.query("INSERT INTO channel_products(channel_id,haar_product_id,channel_product_no,remote_product_id,channel_product_key,product_name) VALUES('haar_naver_smartstore',$1,'123','123','haar_naver_smartstore:123','synthetic source product')",[id]);
   const app=f.server.app;app.client.tokenProvider.cached={accessToken:'auto-synthetic-commerce-token',issuedAt:Date.now(),expiresIn:3600};
   app.client.fetchImpl=async(url,init)=>{assert.equal(init.method,'GET');const u=new URL(url);assert.equal(u.origin,'https://api.commerce.naver.com');const file={'/external/v2/products/channel-products/123':'naver-product','/external/v1/pay-order/seller/product-orders':'naver-orders','/external/v1/pay-settle/settle/case':'naver-settlements'}[u.pathname];assert.ok(file,'closed synthetic Commerce read trap');return Response.json(JSON.parse(fs.readFileSync(`test/fixtures/searchad-profitability/${file}.json`)));};
   assert.equal((await f.server.call(key,'POST','/api/v1/searchad/customer-channel-bindings',{customerId:'1001',channelId:'haar_naver_smartstore'})).status,200);
-  assert.equal((await f.server.call(key,'POST','/api/v1/searchad/product-mappings',{customerId:'1001',haarProductId:id,channelProductKey:'haar_naver_smartstore:123',entityType:'campaign',entityId:'cmp-1',method:'manual',validFrom:'2026-09-01T00:00:00Z'})).status,200);
+  assert.equal((await f.server.call(key,'POST','/api/v1/searchad/product-mappings',{customerId:'1001',haarProductId:id,channelProductKey:'haar_naver_smartstore:123',entityType:'campaign',entityId:'cmp-1',method:'manual',validFrom:'2026-09-01T00:00:00Z',validTo})).status,200);
   assert.equal((await f.server.call(key,'POST','/api/v1/searchad/product-evidence/collect',{customerId:'1001',haarProductId:id,...autoWindow(autoNow)})).status,200);return id;
 }
 test('actual bootstrap selector uses seven real ingestions and preserves manual/provider financial blockers',async t=>{
@@ -256,4 +257,91 @@ test('policy revocation waits on the authoritative account row until local trans
   // The native update must be waiting on this schema's actual account row.
   let waiting=false;for(let i=0;i<20&&!waiting;i++){const rows=(await f.pool.query("SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%searchad_canary_accounts%FOR UPDATE%'")).rows;waiting=rows.length>0;if(!waiting)await new Promise(r=>setImmediate(r));}
   assert.equal(waiting,true);assert.equal(revised,false);assert.equal(f.mutations,0);pause.release();assert.equal((await execution).body.state,'applied');await revoke;assert.equal(revised,true);assert.equal(f.mutations,1);
+});
+
+// Refuse an otherwise unbounded nested checkout while retaining the real native
+// connection and SQL. A failed RED cannot leak pool checkout promises/queries.
+function boundedSourcePool(raw,max,{warmAll=false}={}) {
+  let active=0,nested=0,releaseWarm;const ready=new Promise(r=>releaseWarm=r),pids=new Set(),queries=[];
+  if(!warmAll)releaseWarm();
+  return {get active(){return active;},get nested(){return nested;},pids,queries,
+    async connect(){const client=await raw.connect();active++;pids.add(client.processID);if(active===max)releaseWarm();await ready;let released=false;return {query(sql,args){queries.push(sql);return client.query(sql,args);},release(){if(!released){released=true;active--;pids.delete(client.processID);client.release();}}};},
+    async query(sql,args){if(active){nested++;throw Object.assign(new Error('bounded observation of nested checkout while account transaction owns a connection'),{code:'TEST_NESTED_CHECKOUT'});}return raw.query(sql,args);}
+  };
+}
+async function waitForNineAccountWaiters(pool,pids){
+  for(let i=0;i<100;i++){const {rows}=await pool.query("SELECT count(*)::int n FROM pg_stat_activity WHERE pid=ANY($1::int[]) AND wait_event_type='Lock' AND query LIKE '%searchad_canary_accounts%FOR UPDATE%'",[[...pids]]);if(rows[0].n===9)return;await new Promise(r=>setImmediate(r));}
+  assert.fail('native nine account-row waiters were not observed');
+}
+test('fix1 T10-I1 actual producer selection completes on one owned native connection without nested checkout',async t=>{
+  if(!native(t))return;const f=await fixture(t,{nativeSources:true}),id=await sourceProduct(f),runtime=f.server.app.searchAdCompletionRuntime,date='2026-10-02',start=Date.parse(`${date}T00:00:00+09:00`);
+  for(const slot of [1,2,3])await f.ingest(date,start+slot*86400000+12*3600000);f.setTime(autoNow);
+  const pool=boundedSourcePool(f.connect({max:1}),1),graph=autoSourceGraph({pool,identityResolver:runtime.identityResolver,providers:runtime.commerceProviders,clock:()=>autoNow}),repo=new PostgresAutomationRepository({pool,clock:()=>autoNow});
+  const selected=await repo.transaction('1001',client=>graph.select(f.policy,{client,now:autoNow}));
+  assert.equal(pool.nested,0);assert.equal(pool.active,0);assert.equal(selected.mapping.current,true);assert.equal(selected.profitability.haarProductId,id);assert.equal(selected.profitability.quality,'partial');assert.equal(selected.history.generations.length,1);
+  for(const table of ['searchad_customer_channel_bindings','searchad_commerce_observations','searchad_product_cost_inputs','supplier_cost_history','channel_product_snapshots','searchad_report_jobs','searchad_daily_metrics','searchad_stats_observations','searchad_spend_evidence'])assert.ok(pool.queries.some(sql=>sql.includes(table)),table);
+});
+test('fix1 T10-I1 ten saturated native account reservations make progress and preserve atomic limits',async t=>{
+  if(!native(t))return;const f=await fixture(t,{limits:{maxDailyOperations:1}});await sourceProduct(f);const runtime=f.server.app.searchAdCompletionRuntime,runs=[(await f.evaluate()).body];
+  for(let i=1;i<10;i++){const policy=await runtime.automationService.createPolicy(f.policyInput,context);runs.push(await runtime.automationService.evaluate({customerId:'1001',policyId:policy.policyId},context));}
+  assert.ok(runs.every(r=>r.state==='ready'));
+  const pool=boundedSourcePool(f.connect({max:10}),10,{warmAll:true}),graph=autoSourceGraph({pool,identityResolver:runtime.identityResolver,providers:runtime.commerceProviders,clock:()=>autoNow}),synthetic=runtime.automationRepository.autoEvidenceSelector;let first=true,selections=0;
+  const repo=new PostgresAutomationRepository({pool,clock:()=>autoNow,identityResolver:runtime.identityResolver,automationEnabled:true,autoEvidenceSelector:{async select(policy,options){if(first){first=false;await waitForNineAccountWaiters(f.pool,pool.pids);}const real=await graph.select(policy,options);assert.equal(real.profitability.quality,'unknown');assert.ok(real.profitability.missingReasons.includes('AD_COST_MISSING'));assert.equal(real.mapping.current,true);selections++;return synthetic.select(policy,options);}}});
+  // Financial facts are the same explicitly synthetic private positive fixture;
+  // source progress/provenance checks above use the entire real producer graph.
+  const results=await Promise.allSettled(runs.map(run=>repo.reserveRun({customerId:'1001',runId:run.runId,now:autoNow})));
+  assert.equal(pool.nested,0);assert.equal(pool.active,0);assert.equal(selections,10,JSON.stringify(results.map(r=>r.status==='rejected'?{code:r.reason.code,message:r.reason.message}:r.status)));assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+  assert.ok(results.filter(r=>r.status==='rejected').every(r=>r.reason.code==='SEARCHAD_AUTOMATION_DAILY_LIMIT'));assert.equal(f.mutations,0);
+});
+test('fix1 T10-I2 actual synchronous closure rejects exact mapping and capability expiry with a before-expiry positive',async t=>{
+  if(!native(t))return;
+  for(const kind of ['mapping','estimate','balance','estimate-validUntil','balance-validUntil','estimate-age','balance-age'])await t.test(kind,async t=>{
+    const deadline=autoNow+1000,increase=kind!=='mapping',f=await fixture(t,{mappingDeadline:kind==='mapping'?iso(deadline):null,syntheticIncrease:increase,capabilityDeadline:kind==='estimate'?iso(deadline):null,...(increase?{recipe:{kind:'campaign_budget',dailyBudgetKrw:1200}}:{})}),runtime=f.server.app.searchAdCompletionRuntime;
+    if(kind.endsWith('-age')){const select=runtime.automationRepository.autoEvidenceSelector.select.bind(runtime.automationRepository.autoEvidenceSelector);runtime.automationRepository.autoEvidenceSelector.select=async(...args)=>{const facts=await select(...args);facts.capability[kind==='estimate-age'?'estimate':'balance'].observedAt=iso(deadline-1800000);return facts;};}
+    if(kind==='balance'||kind.endsWith('-validUntil')){const select=runtime.automationRepository.autoEvidenceSelector.select.bind(runtime.automationRepository.autoEvidenceSelector);runtime.automationRepository.autoEvidenceSelector.select=async(...args)=>{const facts=await select(...args);facts.capability[kind.startsWith('estimate')?'estimate':'balance'][kind.endsWith('-validUntil')?'validUntil':'expiresAt']=iso(deadline);return facts;};}
+    const run=await f.evaluate();assert.equal(run.body.state,'ready');const circuit=runtime.circuitService,original=circuit.assertDispatchAllowed.bind(circuit),observations=[];
+    circuit.assertDispatchAllowed=async(...args)=>{const validate=await original(...args);for(const at of [deadline-1,deadline,deadline+1]){f.setTime(at);let error;try{validate();}catch(value){error=value;}observations.push({at,error:error?.code});}f.setTime(autoNow);return validate;};
+    assert.equal((await f.execute(run.body.runId)).body.state,'applied');assert.equal(f.mutations,1);assert.deepEqual(observations,[{at:deadline-1,error:undefined},{at:deadline,error:'SEARCHAD_CIRCUIT_EVIDENCE_EXPIRED'},{at:deadline+1,error:'SEARCHAD_CIRCUIT_EVIDENCE_EXPIRED'}]);
+  });
+});
+test('fix1 T10-I2 scheduled stale binding bounds old membership before current binding authorization fails',async t=>{
+  if(!native(t))return;const deadline=autoNow+1000,f=await fixture(t),id=await sourceProduct(f),runtime=f.server.app.searchAdCompletionRuntime;
+  let now=autoNow;const graph=autoSourceGraph({pool:f.pool,identityResolver:runtime.identityResolver,providers:runtime.commerceProviders,clock:()=>now}),repo=graph.productRepository;
+  const selected=await graph.select(f.policy),mapping=selected.profitability.sources.mappings[0],staleIdentity='e'.repeat(64);
+  await repo.appendBinding({customerId:'1001',channelId:mapping.channelId,identityHash:mapping.identityHash,sourceIdentity:staleIdentity,actorHash:contentHash('synthetic retired provider')});
+  await repo.appendMapping({customerId:'1001',haarProductId:id,channelProductKey:mapping.channelProductKey,entityType:mapping.entityType,entityId:mapping.entityId,validFrom:iso(deadline),validTo:null,identityHash:mapping.identityHash,sourceIdentity:staleIdentity,actorHash:contentHash('synthetic scheduled retired binding')});
+  const bounded=await graph.select(f.policy);assert.equal(bounded.mapping.current,true);assert.equal(bounded.mapping.validUntil,iso(deadline));
+  // Keep explicitly synthetic positive financial facts, but consume the actual
+  // native producer's deadline in the real plan authority/Circuit closure.
+  const factsSelector=runtime.automationRepository.autoEvidenceSelector,select=factsSelector.select.bind(factsSelector);
+  factsSelector.select=async(...args)=>{const facts=await select(...args);facts.mapping.validUntil=bounded.mapping.validUntil;return facts;};
+  const run=await f.evaluate();assert.equal(run.body.state,'ready');const circuit=runtime.circuitService,original=circuit.assertDispatchAllowed.bind(circuit),observations=[];
+  circuit.assertDispatchAllowed=async(...args)=>{const validate=await original(...args);for(const at of [deadline-1,deadline,deadline+1]){f.setTime(at);let error;try{validate();}catch(value){error=value;}observations.push(error?.code);}f.setTime(autoNow);return validate;};
+  assert.equal((await f.execute(run.body.runId)).body.state,'applied');assert.deepEqual(observations,[undefined,'SEARCHAD_CIRCUIT_EVIDENCE_EXPIRED','SEARCHAD_CIRCUIT_EVIDENCE_EXPIRED']);assert.equal(f.mutations,1);
+  now=deadline;const expired=await graph.select(f.policy);assert.equal(expired.mapping.current,false);assert.deepEqual(expired.history.sourceReasons,['SEARCHAD_CUSTOMER_CHANNEL_BINDING_REQUIRED']);
+});
+test('fix1 T10-I2 scheduled deadlines remain disjoint across exact native resolver membership groups',async t=>{
+  if(!native(t))return;const deadline=autoNow+5000,f=await fixture(t),id=await sourceProduct(f,{validTo:iso(deadline)}),runtime=f.server.app.searchAdCompletionRuntime;
+  const graph=autoSourceGraph({pool:f.pool,identityResolver:runtime.identityResolver,providers:runtime.commerceProviders,clock:()=>autoNow}),selected=await graph.select(f.policy),repo=graph.productRepository,m=selected.profitability.sources.mappings[0];
+  const otherProduct=randomUUID();await f.pool.query("INSERT INTO haar_products(haar_product_id,product_name) VALUES($1,'synthetic disjoint product')",[otherProduct]);
+  async function channel(product,channel,no){return (await f.pool.query('INSERT INTO channel_products(channel_id,haar_product_id,channel_product_no,remote_product_id,channel_product_key,product_name) VALUES($1,$2,$3,$3,$4,$5) RETURNING channel_product_id',[channel,product,no,`${channel}:${no}`,'synthetic disjoint channel'])).rows[0].channel_product_id;}
+  const otherProductChannel=await channel(otherProduct,m.channelId,'456'),otherChannel=await channel(id,'haar_own_mall','789'),otherSameChannel=await channel(id,m.channelId,'457');
+  await f.pool.query("INSERT INTO searchad_customer_accounts(customer_id) VALUES('2002')");
+  async function binding(customerId,channelId,identityHash){return (await repo.appendBinding({customerId,channelId,identityHash,sourceIdentity:'f'.repeat(64),actorHash:contentHash('synthetic disjoint binding')})).bindingId;}
+  const otherCustomerBinding=await binding('2002',m.channelId,m.identityHash),otherIdentity='d'.repeat(64),otherIdentityBinding=await binding('1001',m.channelId,otherIdentity),otherChannelBinding=await binding('1001','haar_own_mall',m.identityHash);
+  const groups=[{customerId:'2002',bindingId:otherCustomerBinding},{haarProductId:otherProduct,channelProductId:otherProductChannel},{entityType:'adgroup'},{entityId:'cmp-2'},{channelProductId:otherChannel,bindingId:otherChannelBinding},{channelProductId:otherSameChannel},{identityHash:otherIdentity,bindingId:otherIdentityBinding}];
+  for(const [i,change] of groups.entries()){
+    const next={...m,...change};await f.pool.query(`INSERT INTO product_ad_mappings(customer_id,source_product_id,haar_product_id,channel_product_id,remote_entity_type,remote_entity_id,mapping_method,mapping_confidence,valid_from,valid_to,allocation_json,binding_id,identity_hash,provenance,actor_hash,created_at) VALUES($1,NULL,$2,$3,$4,$5,'manual',1,$6,NULL,NULL,$7,$8,'manual',$9,$10)`,[next.customerId,next.haarProductId,next.channelProductId,next.entityType,next.entityId,iso(autoNow+1000+i),next.bindingId,next.identityHash,contentHash('synthetic disjoint revision'),iso(autoNow)]);
+    assert.equal(await repo.mappingMembershipDeadline({customerId:'1001',identityHash:m.identityHash,mappings:[m],at:iso(autoNow)}),iso(deadline),JSON.stringify(change));
+  }
+  assert.equal(f.mutations,0);
+});
+test('fix1 T10-I2 actual native selector bounds current and scheduled mapping membership',async t=>{
+  if(!native(t))return;
+  for(const kind of ['validTo','scheduled'])await t.test(kind,async t=>{
+    const deadline=autoNow+1000,f=await fixture(t,{nativeSources:true}),id=await sourceProduct(f,{validTo:kind==='validTo'?iso(deadline):null}),runtime=f.server.app.searchAdCompletionRuntime;
+    if(kind==='scheduled')assert.equal((await f.server.call(key,'POST','/api/v1/searchad/product-mappings',{customerId:'1001',haarProductId:id,channelProductKey:'haar_naver_smartstore:123',entityType:'campaign',entityId:'cmp-1',method:'manual',validFrom:iso(deadline)})).status,200);
+    const selected=await runtime.automationRepository.autoEvidenceSelector.select(f.policy);assert.equal(selected.mapping.current,true);assert.equal(selected.mapping.validUntil,iso(deadline));
+    f.setTime(deadline);const expired=await runtime.automationRepository.autoEvidenceSelector.select(f.policy);if(kind==='validTo')assert.equal(expired.mapping.current,false);else assert.notEqual(expired.mapping.sourceHash,selected.mapping.sourceHash);assert.equal(f.mutations,0);
+  });
 });

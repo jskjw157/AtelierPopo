@@ -4,7 +4,7 @@ import { contentHash } from '../write/canonical.js';
 import { randomUUID } from 'node:crypto';
 import { automationError, UUID } from './policy.js';
 import { CAMPAIGN_READ } from './recipes.js';
-import { evaluateAutoEligibility,delegationValid } from './eligibility.js';
+import { evaluateAutoEligibility,delegationValid,autoValidityDeadline } from './eligibility.js';
 const preparations=new AsyncLocalStorage();
 export function currentAutomationPreparation() { return preparations.getStore(); }
 const iso=value=>new Date(value).toISOString();
@@ -53,7 +53,7 @@ export class PostgresAutomationRepository {
       const facts=await this.selectAutoFacts({policy:p,selected:run.decision.selected,now,client:client===this.pool?undefined:client});
       const result=evaluateAutoEligibility({...facts,policy:p,now});
       if(!result.eligible||contentHash(facts)!==contentHash(run.decision.selected.auto))throw automationError('AUTO_INELIGIBLE');
-      validUntil=Math.min(validUntil,Date.parse(p.delegation.expiresAt),Date.parse(facts.profitability.asOf)+86400000,Date.parse(facts.evidence.spend.generation_lower)+86400000,...facts.evidence.commerce.map(o=>Date.parse(o.observedAt)+900000),...facts.history.generations.map(g=>Date.parse(g.generationWindow.lower)+86400000));
+      validUntil=Math.min(validUntil,autoValidityDeadline({...facts,policy:p}),Date.parse(p.delegation.expiresAt),Date.parse(facts.profitability.asOf)+86400000,Date.parse(facts.evidence.spend.generation_lower)+86400000,...facts.evidence.commerce.map(o=>Date.parse(o.observedAt)+900000),...facts.history.generations.map(g=>Date.parse(g.generationWindow.lower)+86400000));
     }
     const reservation=(await client.query('SELECT * FROM searchad_automation_reservations WHERE customer_id=$1 AND run_id=$2',[customerId,run.runId])).rows[0] || null;
     if(p.mode==='limited_auto' && reservation){

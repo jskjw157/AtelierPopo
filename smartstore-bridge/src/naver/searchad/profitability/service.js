@@ -9,14 +9,14 @@ const covers=(row,start,end)=>Date.parse(row.validFrom)<=start&&(!row.validTo||D
 /** All financial inputs are selected from durable scoped producers, never HTTP. */
 export class ProfitabilityService {
   constructor({repository,productEvidenceService,reportingRepository,identityResolver,clock=Date.now}){Object.assign(this,{repository,productEvidenceService,reportingRepository,identityResolver,clock});}
-  async select(input){
+  async select(input,{client}={}){
     input={...input,haarProductId:uuid(input.haarProductId)};
-    const scoped=await this.productEvidenceService.scopes(input),{scopes,mappings,identityHash,at}=scoped;
-    const data=JSON.parse(JSON.stringify(await this.repository.selectProductInputs({...input,identityHash,at})));
+    const scoped=await this.productEvidenceService.scopes(input,{client}),{scopes,mappings,identityHash,at}=scoped;
+    const data=JSON.parse(JSON.stringify(await this.repository.selectProductInputs({...input,identityHash,at},client)));
     const observations=data.observations.filter(o=>scopes.some(s=>s.channelProductId===o.channelProductId&&s.bindingId===o.bindingId&&s.sourceIdentity===o.sourceIdentity&&s.identityHash===o.identityHash));
     const identity=this.identityResolver(input.customerId);
     if(hash(identity)!==identityHash)throw fail('SEARCHAD_COMMERCE_IDENTITY_CHANGED',409);
-    const ads=this.reportingRepository?await this.reportingRepository.selectProductAdInputs({...input,identity,mappings,now:this.clock()}):{rows:[],conversions:[],searchTerms:[],generations:[]};
+    const ads=this.reportingRepository?await this.reportingRepository.selectProductAdInputs({...input,identity,mappings,now:this.clock()},client):{rows:[],conversions:[],searchTerms:[],generations:[]};
     const missing=new Set(['MANUAL_MAPPING_UNVERIFIED','ALLOCATION_UNVERIFIED']);
     const start=Date.parse(`${input.since}T00:00:00+09:00`),end=Date.parse(`${input.until}T23:59:59.999+09:00`);
     if(mappings.some(m=>!covers(m,start,end)))missing.add('MAPPING_RANGE_PARTIAL');
@@ -78,7 +78,7 @@ export class ProfitabilityService {
     const catalog=data.catalog.filter(c=>scopes.some(s=>s.channelProductId===c.channelProductId)).sort((a,b)=>a.channelProductId.localeCompare(b.channelProductId));
     const sources={catalog,identityHash,bindings:scopes,mappings,commerce:provenance,costs:data.costs,sourceCosts:data.sourceCosts,ads:ads.generations,adRows:ads.rows.map(r=>({sourceKey:r.sourceKey,rowSha:r.rowSha,generationSha:r.generationSha})),conversionRows:ads.conversions.map(r=>({sourceKey:r.sourceKey,rowSha:r.rowSha,generationSha:r.generationSha}))};
     const inputHash=contentHash({input,sources,calculation});
-    const current=await this.productEvidenceService.scopes(input);
+    const current=await this.productEvidenceService.scopes(input,{client});
     if(contentHash(current.scopes)!==contentHash(scopes)||contentHash(current.mappings)!==contentHash(mappings))throw fail('SEARCHAD_COMMERCE_IDENTITY_CHANGED',409);
     const snapshot={...input,...calculation,inputHash,snapshotId:deterministicId({input,inputHash}),sourceSetHash:contentHash(sources),sources,mappingVerified:false,allocationVerified:false,unallocatedSpendKrw:allocated.unallocatedKrw,searchTerms:ads.searchTerms,liveVerified:false,autoEligible:false,contributionKrw:calculation.metrics.contributionKrw,netRevenueKrw:calculation.metrics.netRevenueKrw,settlementAmountKrw:null,
       observations:observations.map(({bindingId,sourceIdentity,identityHash,...o})=>o),mappings:mappings.map(({bindingId,identityHash,...m})=>m),costs:data.costs,sourceCosts:data.sourceCosts,catalog};

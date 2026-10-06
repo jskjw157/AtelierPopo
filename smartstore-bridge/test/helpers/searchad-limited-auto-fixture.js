@@ -1,4 +1,10 @@
 import { CAMPAIGN_WRITE } from '../../src/naver/searchad/automation/recipes.js';
+import { AutoEvidenceSelector } from '../../src/naver/searchad/automation/auto-executor.js';
+import { PostgresProductEvidenceRepository } from '../../src/naver/searchad/profitability/postgres-repository.js';
+import { ProductMappingService } from '../../src/naver/searchad/profitability/mapping-service.js';
+import { ProductEvidenceService } from '../../src/naver/searchad/profitability/product-evidence-service.js';
+import { ProfitabilityService } from '../../src/naver/searchad/profitability/service.js';
+import { PostgresReportingRepository } from '../../src/naver/searchad/reporting/postgres-repository.js';
 export const autoNow=Date.parse('2026-10-05T03:00:00Z');
 const iso=n=>new Date(n).toISOString();
 // Synthetic source facts only. Production eligibility must establish every predicate.
@@ -12,4 +18,15 @@ export function autoFacts(now=autoNow) {
     profitability:{quality:'actual',asOf:iso(now),missingReasons:[],mappingVerified:true,allocationVerified:true,unallocatedSpendKrw:'0',metrics:{contributionKrw:'1000'},inputHash:'d'.repeat(64)},
     history:{generations:days.map((statDate,i)=>({ingestionId:`00000000-0000-0000-0000-${String(i+1).padStart(12,'0')}`,statDate,reportType:'AD',quality:'stabilized_by_policy',rowCount:1,entityRowCount:1,generationSha:String(i+1).repeat(64),schemaSha:'e'.repeat(64),generationWindow:{lower:iso(now-1000),upper:iso(now),downloadCompletedAt:iso(now),slot:Math.floor((now-Date.parse(`${statDate}T00:00:00+09:00`))/86400000),stableAge:true,policy:{version:'generation-window-v1'}}}))},
     capability:{automationEnabled:true,estimate:null,balance:null}};
+}
+
+// The actual production selection graph, with only its pool/clock supplied by
+// tests. No profitability, eligibility, scope or repository query is replaced.
+export function autoSourceGraph({pool,identityResolver,providers,clock}) {
+  const productRepository=new PostgresProductEvidenceRepository({pool,clock});
+  const mappingService=new ProductMappingService({repository:productRepository,providers,identityResolver,clock});
+  const productEvidenceService=new ProductEvidenceService({repository:productRepository,mappingService,providers,identityResolver,clock});
+  const reportingRepository=new PostgresReportingRepository({pool,clock});
+  const profitabilityService=new ProfitabilityService({repository:productRepository,productEvidenceService,reportingRepository,identityResolver,clock});
+  return new AutoEvidenceSelector({profitabilityService,productRepository,reportingRepository,identityResolver,clock});
 }

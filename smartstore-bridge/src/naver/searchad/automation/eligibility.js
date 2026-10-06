@@ -8,6 +8,19 @@ const fresh=(v,age,now)=>Number.isFinite(time(v))&&time(v)<=now&&now-time(v)<=ag
 const hash=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 const integer=v=>typeof v==='string'&&/^(0|[1-9][0-9]*)$/.test(v)?BigInt(v):Number.isSafeInteger(v)&&v>=0?BigInt(v):null;
 const signedInteger=v=>typeof v==='string'&&/^-?(0|[1-9][0-9]*)$/.test(v)?BigInt(v):Number.isSafeInteger(v)?BigInt(v):null;
+const canonicalDeadline=v=>typeof v==='string'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v?Date.parse(v):NaN;
+const mappingDeadline=m=>m?.validUntil===null||!Object.hasOwn(m||{},'validUntil')?Infinity:canonicalDeadline(m.validUntil);
+function capabilityDeadline(value){
+  let until=time(value?.observedAt)+1800000;
+  for(const key of ['expiresAt','validUntil'])if(Object.hasOwn(value||{},key))until=Math.min(until,canonicalDeadline(value[key]));
+  return until;
+}
+// Pure deadline construction used again by the synchronous final fence. Source
+// locks preserve rows; finite time-qualified facts must also expire on the clock.
+export function autoValidityDeadline({mapping,capability={},evidence={},policy={}}){
+  const increase=policy.recipe?.kind==='campaign_budget'&&policy.recipe.dailyBudgetKrw>evidence.current?.normalized?.dailyBudgetKrw;
+  return Math.min(mappingDeadline(mapping),...(increase?[capabilityDeadline(capability.estimate),capabilityDeadline(capability.balance)]:[]));
+}
 export function autoWindow(now) {
   const day=new Date(now+9*3600000).toISOString().slice(0,10),start=Date.parse(`${day}T00:00:00+09:00`);
   return {since:new Date(start-9*DAY+9*3600000).toISOString().slice(0,10),until:new Date(start-3*DAY+9*3600000).toISOString().slice(0,10)};
@@ -36,7 +49,7 @@ export function evaluateAutoEligibility({policy={},evidence={},profitability,map
     if(delta*100n>before*BigInt(policy.delegation?.maxChangePercent||20)||after>BigInt(policy.delegation?.maxDailyBudgetKrw||100000)||after>100000n||delta*100n>before*20n)deny('RECIPE_BOUNDS');
     patch={dailyBudget:recipe.dailyBudgetKrw};
   }else deny('UNSUPPORTED_AUTO_RECIPE');
-  if(!mapping?.current||mapping.customerId!==policy.customerId||mapping.entityType!=='campaign'||mapping.entityId!==policy.entityId||!Array.isArray(mapping.bindingIds)||!mapping.bindingIds.length||!hash(mapping.sourceHash)||!/^(0\.[0-9]+|1(?:\.0+)?)$/.test(String(mapping.confidence))||Number(mapping.confidence)<0.90)deny('MAPPING_UNAVAILABLE');
+  if(!mapping?.current||!(mappingDeadline(mapping)>now)||mapping.customerId!==policy.customerId||mapping.entityType!=='campaign'||mapping.entityId!==policy.entityId||!Array.isArray(mapping.bindingIds)||!mapping.bindingIds.length||!hash(mapping.sourceHash)||!/^(0\.[0-9]+|1(?:\.0+)?)$/.test(String(mapping.confidence))||Number(mapping.confidence)<0.90)deny('MAPPING_UNAVAILABLE');
   if(!evidence.identity||evidence.identity.customerId!==policy.customerId||!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(evidence.identity.specSha||'')||!hash(evidence.identity.credentialFingerprint)||evidence.identity.upstreamBaseUrl!=='https://api.searchad.naver.com')deny('IDENTITY_UNAVAILABLE');
   if(!fresh(evidence.stats?.observedAt,1800000,now)||!fresh(evidence.stats?.cycleAt,1800000,now))deny('STATS_STALE');
   if(evidence.spend?.quality!=='stabilized_by_policy'||!fresh(evidence.spend?.generation_lower,DAY,now))deny('STABILIZED_SPEND_UNAVAILABLE');
@@ -56,7 +69,7 @@ export function evaluateAutoEligibility({policy={},evidence={},profitability,map
     if(signedInteger(profitability?.metrics?.contributionKrw)===null||signedInteger(profitability.metrics.contributionKrw)<=0n)deny('PROFITABILITY_INCREASE_UNAVAILABLE');
     if(integer(evidence.stats?.metrics?.conversions)===null||integer(evidence.stats.metrics.conversions)<3n)deny('CONVERSIONS_INSUFFICIENT');
     const estimate=capability.estimate,balance=capability.balance;
-    if(![estimate,balance].every(v=>v?.verified===true&&fresh(v.observedAt,1800000,now)&&contentHash(v.identity)===contentHash(evidence.identity))||integer(balance?.availableKrw)===null||integer(balance.availableKrw)<BigInt(recipe.dailyBudgetKrw-prior.dailyBudgetKrw))deny('ESTIMATE_BALANCE_UNAVAILABLE');
+    if(![estimate,balance].every(v=>v?.verified===true&&fresh(v.observedAt,1800000,now)&&capabilityDeadline(v)>now&&contentHash(v.identity)===contentHash(evidence.identity))||integer(balance?.availableKrw)===null||integer(balance.availableKrw)<BigInt(recipe.dailyBudgetKrw-prior.dailyBudgetKrw))deny('ESTIMATE_BALANCE_UNAVAILABLE');
   }
   return {eligible:reasons.length===0,reasons:[...new Set(reasons)],allowedPatch:reasons.length?null:patch};
 }

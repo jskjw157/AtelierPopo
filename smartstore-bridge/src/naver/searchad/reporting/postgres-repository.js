@@ -653,24 +653,24 @@ export class PostgresReportingRepository {
       ).rows[0] || null
     );
   }
-  async selectProductAdInputs({customerId,since,until,identity,mappings,now}) {
+  async selectProductAdInputs({customerId,since,until,identity,mappings,now},client=this.pool) {
     validateIdentity(identity,customerId);
-    const selected=(await this.selectedIngestions(this.pool,{customerId,identity})).filter(r=>r.report_kind==='stat'&&r.stat_date>=since&&r.stat_date<=until&&Date.parse(r.provenance_json.generationWindow.lower)<=now);
+    const selected=(await this.selectedIngestions(client,{customerId,identity})).filter(r=>r.report_kind==='stat'&&r.stat_date>=since&&r.stat_date<=until&&Date.parse(r.provenance_json.generationWindow.lower)<=now);
     const matches=row=>mappings.some(m=>m.entityType===row.entity_type&&m.entityId===row.entity_id||({'campaign':'Campaign ID','adgroup':'AD Group ID','keyword':'Keyword ID','creative':'AD ID'}[m.entityType]&&row.dimensions_json?.[{'campaign':'Campaign ID','adgroup':'AD Group ID','keyword':'Keyword ID','creative':'AD ID'}[m.entityType]]===m.entityId));
     const rows=[];const conversions=[];const searchTerms=[];
     for(const i of selected){const generation={ingestionId:i.ingestion_id,generationSha:i.generation_sha,statDate:i.stat_date,quality:i.quality,generationWindow:i.provenance_json.generationWindow};
-      if(i.report_type==='AD')for(const r of (await this.pool.query('SELECT *,stat_date::text AS stat_date FROM searchad_daily_metrics WHERE customer_id=$1 AND ingestion_id=$2 ORDER BY natural_key',[customerId,i.ingestion_id])).rows.filter(matches))rows.push({...generation,sourceKey:`${i.stat_date}:${r.natural_key}`,rowSha:r.row_sha,entityType:r.entity_type,entityId:r.entity_id,dimensions:r.dimensions_json,metrics:r.metrics_json,costRaw:r.cost_raw,costGrossKrw:r.cost_gross_krw,costBasis:r.cost_basis});
-      if(i.report_type==='AD_CONVERSION')for(const r of (await this.pool.query('SELECT * FROM searchad_conversion_metrics WHERE customer_id=$1 AND ingestion_id=$2 ORDER BY natural_key',[customerId,i.ingestion_id])).rows.filter(matches))conversions.push({...generation,sourceKey:`${i.stat_date}:${r.natural_key}`,rowSha:r.row_sha,dimensions:r.dimensions_json,metrics:r.metrics_json});
-      if(i.report_type==='SHOPPINGKEYWORD_DETAIL')for(const r of (await this.pool.query('SELECT * FROM searchad_search_terms WHERE customer_id=$1 AND ingestion_id=$2 ORDER BY natural_key',[customerId,i.ingestion_id])).rows.filter(r=>mappings.some(m=>m.entityType===r.entity_type&&m.entityId===r.entity_id)))searchTerms.push({sourceHash:r.row_sha,generationSha:i.generation_sha});
+      if(i.report_type==='AD')for(const r of (await client.query('SELECT *,stat_date::text AS stat_date FROM searchad_daily_metrics WHERE customer_id=$1 AND ingestion_id=$2 ORDER BY natural_key',[customerId,i.ingestion_id])).rows.filter(matches))rows.push({...generation,sourceKey:`${i.stat_date}:${r.natural_key}`,rowSha:r.row_sha,entityType:r.entity_type,entityId:r.entity_id,dimensions:r.dimensions_json,metrics:r.metrics_json,costRaw:r.cost_raw,costGrossKrw:r.cost_gross_krw,costBasis:r.cost_basis});
+      if(i.report_type==='AD_CONVERSION')for(const r of (await client.query('SELECT * FROM searchad_conversion_metrics WHERE customer_id=$1 AND ingestion_id=$2 ORDER BY natural_key',[customerId,i.ingestion_id])).rows.filter(matches))conversions.push({...generation,sourceKey:`${i.stat_date}:${r.natural_key}`,rowSha:r.row_sha,dimensions:r.dimensions_json,metrics:r.metrics_json});
+      if(i.report_type==='SHOPPINGKEYWORD_DETAIL')for(const r of (await client.query('SELECT * FROM searchad_search_terms WHERE customer_id=$1 AND ingestion_id=$2 ORDER BY natural_key',[customerId,i.ingestion_id])).rows.filter(r=>mappings.some(m=>m.entityType===r.entity_type&&m.entityId===r.entity_id)))searchTerms.push({sourceHash:r.row_sha,generationSha:i.generation_sha});
     }
     return {rows,conversions,searchTerms,generations:selected.filter(i=>['AD','AD_CONVERSION','SHOPPINGKEYWORD_DETAIL'].includes(i.report_type)).map(i=>({ingestionId:i.ingestion_id,generationSha:i.generation_sha,reportType:i.report_type,statDate:i.stat_date,quality:i.quality,generationWindow:i.provenance_json.generationWindow}))};
   }
-  async selectAutomationEvidence({customerId,entityType,entityId,identity,now,maxCurrentAgeMs=1800000}) {
+  async selectAutomationEvidence({customerId,entityType,entityId,identity,now,maxCurrentAgeMs=1800000},client=this.pool) {
     validateIdentity(identity,customerId);
-    const stats=map((await this.pool.query(`SELECT *,since_kst::text AS since_kst,until_kst::text AS until_kst FROM searchad_stats_observations
+    const stats=map((await client.query(`SELECT *,since_kst::text AS since_kst,until_kst::text AS until_kst FROM searchad_stats_observations
       WHERE customer_id=$1 AND entity_type=$2 AND entity_id=$3 AND spec_sha=$4 AND credential_fingerprint=$5 AND upstream_base_url=$6
       AND observed_at BETWEEN $7 AND $8 AND cycle_at BETWEEN $7 AND $8 ORDER BY observed_at DESC,observation_id DESC LIMIT 1`,[customerId,entityType,entityId,identity.specSha,identity.credentialFingerprint,identity.upstreamBaseUrl,new Date(now-Math.min(maxCurrentAgeMs,1800000)).toISOString(),new Date(now).toISOString()])).rows[0]);
-    const spend=await this.selectSpendEvidence({customerId,entityType,entityId,identity,now,maxAgeMs:86400000});
+    const spend=await this.selectSpendEvidence({customerId,entityType,entityId,identity,now,maxAgeMs:86400000,client});
     return {stats,spend};
   }
   // Stats is provisional regardless of age or identity. Task 3 supplies a

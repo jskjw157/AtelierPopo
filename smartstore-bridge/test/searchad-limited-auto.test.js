@@ -48,3 +48,8 @@ test('increase requires positive exact actual contribution while loss can still 
   for(const amount of ['0','-1','invalid']){value.policy.recipe.dailyBudgetKrw=1200;value.profitability.metrics.contributionKrw=amount;assert.equal(evaluateAutoEligibility(value).eligible,false,amount);}
   value.policy.recipe.dailyBudgetKrw=800;value.profitability.metrics.contributionKrw='-1';assert.equal(evaluateAutoEligibility(value).eligible,true);
 });
+
+test('fix1 T10-I2 malformed or elapsed provided source deadlines cannot supply Auto authority',()=>{
+  for(const deadline of [iso(autoNow),iso(autoNow-1),'2026-02-30T03:00:00.000Z','2026-10-05T12:00:01+09:00','invalid',Infinity]){const value=autoFacts();value.mapping.validUntil=deadline;assert.equal(evaluateAutoEligibility(value).eligible,false,String(deadline));}
+  for(const source of ['estimate','balance'])for(const field of ['expiresAt','validUntil'])for(const deadline of [iso(autoNow),'invalid',null,Infinity]){const value=autoFacts();value.policy.recipe.dailyBudgetKrw=1200;value.capability.estimate={verified:true,observedAt:iso(autoNow),identity:value.evidence.identity};value.capability.balance={verified:true,observedAt:iso(autoNow),identity:value.evidence.identity,availableKrw:'30000'};value.capability[source][field]=deadline;assert.equal(evaluateAutoEligibility(value).eligible,false,`${source}.${field}:${deadline}`);}
+});
