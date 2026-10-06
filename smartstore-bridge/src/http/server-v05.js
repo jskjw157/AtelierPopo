@@ -1,3 +1,7 @@
+import { createSearchAdProfitabilityRoutes } from './routes-searchad-profitability.js';
+import { disposeApplicationV05 } from '../bootstrap-v05.js';
+import { createSearchAdWorkerRoutes } from './routes-searchad-worker.js';
+import { createSearchAdAutomationRoutes } from './routes-searchad-automation.js';
 import http from 'node:http';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -16,24 +20,42 @@ import {
   configuredApiKeys,
   ensureSameIdempotentOperation,
   normalizePathname,
+  route,
   sendJson
 } from './runtime.js';
+import { loadSearchAdHttpAccessControl } from './searchad-access-control.js';
 import { createSystemRoutesV04, readinessV04 } from './routes-system-v04.js';
 import { createProductRoutesV03 } from './routes-products-v03.js';
 import { createLedgerRoutesV03 } from './routes-ledger-v03.js';
 import { createDriveRoutes } from './routes-drive.js';
 import { createCommerceRoutes } from './routes-commerce.js';
+import { createSearchAdCircuitRoutes } from './routes-searchad-circuit.js';
+import { createSearchAdReportingRoutes } from './routes-searchad-reporting.js';
 import { createSearchAdRoutes } from './routes-searchad.js';
+import { createSearchAdWriteRoutesV3 } from './routes-searchad-write-v3.js';
+import { createSearchAdCanaryRoutes } from './routes-searchad-canary.js';
+import { createSearchAdActivationRoutes } from './routes-searchad-activation.js';
+import { createSearchAdHierarchyRoutes } from './routes-searchad-hierarchy.js';
 import { createMultiSourceCatalogRoutes } from './routes-multi-source-catalog.js';
 import { HttpError } from './errors.js';
 
 const SERVICE_VERSION = '0.5.1';
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const LOG_METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
+// Exception codes can originate upstream. Log only fixed boundary diagnostics;
+// other failures still retain their static route, HTTP status and generic code.
+const LOG_ERROR_CODES = new Set([
+  'CORS_ORIGIN_NOT_ALLOWED', 'METHOD_NOT_ALLOWED', 'ROUTE_NOT_FOUND', 'UNAUTHORIZED',
+  'RATE_LIMITED', 'API_AUTH_NOT_CONFIGURED', 'SEARCHAD_HTTP_AUTH_NOT_CONFIGURED',
+  'SEARCHAD_ROLE_FORBIDDEN', 'SEARCHAD_CUSTOMER_FORBIDDEN', 'PAYLOAD_TOO_LARGE',
+  'UNSUPPORTED_MEDIA_TYPE', 'INVALID_JSON', 'SEARCHAD_REPORTING_QUERY_INVALID', 'INTERNAL_ERROR'
+]);
 
 export function createHttpApiV05({ app, env = process.env, logger = defaultLogger, version = SERVICE_VERSION } = {}) {
   if (!app) throw new Error('createHttpApiV05에는 bootstrap 결과 app이 필요합니다.');
   if (!app.commerceGateway) throw new Error('네이버 커머스API gateway가 초기화되지 않았습니다.');
   const httpConfig = loadHttpConfig(env);
+  const searchAdAccessControl = loadSearchAdHttpAccessControl(env);
   const rateLimiter = new FixedWindowRateLimiter();
   const operationQueue = new OperationQueue({
     ledger: app.ledger,
@@ -70,20 +92,57 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     return { row, reused: false };
   }
 
-  const routeContext = { app, httpConfig, operationQueue, version, startedAt, createAsyncOperation, redactionRoots };
+  const routeContext = { app, env, httpConfig, operationQueue, version, startedAt, createAsyncOperation, redactionRoots };
   const routes = [
+    // Override only v0.5 readiness; legacy servers keep their existing contract.
+    route('GET', /^\/health\/ready$/, async ({ req, res }) => {
+      const { ready, searchAdActivation, searchAdHierarchy, searchAdCompletion, searchAdWorker } = api.readiness();
+      sendJson(req, res, ready ? 200 : 503, {
+        ok: ready,
+        status: ready ? 'ready' : 'not_ready',
+        service: 'haar-smartstore-commerce-drive-bridge',
+        version,
+        searchAdActivation: {
+          required: searchAdActivation.required,
+          initialized: searchAdActivation.initialized,
+          ready: searchAdActivation.ready
+        },
+        searchAdWorker,
+        searchAdCompletion: {
+          required: searchAdCompletion.required, initialized: searchAdCompletion.initialized, ready: searchAdCompletion.ready
+        },
+        searchAdHierarchy: {
+          required: searchAdHierarchy.required,
+          initialized: searchAdHierarchy.initialized,
+          ready: searchAdHierarchy.ready
+        }
+      });
+    }, { auth: false }),
     ...createSystemRoutesV04(routeContext),
     ...createProductRoutesV03(routeContext),
     ...createLedgerRoutesV03(routeContext),
     ...createDriveRoutes(routeContext),
     ...createCommerceRoutes(routeContext),
     ...createSearchAdRoutes(routeContext),
+    ...createSearchAdReportingRoutes(routeContext),
+    ...createSearchAdCircuitRoutes(routeContext),
+    ...createSearchAdAutomationRoutes(routeContext),
+    ...createSearchAdProfitabilityRoutes(routeContext),
+    ...createSearchAdWorkerRoutes(routeContext),
+    ...createSearchAdWriteRoutesV3(routeContext),
+    ...createSearchAdCanaryRoutes(routeContext),
+    ...createSearchAdActivationRoutes(routeContext),
+    ...createSearchAdHierarchyRoutes(routeContext),
     ...createMultiSourceCatalogRoutes(routeContext)
   ];
 
   const server = http.createServer(async (req, res) => {
     const requestId = String(req.headers['x-request-id'] || randomUUID()).slice(0, 128);
+    const logRequestId = randomUUID();
+    const logMethod = LOG_METHODS.has(req.method) ? req.method : 'OTHER';
+    let logRoute = null;
     res.setHeader('X-Request-Id', requestId);
+    res.setHeader('X-Log-Request-Id', logRequestId);
     applyCors(req, res, httpConfig);
     if (res.hasHeader('Access-Control-Allow-Methods')) {
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -110,15 +169,24 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
         }
         throw new HttpError(404, 'ROUTE_NOT_FOUND', '요청한 API 경로를 찾을 수 없습니다.');
       }
+      logRoute = selected.pattern.source;
       selected.pattern.lastIndex = 0;
       const match = selected.pattern.exec(pathname);
       let authenticatedToken = '';
+      let tokenFingerprint = '';
+      let principal = null;
       if (selected.auth) {
-        authenticatedToken = verifyApiKey(req, { ...httpConfig, apiKeys: configuredApiKeys(httpConfig) });
+        if (selected.searchAdRole) {
+          const authenticated = searchAdAccessControl.authenticateRequest(req, { minimumRole: selected.searchAdRole });
+          principal = authenticated.principal;
+          tokenFingerprint = authenticated.tokenFingerprint;
+        } else {
+          authenticatedToken = verifyApiKey(req, { ...httpConfig, apiKeys: configuredApiKeys(httpConfig) });
+          tokenFingerprint = authenticatedToken.slice(0, 8);
+        }
       }
       if (selected.auth) {
         const ip = clientIp(req, httpConfig);
-        const tokenFingerprint = authenticatedToken.slice(0, 8);
         const limit = selected.write ? httpConfig.writeRateLimitPerMinute : httpConfig.readRateLimitPerMinute;
         const rate = rateLimiter.consume(`${ip}:${tokenFingerprint}:${selected.write ? 'write' : 'read'}`, limit);
         res.setHeader('X-RateLimit-Limit', String(rate.limit));
@@ -132,14 +200,20 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       const bodyLimit = Math.max(httpConfig.maxBodyBytes, Number(selected.maxBodyBytes || 0));
       const body = BODY_METHODS.has(req.method || '') ? await readJsonBody(req, bodyLimit) : {};
       logger.info('HTTP request', {
-        requestId, method: req.method, pathname, authenticated: selected.auth, write: selected.write, bodyLimit
+        requestId: logRequestId,
+        method: logMethod,
+        route: logRoute,
+        authenticated: selected.auth,
+        write: selected.write,
+        searchAdRole: selected.searchAdRole || null,
+        bodyLimit
       });
-      await selected.handler({ req, res, url, pathname, match, body, requestId });
+      await selected.handler({ req, res, url, pathname, match, body, requestId, principal });
     } catch (error) {
       const { status, body } = errorPayloadV05(error, requestId, { exposeInternal: httpConfig.exposeInternalErrors });
       logger.error('HTTP request failed', {
-        requestId, method: req.method, url: req.url, status,
-        name: error.name, code: error.code, message: error.message
+        requestId: logRequestId, method: logMethod, route: logRoute, status,
+        code: LOG_ERROR_CODES.has(body.error.code) ? body.error.code : 'HTTP_REQUEST_FAILED'
       });
       if (!res.headersSent) {
         if (status === 401) res.setHeader('WWW-Authenticate', 'Bearer realm="atelier-popo"');
@@ -174,26 +248,107 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     return server.address();
   }
 
-  async function close() {
-    operationQueue.accepting = false;
-    if (server.listening) await new Promise(resolve => server.close(() => resolve()));
-    await operationQueue.close({ timeoutMs: httpConfig.shutdownTimeoutMs });
-    app.ledger.close();
+  let closePromise = null;
+  function close() {
+    if (closePromise) return closePromise;
+    closePromise = (async () => {
+      operationQueue.accepting = false;
+      if (server.listening) await new Promise(resolve => server.close(() => resolve()));
+      const idle = await operationQueue.close({ timeoutMs: httpConfig.shutdownTimeoutMs });
+      if (idle !== true) {
+        throw Object.assign(new Error('Shutdown is pending: active operations still own runtime resources.'), {
+          code: 'HTTP_SHUTDOWN_PENDING'
+        });
+      }
+      await disposeApplicationV05(app,{drainTimeoutMs:httpConfig.shutdownTimeoutMs});
+      return true;
+    })().catch(error => {
+      // A drain timeout is retryable; no pool or ledger has been closed yet.
+      if (['HTTP_SHUTDOWN_PENDING','SEARCHAD_WORKER_SHUTDOWN_PENDING'].includes(error?.code)) closePromise = null;
+      throw error;
+    });
+    return closePromise;
   }
 
-  return {
+  const api = {
     server,
     httpConfig,
+    searchAdAccessControl,
     operationQueue,
     listen,
     close,
-    readiness: () => ({
-      ...readinessV04(app, httpConfig, operationQueue),
+    readiness: () => {
+      const base = readinessV04(app, httpConfig, operationQueue);
+      const activationStatus = app.searchAdActivationRuntime?.status?.() || null;
+      const activationRequired = Boolean(app.searchAdConfig?.configured);
+      const activationReady = activationStatus?.ready === true;
+      const hierarchyStatus = app.searchAdHierarchyRuntime?.status?.() || null;
+      const hierarchyRequired = app.searchAdConfig?.allowActiveCanary === true;
+      const hierarchyReady = hierarchyStatus?.ready === true;
+      const workerRequired=env.ATELIER_SEARCHAD_WORKER_ENABLED==='true';
+      const workerStatus=app.searchAdCompletionRuntime?.status?.().worker;
+      const searchAdWorker={required:workerRequired,initialized:workerStatus?.initialized===true,ready:workerStatus?.ready===true};
+      const completionRequired = app.searchAdCompletionRequired === true;
+      const completionReady = app.searchAdCompletionRuntime?.status?.().ready === true;
+      // Infrastructure readiness is not permission to mutate any Customer.
+      // This projection performs no upstream probe or lazy write initialization.
+      return {
+      ...base,
+      ready: base.readyForRead === true &&
+        (!activationRequired || activationReady) &&
+        (!hierarchyRequired || hierarchyReady) &&
+        (!completionRequired || completionReady) && (!workerRequired || searchAdWorker.ready),
+      searchAdWorker,
+      searchAdCompletion: { required: completionRequired, initialized: Boolean(app.searchAdCompletionRuntime), ready: completionReady },
       searchAd: {
         configured: Boolean(app.searchAdConfig?.configured),
         ready: Boolean(app.searchAdGateway),
         startupError: app.searchAdStartupError || null,
         status: app.searchAdGateway?.status?.() || null
+      },
+      searchAdWrite: {
+        featureVersion: '0.7.0',
+        initialized: Boolean(app.searchAdWriteRuntime),
+        status: app.searchAdWriteRuntime?.status?.() || {
+          enabled: true,
+          allowWrites: false,
+          activationMode: 'prevalidation',
+          prevalidationGateTemporary: true,
+          permanentWriteProhibition: false
+        }
+      },
+      searchAdActiveCanary: {
+        initialized: Boolean(app.searchAdActiveCanaryRuntime),
+        startupError: app.searchAdActiveCanaryStartupError || null,
+        access: searchAdAccessControl.status(),
+        status: app.searchAdActiveCanaryRuntime?.status?.() || {
+          enabled: false,
+          ready: false,
+          activationMode: 'prevalidation',
+          storage: { runtime: 'postgres', schemaReady: false }
+        }
+      },
+      searchAdActivation: {
+        required: activationRequired,
+        initialized: Boolean(app.searchAdActivationRuntime),
+        ready: activationReady,
+        startupError: app.searchAdActivationStartupError || null,
+        status: activationStatus || {
+          ready: false, storage: { runtime: 'postgres', schemaReady: false },
+          targetOperationCount: 0, targetFieldCount: 0
+        }
+      },
+      searchAdHierarchy: {
+        required: hierarchyRequired,
+        initialized: Boolean(app.searchAdHierarchyRuntime),
+        ready: hierarchyReady,
+        startupError: app.searchAdHierarchyStartupError || null,
+        status: hierarchyStatus || {
+          enabled: false,
+          ready: false,
+          storage: { runtime: 'postgres', schemaReady: false },
+          scope: { campaignCreate: false }
+        }
       },
       multiSourceCatalog: {
         configured: Boolean(app.multiSourceCatalogConfig),
@@ -203,6 +358,8 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
         sources: app.catalogSourceRegistry?.status?.() || null,
         channels: app.salesChannelRegistry?.status?.() || null
       }
-    })
+      };
+    }
   };
+  return api;
 }

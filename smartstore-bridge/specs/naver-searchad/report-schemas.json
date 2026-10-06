@@ -1,0 +1,1320 @@
+{
+  "version": 1,
+  "vatPolicy": {
+    "version": "vat-20260330-v1",
+    "boundary": "2026-03-30",
+    "before": "vat_excluded",
+    "after": "vat_included",
+    "url": "https://naver.github.io/searchad-apidoc/notice/2026/02/11/notice1/",
+    "blob": "696fea89d3fd0c4c9664f3076c117182366b4861"
+  },
+  "searchKeywordTypes": {
+    "0": "exact",
+    "5": "exact",
+    "1": "extended",
+    "2": "exact_similar"
+  },
+  "descriptors": [
+    {
+      "kind": "stat",
+      "reportType": "AD",
+      "schemaVersion": "AD-v1",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Date",
+          "type": "string"
+        },
+        {
+          "name": "CUSTOMER ID",
+          "type": "int"
+        },
+        {
+          "name": "Campaign ID",
+          "type": "string"
+        },
+        {
+          "name": "AD Group ID",
+          "type": "string"
+        },
+        {
+          "name": "AD keyword ID",
+          "type": "string"
+        },
+        {
+          "name": "AD ID",
+          "type": "string"
+        },
+        {
+          "name": "Business Channel ID",
+          "type": "string"
+        },
+        {
+          "name": "Media code",
+          "type": "string"
+        },
+        {
+          "name": "PC Mobile Type",
+          "type": "string"
+        },
+        {
+          "name": "Impression",
+          "type": "int"
+        },
+        {
+          "name": "Click",
+          "type": "int"
+        },
+        {
+          "name": "Cost",
+          "type": "long"
+        },
+        {
+          "name": "Sum of AD rank",
+          "type": "int"
+        },
+        {
+          "name": "View count",
+          "type": "int"
+        }
+      ],
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      },
+      "generationFrom": null,
+      "generationTo": null,
+      "orderedSchemaSha": "82c9a6ea0c17dd0c87258ded72f1a16c21145d97352e00da82ce8ab1a4f9a066"
+    },
+    {
+      "kind": "stat",
+      "reportType": "AD_CONVERSION",
+      "schemaVersion": "AD_CONVERSION-v1",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Date",
+          "type": "string"
+        },
+        {
+          "name": "CUSTOMER ID",
+          "type": "int"
+        },
+        {
+          "name": "Campaign ID",
+          "type": "string"
+        },
+        {
+          "name": "AD Group ID",
+          "type": "string"
+        },
+        {
+          "name": "AD keyword ID",
+          "type": "string"
+        },
+        {
+          "name": "AD ID",
+          "type": "string"
+        },
+        {
+          "name": "Business Channel ID",
+          "type": "string"
+        },
+        {
+          "name": "Media code",
+          "type": "string"
+        },
+        {
+          "name": "PC Mobile Type",
+          "type": "string"
+        },
+        {
+          "name": "Conversion Method",
+          "type": "int"
+        },
+        {
+          "name": "Conversion Type",
+          "type": "string"
+        },
+        {
+          "name": "Conversion count",
+          "type": "int"
+        },
+        {
+          "name": "Sales by conversion",
+          "type": "long"
+        }
+      ],
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      },
+      "generationFrom": null,
+      "generationTo": null,
+      "orderedSchemaSha": "db3035546a96243f6e75f3da01aaf6cb51c160085b927a90fd9e44379756e9b7"
+    },
+    {
+      "kind": "stat",
+      "reportType": "EXPKEYWORD",
+      "schemaVersion": "EXPKEYWORD-v1",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Date",
+          "type": "string"
+        },
+        {
+          "name": "CUSTOMER ID",
+          "type": "int"
+        },
+        {
+          "name": "Campaign ID",
+          "type": "string"
+        },
+        {
+          "name": "AD Group ID",
+          "type": "string"
+        },
+        {
+          "name": "Search Keyword",
+          "type": "string"
+        },
+        {
+          "name": "Media code",
+          "type": "string"
+        },
+        {
+          "name": "PC Mobile Type",
+          "type": "string"
+        },
+        {
+          "name": "Search Keyword Type",
+          "type": "int"
+        },
+        {
+          "name": "Impression",
+          "type": "int"
+        },
+        {
+          "name": "Click",
+          "type": "int"
+        },
+        {
+          "name": "Cost",
+          "type": "long"
+        },
+        {
+          "name": "View count",
+          "type": "int"
+        }
+      ],
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      },
+      "generationFrom": null,
+      "generationTo": null,
+      "orderedSchemaSha": "fa1dac12abb9ce17f349c3c85e0d72ad3c48190de789aab5de89893ac815c42a"
+    },
+    {
+      "kind": "stat",
+      "reportType": "ADEXTENSION",
+      "schemaVersion": "ADEXTENSION-v2",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Date",
+          "type": "string"
+        },
+        {
+          "name": "CUSTOMER ID",
+          "type": "int"
+        },
+        {
+          "name": "Campaign ID",
+          "type": "string"
+        },
+        {
+          "name": "AD Group ID",
+          "type": "string"
+        },
+        {
+          "name": "AD keyword ID",
+          "type": "string"
+        },
+        {
+          "name": "AD ID",
+          "type": "string"
+        },
+        {
+          "name": "AD extension ID",
+          "type": "string"
+        },
+        {
+          "name": "Media code",
+          "type": "string"
+        },
+        {
+          "name": "PC Mobile Type",
+          "type": "string"
+        },
+        {
+          "name": "Impression",
+          "type": "int"
+        },
+        {
+          "name": "Click",
+          "type": "int"
+        },
+        {
+          "name": "Cost",
+          "type": "long"
+        },
+        {
+          "name": "Sum of AD rank",
+          "type": "int"
+        },
+        {
+          "name": "View count",
+          "type": "int"
+        }
+      ],
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      },
+      "generationFrom": "2026-11-15T15:00:00Z",
+      "generationTo": null,
+      "notice": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/_posts/2026-08-14-notice1.md",
+      "orderedSchemaSha": "739b4c5bd1dec5ebe314a40dabcd079b2b12774a53ce31e9cf6c1714c3576e90"
+    },
+    {
+      "kind": "stat",
+      "reportType": "ADEXTENSION",
+      "schemaVersion": "ADEXTENSION-v1",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Date",
+          "type": "string"
+        },
+        {
+          "name": "CUSTOMER ID",
+          "type": "int"
+        },
+        {
+          "name": "Campaign ID",
+          "type": "string"
+        },
+        {
+          "name": "AD Group ID",
+          "type": "string"
+        },
+        {
+          "name": "AD keyword ID",
+          "type": "string"
+        },
+        {
+          "name": "AD ID",
+          "type": "string"
+        },
+        {
+          "name": "AD extension ID",
+          "type": "string"
+        },
+        {
+          "name": "AD extension Business Channel ID",
+          "type": "string"
+        },
+        {
+          "name": "Media code",
+          "type": "string"
+        },
+        {
+          "name": "PC Mobile Type",
+          "type": "string"
+        },
+        {
+          "name": "Impression",
+          "type": "int"
+        },
+        {
+          "name": "Click",
+          "type": "int"
+        },
+        {
+          "name": "Cost",
+          "type": "long"
+        },
+        {
+          "name": "Sum of AD rank",
+          "type": "int"
+        },
+        {
+          "name": "View count",
+          "type": "int"
+        }
+      ],
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      },
+      "generationFrom": null,
+      "generationTo": "2026-11-15T15:00:00Z",
+      "orderedSchemaSha": "2c3d583d0ce059783ef3eb0b2cb27513903596cc4563396780f359bb893a4b4f"
+    },
+    {
+      "kind": "stat",
+      "reportType": "ADEXTENSION_CONVERSION",
+      "schemaVersion": "ADEXTENSION_CONVERSION-v2",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Date",
+          "type": "string"
+        },
+        {
+          "name": "CUSTOMER ID",
+          "type": "int"
+        },
+        {
+          "name": "Campaign ID",
+          "type": "string"
+        },
+        {
+          "name": "AD Group ID",
+          "type": "string"
+        },
+        {
+          "name": "AD keyword ID",
+          "type": "string"
+        },
+        {
+          "name": "AD ID",
+          "type": "string"
+        },
+        {
+          "name": "AD extension ID",
+          "type": "string"
+        },
+        {
+          "name": "Media code",
+          "type": "string"
+        },
+        {
+          "name": "PC Mobile Type",
+          "type": "string"
+        },
+        {
+          "name": "Conversion Method",
+          "type": "int"
+        },
+        {
+          "name": "Conversion Type",
+          "type": "string"
+        },
+        {
+          "name": "Conversion count",
+          "type": "int"
+        },
+        {
+          "name": "Sales by conversion",
+          "type": "long"
+        }
+      ],
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      },
+      "generationFrom": "2026-11-15T15:00:00Z",
+      "generationTo": null,
+      "notice": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/_posts/2026-08-14-notice1.md",
+      "orderedSchemaSha": "84891bedfba1cafcee7f5b070fc8aad32af59adb9cf057e8fd410b05fc6c9574"
+    },
+    {
+      "kind": "stat",
+      "reportType": "ADEXTENSION_CONVERSION",
+      "schemaVersion": "ADEXTENSION_CONVERSION-v1",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Date",
+          "type": "string"
+        },
+        {
+          "name": "CUSTOMER ID",
+          "type": "int"
+        },
+        {
+          "name": "Campaign ID",
+          "type": "string"
+        },
+        {
+          "name": "AD Group ID",
+          "type": "string"
+        },
+        {
+          "name": "AD keyword ID",
+          "type": "string"
+        },
+        {
+          "name": "AD ID",
+          "type": "string"
+        },
+        {
+          "name": "AD extension ID",
+          "type": "string"
+        },
+        {
+          "name": "AD extension Business Channel ID",
+          "type": "string"
+        },
+        {
+          "name": "Media code",
+          "type": "string"
+        },
+        {
+          "name": "PC Mobile Type",
+          "type": "string"
+        },
+        {
+          "name": "Conversion Method",
+          "type": "int"
+        },
+        {
+          "name": "Conversion Type",
+          "type": "string"
+        },
+        {
+          "name": "Conversion count",
+          "type": "int"
+        },
+        {
+          "name": "Sales by conversion",
+          "type": "long"
+        }
+      ],
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      },
+      "generationFrom": null,
+      "generationTo": "2026-11-15T15:00:00Z",
+      "orderedSchemaSha": "67bdf08e71e1242eaf5c06b05072721513e7f32547863b00728331a74fdeab6d"
+    },
+    {
+      "kind": "master",
+      "reportType": "Campaign",
+      "schemaVersion": "Campaign-v1",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Customer ID",
+          "type": "int"
+        },
+        {
+          "name": "Campaign ID",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Campaign Name",
+          "type": "string",
+          "maxLength": 256
+        },
+        {
+          "name": "Campaign Type",
+          "type": "int"
+        },
+        {
+          "name": "Delivery Method",
+          "type": "int"
+        },
+        {
+          "name": "Using Period",
+          "type": "int"
+        },
+        {
+          "name": "Period Start Date",
+          "type": "date"
+        },
+        {
+          "name": "Period End Date",
+          "type": "date"
+        },
+        {
+          "name": "regTm",
+          "type": "date"
+        },
+        {
+          "name": "delTm",
+          "type": "date"
+        },
+        {
+          "name": "ON/OFF",
+          "type": "int"
+        },
+        {
+          "name": "Shared Budget ID",
+          "type": "string",
+          "maxLength": 31
+        }
+      ],
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      },
+      "generationFrom": null,
+      "generationTo": null,
+      "orderedSchemaSha": "4c7830afe3cdb5855f54a9c6e6bca8eb3eab21c7ff3f8290cbd158d27d9f01ec"
+    },
+    {
+      "kind": "master",
+      "reportType": "Adgroup",
+      "schemaVersion": "Adgroup-before-ai",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Customer ID",
+          "type": "int"
+        },
+        {
+          "name": "Ad Group ID",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Campaign ID",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Ad Group Name",
+          "type": "string",
+          "maxLength": 256
+        },
+        {
+          "name": "Ad Group Bid amount",
+          "type": "int"
+        },
+        {
+          "name": "ON/OFF",
+          "type": "int"
+        },
+        {
+          "name": "Using contents network bid",
+          "type": "int"
+        },
+        {
+          "name": "Contents network bid",
+          "type": "int"
+        },
+        {
+          "name": "PC network bidding weight",
+          "type": "int"
+        },
+        {
+          "name": "Mobile network bidding weight",
+          "type": "int"
+        },
+        {
+          "name": "Business Channel Id(Mobile)",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Business Channel Id(PC)",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "regTm",
+          "type": "date"
+        },
+        {
+          "name": "delTm",
+          "type": "date"
+        },
+        {
+          "name": "Content Type",
+          "type": "string",
+          "maxLength": 32
+        },
+        {
+          "name": "AdGroup Type",
+          "type": "int"
+        },
+        {
+          "name": "Shared Budget ID",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Using Expanded Search",
+          "type": "int"
+        }
+      ],
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      },
+      "generationFrom": null,
+      "generationTo": "2026-07-15T15:00:00Z",
+      "notice": "https://naver.github.io/searchad-apidoc/notice/2026/06/16/notice1/",
+      "orderedSchemaSha": "b67ee6c922d1d16ffdd53c15e646029897963a0361362dc568931aad9e05e14e"
+    },
+    {
+      "kind": "master",
+      "reportType": "Adgroup",
+      "schemaVersion": "Adgroup-v1",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Customer ID",
+          "type": "int"
+        },
+        {
+          "name": "Ad Group ID",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Campaign ID",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Ad Group Name",
+          "type": "string",
+          "maxLength": 256
+        },
+        {
+          "name": "Ad Group Bid amount",
+          "type": "int"
+        },
+        {
+          "name": "ON/OFF",
+          "type": "int"
+        },
+        {
+          "name": "Using contents network bid",
+          "type": "int"
+        },
+        {
+          "name": "Contents network bid",
+          "type": "int"
+        },
+        {
+          "name": "PC network bidding weight",
+          "type": "int"
+        },
+        {
+          "name": "Mobile network bidding weight",
+          "type": "int"
+        },
+        {
+          "name": "Business Channel Id(Mobile)",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Business Channel Id(PC)",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "regTm",
+          "type": "date"
+        },
+        {
+          "name": "delTm",
+          "type": "date"
+        },
+        {
+          "name": "Content Type",
+          "type": "string",
+          "maxLength": 32
+        },
+        {
+          "name": "AdGroup Type",
+          "type": "int"
+        },
+        {
+          "name": "Shared Budget ID",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Using Expanded Search",
+          "type": "int"
+        },
+        {
+          "name": "Using Ai Ads",
+          "type": "int"
+        }
+      ],
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      },
+      "generationFrom": "2026-07-15T15:00:00Z",
+      "generationTo": null,
+      "notice": "https://naver.github.io/searchad-apidoc/notice/2026/06/16/notice1/",
+      "orderedSchemaSha": "0e2f4cdadb03d7d276e9cb8ccf71de3796634601e34fce6ee359a13faa2ccd0a"
+    },
+    {
+      "kind": "master",
+      "reportType": "Keyword",
+      "schemaVersion": "Keyword-v1",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Customer ID",
+          "type": "int"
+        },
+        {
+          "name": "Ad Group ID",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Ad Keyword ID",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Ad Keyword",
+          "type": "string",
+          "maxLength": 300
+        },
+        {
+          "name": "Ad Keyword Bid Amount",
+          "type": "int"
+        },
+        {
+          "name": "landing URL(PC)",
+          "type": "string",
+          "maxLength": 1024
+        },
+        {
+          "name": "landing URL(Mobile)",
+          "type": "string",
+          "maxLength": 1024
+        },
+        {
+          "name": "ON/OFF",
+          "type": "int"
+        },
+        {
+          "name": "Ad Keyword Inspect Status",
+          "type": "int"
+        },
+        {
+          "name": "Using Ad Group Bid Amount",
+          "type": "int"
+        },
+        {
+          "name": "regTm",
+          "type": "date"
+        },
+        {
+          "name": "delTm",
+          "type": "date"
+        },
+        {
+          "name": "Ad Keyword Type",
+          "type": "int"
+        }
+      ],
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      },
+      "generationFrom": null,
+      "generationTo": null,
+      "orderedSchemaSha": "7c6daaa5e5fdd4b07665743f89eb23520a6e7118999b4114fcb5bcbb6f754505"
+    },
+    {
+      "kind": "master",
+      "reportType": "Ad",
+      "schemaVersion": "Ad-v1",
+      "parserVersion": "tsv-v1",
+      "supported": true,
+      "columns": [
+        {
+          "name": "Customer ID",
+          "type": "int"
+        },
+        {
+          "name": "Ad Group ID",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Ad ID",
+          "type": "string",
+          "maxLength": 31
+        },
+        {
+          "name": "Ad Creative Inspect Status",
+          "type": "int"
+        },
+        {
+          "name": "Subject",
+          "type": "string",
+          "maxLength": 256
+        },
+        {
+          "name": "Description",
+          "type": "string",
+          "maxLength": 256
+        },
+        {
+          "name": "Landing URL(PC)",
+          "type": "string",
+          "maxLength": 1024
+        },
+        {
+          "name": "Landing URL(Mobile)",
+          "type": "string",
+          "maxLength": 1024
+        },
+        {
+          "name": "ON/OFF",
+          "type": "int"
+        },
+        {
+          "name": "regTm",
+          "type": "date"
+        },
+        {
+          "name": "delTm",
+          "type": "date"
+        }
+      ],
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      },
+      "generationFrom": null,
+      "generationTo": null,
+      "orderedSchemaSha": "7715ebec3837f64198fbaaba79e12ef6955b01868871ad3352d61dd5022f443a"
+    },
+    {
+      "kind": "stat",
+      "reportType": "AD_DETAIL",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      }
+    },
+    {
+      "kind": "stat",
+      "reportType": "AD_CONVERSION_DETAIL",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      }
+    },
+    {
+      "kind": "stat",
+      "reportType": "SHOPPINGKEYWORD_DETAIL",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      }
+    },
+    {
+      "kind": "stat",
+      "reportType": "SHOPPINGKEYWORD_CONVERSION_DETAIL",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      }
+    },
+    {
+      "kind": "stat",
+      "reportType": "SHOPPINGBRANDPRODUCT",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      }
+    },
+    {
+      "kind": "stat",
+      "reportType": "SHOPPINGBRANDPRODUCT_CONVERSION",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      }
+    },
+    {
+      "kind": "stat",
+      "reportType": "CRITERION",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      }
+    },
+    {
+      "kind": "stat",
+      "reportType": "CRITERION_CONVERSION",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://github.com/naver/searchad-apidoc/blob/8e250490ab748367a627213f7d7a2917e005cb10/assets/i18n/markdown-en-US.json",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10",
+        "sha256": "158b13e7be66239a021e982b25f68708351cb8f01200393715103cc40c72b63e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "CampaignBudget",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "BusinessChannel",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "AdgroupBudget",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "AdExtension",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "Qi",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "Label",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "LabelRef",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "Media",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "Biz",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "SeasonalEvent",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "ShoppingProduct",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "ContentsAd",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "PlaceAd",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "CatalogAd",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "AdQi",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "ProductGroup",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "ProductGroupRel",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "BrandAd",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "BrandThumbnailAd",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "BrandBannerAd",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "Criterion",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "SharedBudget",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "Asset",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "AdAssetLink",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "RsaAd",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "master",
+      "reportType": "HospitalAd",
+      "supported": false,
+      "reason": "EXACT_SCHEMA_NOT_IMPLEMENTED",
+      "source": {
+        "url": "https://gist.github.com/naver-searchad/186ca42e1e8596b0e3dcf74e3a86c04f/8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "revision": "8f5aed7a003af91e00fc2eede43e8452fd369a33",
+        "sha256": "7d94d45b4db76e2faa1a828eeb9611f7e398d9b2ba1c06af53a8d690027d818e"
+      }
+    },
+    {
+      "kind": "stat",
+      "reportType": "NAVERPAY_CONVERSION",
+      "supported": false,
+      "reason": "RETIRED",
+      "lastDataDate": "2025-04-08",
+      "accessEndDate": "2025-05-09",
+      "source": {
+        "url": "https://naver.github.io/searchad-apidoc/notice/2025/04/02/notice1/",
+        "revision": "8e250490ab748367a627213f7d7a2917e005cb10"
+      }
+    }
+  ],
+  "downloadSource": {
+    "url": "https://github.com/naver/searchad-apidoc/blob/aff5d55f7579fc57f4265861837f0d611b083ce3/php-sample/restapi.php",
+    "lastTouch": "aff5d55f7579fc57f4265861837f0d611b083ce3",
+    "blob": "bfa033419f5b616a294a56b3c64460285cee6921",
+    "sha256": "05f09c441e0689e8921e41c31eace88393d234e4d8fa8a145a901bd7be6f8544",
+    "contract": "GET /report-download path-only signing; sample insecure TLS/debug settings intentionally not adopted"
+  }
+}

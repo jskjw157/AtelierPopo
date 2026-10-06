@@ -1,0 +1,122 @@
+import { ProfitabilityService } from './profitability/service.js';
+import { RecommendationService } from './profitability/recommendation-service.js';
+import { SearchAdRecommendationToolAdapter } from './profitability/tool-adapter.js';
+import { createCommerceEvidenceProviders } from './profitability/commerce-provider.js';
+import { ProductMappingService } from './profitability/mapping-service.js';
+import { ProductEvidenceService } from './profitability/product-evidence-service.js';
+import { PostgresProductEvidenceRepository } from './profitability/postgres-repository.js';
+import { ValidationService } from './validation/service.js';
+import { loadValidationRegistry } from './validation/registry.js';
+import { createWorkerRuntime } from './worker/runtime.js';
+import { loadWorkerConfig } from './worker/config.js';
+import { AutomationService } from './automation/service.js';
+import { AutoEvidenceSelector, LimitedAutoExecutor } from './automation/auto-executor.js';
+import { PostgresAutomationRepository } from './automation/postgres-repository.js';
+import { createCircuitGuard } from './circuit/service.js';
+import { configuredReportStorage } from './reporting/s3-storage.js';
+import { createPostgresPool, closePostgresPool } from '../../infrastructure/postgres/pool.js';
+import { loadSearchAdReportingConfig } from './reporting/config.js';
+import { createReportingRuntime } from './reporting/runtime.js';
+import { reportingError } from './reporting/contracts.js';
+import { reportSchemas } from './reporting/schema-registry.js';
+function completionBlockers(providers = new Map()) {
+  const entries = [
+    ['parent_remote_absence_unproven', 'Parent cleanup requires remote snapshot and writer-exclusion authority that is not established.'],
+    ['live_validation_not_performed', 'Offline fixtures establish software behavior; no live validation was performed.'],
+    ['actual_profitability_unavailable', 'Configured financial providers do not establish complete reconciled actual profitability.'],
+    ['estimate_read_capability_unavailable', 'Pinned estimates are create-gated POST operations; verified read-only estimate and balance evidence is unavailable.'],
+    ['circuit_baseline_unavailable', 'Production reporting supplies no comparable Customer spend baseline.']
+  ].map(([code, reason]) => ({ code, reason, descriptiveOnly: true, executionAuthority: false }));
+  for (const [channelId, reason] of [
+    ['haar_naver_smartstore', 'SETTLEMENT_RECONCILIATION_REQUIRED'],
+    ['haar_own_mall', 'CAFE24_FINANCIAL_CAPABILITIES_UNVERIFIED']
+  ]) entries.push({ code: providers.has(channelId) ? 'provider_capability_unverified' : 'provider_not_configured', channelId, reason, descriptiveOnly: true, executionAuthority: false });
+  for (const descriptor of reportSchemas.descriptors.filter(item => !item.supported)) entries.push({ code: 'report_schema_unsupported', kind: descriptor.kind, reportType: descriptor.reportType, reason: descriptor.reason, descriptiveOnly: true, executionAuthority: false });
+  return entries;
+}
+const TABLES = ['searchad_profitability_snapshots','searchad_recommendations','searchad_customer_channel_bindings','searchad_commerce_observations','searchad_product_cost_inputs','searchad_stats_observations', 'searchad_report_blobs', 'searchad_report_ingestions', 'searchad_report_rows_staging', 'searchad_daily_metrics', 'searchad_conversion_metrics', 'searchad_search_terms', 'searchad_master_snapshots', 'searchad_spend_evidence', 'searchad_circuit_policies', 'searchad_circuit_state', 'searchad_circuit_events', 'searchad_circuit_projection_cursors', 'searchad_automation_reservations', 'searchad_automation_policy_revisions', 'searchad_write_execution_claims', 'searchad_write_execution_outcomes'];
+async function assertSchema(pool) {
+  try {
+    const result = await pool.query('SELECT name,to_regclass(name)::text AS relation FROM unnest($1::text[]) AS name', [TABLES]);
+    if (result.rows?.length !== TABLES.length || result.rows.some(row => !row.relation)) throw new Error();
+    const migration = await pool.query("SELECT version FROM schema_migrations WHERE version='0015'");
+    if (migration.rows.length !== 1) throw new Error();
+  } catch { throw reportingError('SEARCHAD_REPORTING_SCHEMA_NOT_READY', 503); }
+}
+/** Completion borrows the activation pool when available. Any injected storage
+ * is borrowed; future ingestion services reuse this same resource owner. */
+export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = process.env, clock = Date.now, blobStorage = null, getWriteRuntime, logger = console } = {}) {
+  let ownedPool = null, partialRuntime = null;
+  try {
+    const validationService = new ValidationService({registry:loadValidationRegistry({manifest:app.searchAdRegistry?.manifest})});
+    const workerConfig = loadWorkerConfig(env);
+    const reportingConfig = loadSearchAdReportingConfig(env);
+    if (!app.searchAdConfig?.configured) {
+      if(workerConfig.enabled)throw Object.assign(new Error(),{code:'SEARCHAD_WORKER_DEPENDENCIES'});
+      const runtime=await createReportingRuntime({ reportingConfig: { ...reportingConfig, enabled: false } });
+      runtime.validationService=validationService;
+      const status=runtime.status.bind(runtime);runtime.status=()=>({...status(),blockers:completionBlockers(),worker:{required:false,initialized:false,ready:false}});
+      return {runtime,startupError:null};
+    }
+    if (!app.searchAdGateway || !app.searchAdCredentials || !app.searchAdRegistry) throw reportingError('SEARCHAD_REPORTING_DEPENDENCIES_REQUIRED', 503);
+    let pool = app.searchAdActivationRuntime?.repository?.pool;
+    if (!pool) {
+      if (!reportingConfig.databaseUrl) throw reportingError('SEARCHAD_REPORTING_DATABASE_REQUIRED', 503);
+      ownedPool = createPostgresPool({ connectionString: reportingConfig.databaseUrl, sslMode: reportingConfig.postgresSslMode, logger }); pool = ownedPool;
+    }
+    await assertSchema(pool);
+    for (const customer of app.searchAdCredentials.listCustomers()) {
+      if (customer.status === 'active') {
+        await pool.query('INSERT INTO searchad_customer_accounts(customer_id) VALUES($1) ON CONFLICT(customer_id) DO NOTHING', [customer.customerId]);
+        await pool.query('INSERT INTO searchad_canary_accounts(customer_id) VALUES($1) ON CONFLICT(customer_id) DO NOTHING', [customer.customerId]);
+      }
+    }
+    const storage = blobStorage || configuredReportStorage(env);
+    const runtime = await createReportingRuntime({ pool, blobStorage: storage, gateway: app.searchAdGateway, registry: app.searchAdRegistry, credentialsRegistry: app.searchAdCredentials, config: app.searchAdConfig, reportingConfig, clock, closeOwnedResources: async () => { if (!blobStorage) storage?.client?.destroy?.(); await closePostgresPool(ownedPool); } });
+
+    runtime.validationService=validationService;
+    partialRuntime=runtime;
+    runtime.commerceProviders=createCommerceEvidenceProviders({app,env,clock,logger});
+    runtime.productRepository=new PostgresProductEvidenceRepository({pool,clock});
+    const mappingService=new ProductMappingService({repository:runtime.productRepository,providers:runtime.commerceProviders,identityResolver:runtime.identityResolver,clock});
+    const evidenceService=new ProductEvidenceService({repository:runtime.productRepository,mappingService,providers:runtime.commerceProviders,identityResolver:runtime.identityResolver,clock});
+    runtime.productMappingService=Object.fromEntries(['bindCustomerChannel','createRevision','appendCost'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>mappingService[method](input,context))]));
+    runtime.productEvidenceService=Object.fromEntries(['collect','summary'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>evidenceService[method](input,context))]));
+    const profitabilityService=new ProfitabilityService({repository:runtime.productRepository,productEvidenceService:evidenceService,reportingRepository:runtime.repository,identityResolver:runtime.identityResolver,clock});
+    runtime.recommendationToolAdapter=new SearchAdRecommendationToolAdapter({gateway:app.searchAdGateway,identityResolver:runtime.identityResolver});
+    const recommendationService=new RecommendationService({repository:runtime.productRepository,profitabilityService,toolAdapter:runtime.recommendationToolAdapter,clock});
+    runtime.profitabilityService=Object.fromEntries(['calculate','getLatest'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>profitabilityService[method](input,context))]));
+    runtime.recommendationService=Object.fromEntries(['generate','list'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>recommendationService[method](input,context))]));
+    const spendEvidence = reportingConfig.enabled && runtime.repository ? { async select(dispatch, { client, now }) {
+      // Producer order is Customer advisory -> report date advisory -> job row.
+      // The final account fence holds this shared producer lock through initiation.
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`report-circuit:${dispatch.customerId}`]);
+      const identity = runtime.identityResolver(dispatch.customerId);
+      const row = await runtime.repository.selectSpendEvidence({ customerId: dispatch.customerId, entityType: dispatch.entityType, entityId: dispatch.entityId, identity, now, maxAgeMs: 86400000, client });
+      // A report total alone establishes no comparable deviation baseline.
+      return row ? { spendGrossKrw: Number(row.spend_gross_krw), baselineGrossKrw: null, validUntil: Date.parse(row.generation_lower) + 86400000 } : null;
+    } } : null;
+    runtime.circuitService = createCircuitGuard({ pool, clock, spendEvidence });
+    runtime.circuitRepository = runtime.circuitService.repository;
+    const automationEnabled=env.ATELIER_SEARCHAD_AUTOMATION_ENABLED==='true';
+    runtime.automationRepository = new PostgresAutomationRepository({pool,clock,identityResolver:runtime.identityResolver,automationEnabled,autoEvidenceSelector:new AutoEvidenceSelector({profitabilityService,productRepository:runtime.productRepository,reportingRepository:runtime.repository,identityResolver:runtime.identityResolver,clock})});
+    runtime.circuitService.automationRepository = runtime.automationRepository;
+    runtime.circuitService.activationGuard = app.searchAdActivationRuntime?.guard;
+    const automationService = new AutomationService({repository:runtime.automationRepository,evidenceSelector:{select:async input=>({...(await runtime.repository?.selectAutomationEvidence(input)||{stats:null,spend:null}),profitability:await profitabilityService.selectForAutomation(input)})},circuit:runtime.circuitService,getWriteRuntime,identityResolver:runtime.identityResolver,clock});
+    runtime.automationService = Object.fromEntries(['createPolicy','listPolicies','listRuns','getRun','evaluate','prepare','executeApproved','reconcile'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>automationService[method](input,context))]));
+    const autoExecutor=new LimitedAutoExecutor({repository:runtime.automationRepository,automationService,getWriteRuntime,circuit:runtime.circuitService,identityResolver:runtime.identityResolver,clock});
+    runtime.automationService.executeAuto=(input,context)=>runtime.trackOperation(()=>autoExecutor.execute(input,context));
+    const reportingStatus = runtime.status.bind(runtime);
+    runtime.workerRuntime=await createWorkerRuntime({completion:runtime,pool,env,clock,logger});
+    const closeReporting=runtime.close.bind(runtime);
+    runtime.close=async()=>{await runtime.workerRuntime?.close();await closeReporting();};
+    runtime.status = () => ({ ...reportingStatus(), blockers:completionBlockers(runtime.commerceProviders), worker:runtime.workerRuntime?.status() || {required:false,initialized:false,ready:false}, circuit: { ready: !runtime.isClosing(), mode: 'observe', automationEnabled }, automation: { ready: !runtime.isClosing(), defaultMode: 'observe', autoAvailable: automationEnabled } });
+    return { runtime, startupError: null };
+  } catch (error) {
+    if(partialRuntime)await partialRuntime.close();else await closePostgresPool(ownedPool);
+    const code = /^SEARCHAD_(?:REPORTING|WORKER)_[A-Z_]+$/.test(error?.code || '') ? error.code : 'SEARCHAD_REPORTING_STARTUP_FAILED';
+    const startupError = { code, message: 'SearchAd completion startup failed; reporting remains unavailable.' };
+    logger.error?.('SearchAd completion startup failed', { code });
+    return { runtime: null, startupError };
+  }
+}

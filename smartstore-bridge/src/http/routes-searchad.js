@@ -1,13 +1,12 @@
 import { HttpError } from './errors.js';
-import { parseIntegerQuery, validateIdempotencyKey } from './security.js';
+import { parseIntegerQuery } from './security.js';
 import {
   baseUrlFromRequest,
-  ensureSameIdempotentOperation,
-  operationResponse,
-  operationStatusCode,
   route,
   sendJson
 } from './runtime.js';
+import { getSearchAdWriteRuntime, requiredSearchAdIdempotencyKey, requireSearchAdHttpWrites } from './searchad-write-runtime.js';
+import { assertSearchAdRole, assertSearchAdCustomerAccess, requireSearchAdPlanAccess } from './searchad-write-access.js';
 import { buildSearchAdOpenApi } from './openapi-searchad.js';
 import { SearchAdGatewayError, toPublicSearchAdError } from '../naver/searchad/gateway.js';
 
@@ -26,14 +25,19 @@ function asBoolean(value) {
   return /^(1|true|yes|on)$/i.test(String(value || ''));
 }
 
-export function createSearchAdRoutes({ app, httpConfig, createAsyncOperation, redactionRoots, version }) {
+function roleRoute(role, method, pattern, handler, options = {}) {
+  return { ...route(method, pattern, handler, { ...options, auth: true }), searchAdRole: role };
+}
+
+export function createSearchAdRoutes(context) {
+  const { app, httpConfig, version } = context;
   const maxBodyBytes = app.searchAdConfig?.maxJsonBodyBytes || 8 * 1024 * 1024;
   return [
     route('GET', /^\/openapi-searchad\.json$/, async ({ req, res }) => {
       sendJson(req, res, 200, buildSearchAdOpenApi({ serverUrl: baseUrlFromRequest(req), version }));
     }, { auth: false }),
 
-    route('GET', /^\/api\/v1\/searchad\/status$/, async ({ req, res }) => {
+    roleRoute('reader', 'GET', /^\/api\/v1\/searchad\/status$/, async ({ req, res }) => {
       const gateway = requireGateway(app);
       sendJson(req, res, 200, {
         ok: true,
@@ -43,12 +47,14 @@ export function createSearchAdRoutes({ app, httpConfig, createAsyncOperation, re
       });
     }),
 
-    route('GET', /^\/api\/v1\/searchad\/accounts$/, async ({ req, res }) => {
+    roleRoute('reader', 'GET', /^\/api\/v1\/searchad\/accounts$/, async ({ req, res, principal }) => {
       const gateway = requireGateway(app);
-      sendJson(req, res, 200, { ok: true, accounts: gateway.credentialsRegistry.listCustomers() });
+      const allowed = new Set(principal.customerIds.map(String));
+      const accounts = gateway.credentialsRegistry.listCustomers().filter(account => allowed.has(String(account.customerId)));
+      sendJson(req, res, 200, { ok: true, accounts });
     }),
 
-    route('GET', /^\/api\/v1\/searchad\/operations$/, async ({ req, res, url }) => {
+    roleRoute('reader', 'GET', /^\/api\/v1\/searchad\/operations$/, async ({ req, res, url }) => {
       const gateway = requireGateway(app);
       const result = gateway.list({
         sourceId: url.searchParams.get('sourceId') || undefined,
@@ -64,60 +70,64 @@ export function createSearchAdRoutes({ app, httpConfig, createAsyncOperation, re
       sendJson(req, res, 200, { ok: true, ...result });
     }),
 
-    route('GET', /^\/api\/v1\/searchad\/operations\/([^/]+)$/, async ({ req, res, match }) => {
+    roleRoute('reader', 'GET', /^\/api\/v1\/searchad\/operations\/([^/]+)$/, async ({ req, res, match }) => {
       const gateway = requireGateway(app);
       const operation = gateway.get(decodeURIComponent(match[1]));
       sendJson(req, res, 200, { ok: true, operation: publicOperation(gateway, operation) });
     }),
 
-    route('POST', /^\/api\/v1\/searchad\/operations\/([^/]+)\/preview$/, async ({ req, res, match, body }) => {
+    roleRoute('operator', 'POST', /^\/api\/v1\/searchad\/operations\/([^/]+)\/preview$/, async ({ req, res, match, body, principal }) => {
       const gateway = requireGateway(app);
-      const preview = gateway.preview(decodeURIComponent(match[1]), body);
+      const customerId = assertSearchAdCustomerAccess(principal, body.customerId);
+      const preview = gateway.preview(decodeURIComponent(match[1]), { ...body, customerId });
       sendJson(req, res, 200, { ok: true, preview });
     }, { maxBodyBytes }),
 
-    route('POST', /^\/api\/v1\/searchad\/operations\/([^/]+)\/execute$/, async ({ req, res, match, body }) => {
+    roleRoute('reader', 'POST', /^\/api\/v1\/searchad\/operations\/([^/]+)\/execute$/, async ({ req, res, match, body, requestId, principal }) => {
       const gateway = requireGateway(app);
       const operationKey = decodeURIComponent(match[1]);
       const operation = gateway.get(operationKey);
-      gateway.executionCheck(operation, body, { throwOnFailure: true });
-      if (!operation.sideEffect) {
-        const result = await gateway.execute(operationKey, body);
+      if (operation.sideEffect === false) {
+        const customerId = assertSearchAdCustomerAccess(principal, body.customerId);
+        const result = await gateway.execute(operationKey, { ...body, customerId });
         sendJson(req, res, 200, { ok: true, result });
         return;
       }
-      if (!httpConfig.allowWrites) throw new HttpError(403, 'HTTP_WRITES_DISABLED', 'ATELIER_HTTP_ALLOW_WRITES=false입니다.');
-      const idempotencyKey = validateIdempotencyKey(body.idempotencyKey);
-      const preview = gateway.preview(operationKey, body);
-      const operationType = `searchad:${operationKey}`;
-      const sourceProductId = preview.resourceKey;
-      const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
-      if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId });
-        sendJson(req, res, operationStatusCode(existing), operationResponse(existing, { reused: true, redactionRoots }), {
-          Location: `/api/v1/operations/${existing.operation_id}`
+      // A generic operation endpoint is not an alternate authorization path.
+      assertSearchAdRole(principal, 'executor');
+      requireSearchAdHttpWrites(context);
+      const planId = String(body.planId || '').trim();
+      if (!planId) {
+        throw new HttpError(400, 'SEARCHAD_CHANGE_PLAN_REQUIRED', '공식 쓰기 실행에는 먼저 작성·승인한 변경 계획이 필요합니다.', {
+          planEndpoint: '/api/v1/searchad/changes/plan'
         });
-        return;
       }
-      const created = await createAsyncOperation({
-        idempotencyKey,
-        operationType,
-        sourceProductId,
-        request: { operationKey, requestFingerprint: preview.requestFingerprint, resourceKey: preview.resourceKey },
-        task: async () => gateway.execute(operationKey, body)
-      });
-      sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
-        reused: created.reused,
-        redactionRoots
-      }), { Location: `/api/v1/operations/${created.row.operation_id}` });
+      const allowedFields = new Set(['planId', 'customerId', 'executionToken', 'idempotencyKey']);
+      const overrides = Object.keys(body).filter(key => !allowedFields.has(key));
+      if (overrides.length) {
+        throw new HttpError(400, 'SEARCHAD_APPROVED_PLAN_OVERRIDE_FORBIDDEN', '승인된 계획의 요청값은 실행 시 덮어쓸 수 없습니다.', { fields: overrides });
+      }
+      const runtime = getSearchAdWriteRuntime(context);
+      const plan = await requireSearchAdPlanAccess(runtime, planId, principal);
+      if (plan.mutation_operation_key !== operationKey) {
+        throw new HttpError(409, 'SEARCHAD_CHANGE_OPERATION_MISMATCH', '변경 계획과 실행 operation이 일치하지 않습니다.');
+      }
+      if (plan.customer_id !== String(body.customerId || '').trim()) {
+        throw new HttpError(403, 'SEARCHAD_CUSTOMER_SCOPE_MISMATCH', '변경 계획과 요청의 광고계정이 일치하지 않습니다.');
+      }
+      const result = await runtime.executionService.execute(planId, {
+        ...body, idempotencyKey: requiredSearchAdIdempotencyKey(req, body)
+      }, { requestId, principal });
+      sendJson(req, res, 200, { ok: true, result });
     }, { write: true, maxBodyBytes }),
 
-    route('POST', /^\/api\/v1\/searchad\/capabilities\/passive-probe$/, async ({ req, res, body }) => {
+    roleRoute('operator', 'POST', /^\/api\/v1\/searchad\/capabilities\/passive-probe$/, async ({ req, res, body, principal }) => {
       requireGateway(app);
+      const customerId = assertSearchAdCustomerAccess(principal, body.customerId);
       if (!app.searchAdCapabilityService) throw new HttpError(503, 'SEARCHAD_CAPABILITY_NOT_READY', 'SearchAd capability service is not ready.');
       try {
         const result = await app.searchAdCapabilityService.runPassive({
-          customerId: String(body.customerId || ''),
+          customerId,
           operations: body.operations,
           inputs: body.inputs,
           limit: body.limit

@@ -1,0 +1,20 @@
+{
+  "source": "AtelierPopo v0.3.0 live SQLite ledger",
+  "consistentBackup": true,
+  "integrity": "ok",
+  "tables": {
+    "api_operation_locks": 0,
+    "api_operations": 28,
+    "api_runtime_owner": 1,
+    "product_jobs": 5
+  },
+  "bytes": 221184,
+  "sha256": "5214e948c7da33a78efe4bdb7c24370ab9ed926f889cc54f1606a4423a24d425",
+  "verifiedAt": "2026-10-06T21:27:57.422099+00:00",
+  "restoreIntegrity": "ok",
+  "restoreSchemaMatched": true,
+  "restoreRowCountsMatched": true,
+  "productionMutations": 0,
+  "restoredLocallyOnly": true,
+  "privateBackupRetained": true
+}

@@ -1,0 +1,37 @@
+{
+  "checkedAt": "2026-10-06",
+  "naverVersion": "2.90.0",
+  "cafe24Version": "2026-06-01",
+  "sources": [
+    {
+      "capability": "naver-product",
+      "url": "https://apicenter.commerce.naver.com/llms/get-v2-products-channel-products-channelProductNo.md",
+      "sha256": "38ee3f4e32a35d86444966669fe93b3fcc35d5e519c4bea9d2e18cf6745fb451"
+    },
+    {
+      "capability": "naver-orders",
+      "url": "https://apicenter.commerce.naver.com/llms/get-v1-pay-order-seller-product-orders.md",
+      "sha256": "a20bffe4793b34da54ddf1daa85fafc21be7458894b4c9e2c0119f474dd13eca"
+    },
+    {
+      "capability": "naver-order-schema",
+      "url": "https://apicenter.commerce.naver.com/docs/assets/js/98c74b64.64c0dca1.js",
+      "sha256": "cc1a00d4feb6f8f6c32c832ec77f2b9639d54e0485a57968f24bce399029a5ea"
+    },
+    {
+      "capability": "naver-settlements",
+      "url": "https://apicenter.commerce.naver.com/llms/get-v1-pay-settle-settle-case.md",
+      "sha256": "c50a5b4fb95e359f72811e599a4721f6def9a615768b3027c145d696b2848957"
+    },
+    {
+      "capability": "cafe24-product",
+      "url": "https://apidocs.cafe24.com/en/assets/js/a23c481d.032204f3.js",
+      "sha256": "65664526fa3e740d9156a507520527d2c48a76705f6aa275276a38ee525a5686"
+    },
+    {
+      "capability": "cafe24-variants",
+      "url": "https://apidocs.cafe24.com/en/assets/js/4552530b.f3619cc6.js",
+      "sha256": "923aad79c87f12bee3706c6edd7fb14255baf630711248a1731d9efd3dee4261"
+    }
+  ]
+}

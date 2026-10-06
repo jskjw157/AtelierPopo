@@ -1,0 +1,11 @@
+{
+  "source": "synthetic; ordered against pinned public source descriptors in specs/naver-searchad/report-schemas.json",
+  "kind": "stat",
+  "reportType": "AD",
+  "statDate": "2026-10-01",
+  "expected": {
+    "columns": 14,
+    "costGrossKrw": "110",
+    "entityId": "ad-1"
+  }
+}

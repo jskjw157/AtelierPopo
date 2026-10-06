@@ -1,0 +1,244 @@
+{
+  "observedAt": "2026-10-06T23:24:21.707016+00:00",
+  "sourceCheckoutSha": "62cdc1f8081dbec0bf2b55652ac9c7254d9c2646",
+  "scope": {
+    "dedicatedInfrastructureProvisioned": true,
+    "existingCommerceAndOtherAppUnchanged": true,
+    "candidateApplicationStarted": false,
+    "mainMerged": false,
+    "realNaverCommerceS3Requests": 0,
+    "liveFinancialEvidence": false
+  },
+  "target": {
+    "hostname": "srv1898445",
+    "root": "/opt/atelier-popo-searchad",
+    "postgresImage": "postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+    "containerId": "6edcaaca82ea",
+    "health": "healthy",
+    "internalNetwork": true,
+    "publishedPorts": false,
+    "networkMembers": 1
+  },
+  "applicationPoolVerification": [
+    {
+      "mode": "verify-and-migrate",
+      "exit": 0,
+      "result": {
+        "mode": "verify-and-migrate",
+        "identity": {
+          "db": "searchad",
+          "role": "searchad_owner",
+          "server": "PostgreSQL 16.15 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit"
+        },
+        "tls": {
+          "ssl": true,
+          "version": "TLSv1.3",
+          "cipher": "TLS_AES_256_GCM_SHA384"
+        },
+        "role": {
+          "rolsuper": false,
+          "rolcreatedb": false,
+          "rolcreaterole": false,
+          "rolreplication": false,
+          "rolbypassrls": false
+        },
+        "first": {
+          "applied": [
+            "0001_platform_foundation.sql",
+            "0002_searchad_foundation.sql",
+            "0003_multi_source_product_catalog.sql",
+            "0004_sales_channel_platform_identity.sql",
+            "0005_channel_import_mapping.sql",
+            "0006_searchad_write_execution.sql",
+            "0007_searchad_active_canary.sql",
+            "0008_searchad_activation_control.sql",
+            "0009_searchad_hierarchy_lifecycle.sql",
+            "0010_searchad_reporting.sql",
+            "0011_searchad_reporting_generation.sql",
+            "0012_searchad_circuit_automation.sql",
+            "0013_searchad_automation_protocol.sql",
+            "0014_searchad_worker.sql",
+            "0015_searchad_profitability.sql"
+          ],
+          "currentVersion": "0015"
+        },
+        "repeat": {
+          "applied": [],
+          "currentVersion": "0015"
+        },
+        "counts": {
+          "tables": 82,
+          "triggers": 27
+        },
+        "migrations": [
+          {
+            "version": "0001",
+            "file_name": "0001_platform_foundation.sql",
+            "checksum": "c68ae960d93f428e507a5b7059d09d7a6fd40ee6cd0616b31b25c50d0df974d4"
+          },
+          {
+            "version": "0002",
+            "file_name": "0002_searchad_foundation.sql",
+            "checksum": "78e2fcae34d7c89589f3da212452fca519f685ae94ac742108207202e4ceacc2"
+          },
+          {
+            "version": "0003",
+            "file_name": "0003_multi_source_product_catalog.sql",
+            "checksum": "544d64486737cf4cca54e4631381c8da2632d9a73837cfc32daf0ce21a1e8eab"
+          },
+          {
+            "version": "0004",
+            "file_name": "0004_sales_channel_platform_identity.sql",
+            "checksum": "c5302e1d7c976598f3466ce2815b23559e0a083b9606a1c7d6f18886f4ec3bea"
+          },
+          {
+            "version": "0005",
+            "file_name": "0005_channel_import_mapping.sql",
+            "checksum": "a0715251febf95260ae7e136df0f2fac403e66f8add5674d56e04a7394f50ac5"
+          },
+          {
+            "version": "0006",
+            "file_name": "0006_searchad_write_execution.sql",
+            "checksum": "53532ba82871780bca1b068acefd3510d71c57b564ae569f0da546ad545b39e7"
+          },
+          {
+            "version": "0007",
+            "file_name": "0007_searchad_active_canary.sql",
+            "checksum": "b626c218419cc6ac2a3aaed13daa46febc4f01401718e7839856003a50cf86bf"
+          },
+          {
+            "version": "0008",
+            "file_name": "0008_searchad_activation_control.sql",
+            "checksum": "c8ecbf953b2d6c170a052bea389106b7c64c9854473b4a5b660e3846ad1f511a"
+          },
+          {
+            "version": "0009",
+            "file_name": "0009_searchad_hierarchy_lifecycle.sql",
+            "checksum": "795771a34219909f5a733383d4b6b400b2e32fbba5e3c0d6151abb7ed7c83f28"
+          },
+          {
+            "version": "0010",
+            "file_name": "0010_searchad_reporting.sql",
+            "checksum": "a706e3e4cc2d0d1096d0ab558df11900aad4178ab11aaf1a546a1ef510d58469"
+          },
+          {
+            "version": "0011",
+            "file_name": "0011_searchad_reporting_generation.sql",
+            "checksum": "fd0deb91f3203b40ae3a8740ad9870d0a3763ae1a459c02b8e1eef8c7746f9b5"
+          },
+          {
+            "version": "0012",
+            "file_name": "0012_searchad_circuit_automation.sql",
+            "checksum": "0191a2332f7a603860be0810757fac72a45aaf82f1ba7f0e0ea0f76c9be1e973"
+          },
+          {
+            "version": "0013",
+            "file_name": "0013_searchad_automation_protocol.sql",
+            "checksum": "220a050dfd113d196a8583754cdb68cdd97c94a14663d35e8405f593eea507fc"
+          },
+          {
+            "version": "0014",
+            "file_name": "0014_searchad_worker.sql",
+            "checksum": "366ebc9d28751dd67b5bfcbb883c8d56a4134026dd7180d0357ed11ee19f21d5"
+          },
+          {
+            "version": "0015",
+            "file_name": "0015_searchad_profitability.sql",
+            "checksum": "d2592c62a15537dce3d44163c1d40b1f203844e68669ae17301bfa759f3007de"
+          }
+        ]
+      }
+    },
+    {
+      "mode": "reject-plaintext",
+      "exit": 0,
+      "result": {
+        "mode": "reject-plaintext",
+        "denied": true,
+        "code": "28000"
+      }
+    },
+    {
+      "mode": "reject-untrusted",
+      "exit": 0,
+      "result": {
+        "mode": "reject-untrusted",
+        "denied": true,
+        "code": "UNABLE_TO_VERIFY_LEAF_SIGNATURE"
+      }
+    },
+    {
+      "mode": "reject-hostname",
+      "exit": 0,
+      "result": {
+        "mode": "reject-hostname",
+        "denied": true,
+        "code": "ERR_TLS_CERT_ALTNAME_INVALID"
+      }
+    }
+  ],
+  "postRestart": {
+    "ownerTlsValid": true,
+    "migrationRepeat": {
+      "applied": [],
+      "currentVersion": "0015"
+    },
+    "privatePreparationEnvValid": true
+  },
+  "restore": {
+    "stage": "dedicated-postgresql-backup-restore-restart",
+    "at": "2026-10-06T23:20:45.777974+00:00",
+    "database": "searchad",
+    "sourceContainsLiveProviderEvidence": false,
+    "backupBytes": 285393,
+    "backupSha256": "5a5a42d1b3fd802af141140674460b92edec9b45e260dedb28331d8143de53ab",
+    "restoredSchemaEqual": true,
+    "migrationMetadataEqual": true,
+    "migrationCount": 15,
+    "currentVersion": "0015",
+    "publicTables": 82,
+    "noninternalTriggers": 27,
+    "temporaryRestoreDatabaseDropped": true,
+    "restartPreservedMetadata": true,
+    "health": "healthy",
+    "existingCommerceAndOtherPostgresUnchanged": true,
+    "scheduledBackupsConfigured": false,
+    "offHostBackupConfigured": false,
+    "initialOffHostCopyVerified": true
+  },
+  "privateFiles": {
+    "rootMode": "0700",
+    "runtimeEnvMode": "0600",
+    "secretValuesInGit": false,
+    "credentialValuesInLogs": false,
+    "managedSecretStore": false
+  },
+  "publicConfiguration": {
+    "publicConfigHashes": {
+      "compose.yaml": "eb2545a23965e1706d2985f9fa36e7a025424bf435219354d7b4cef66b9eb9a8",
+      "pg_hba.conf": "aec0ebdf07005750dc76f63cbf1ad6550a47b0efccd4fdcbadc14b6237533ee5",
+      "init-owner.sh": "d2e7d4115fe706821518112fbfa76a7c5b71a093968b75d7a7c9cbab84914041",
+      "runtime.env.example": "459bca7c3bfc483db586cc472c731d1ac99b8c526a433462b29578610e4d6903",
+      "report-storage-policy.example.json": "c8f979b1f6a355e16f0e630b6c642d2624bddf99f3f6ea8518175bd94cbc5890",
+      "README.md": "29c6ee01b6154ca91e6198410d6f79d195768de6b88dd97c16f024165cffbe94",
+      ".gitignore": "9054e95b381e250bb20aac765d8e0166516fde35e259e1f564e1b6f4bdbfcf4d"
+    },
+    "generatedCredentialsAbsentFromLogsAndPublicFiles": true,
+    "dockerInspectHasPasswordFileOnly": true,
+    "networkMembers": 1,
+    "ephemeralProbeRemoved": true,
+    "postgresHealth": "healthy",
+    "postgresContainerId": "6edcaaca82ea",
+    "sourceApplicationModuleDeployed": false
+  },
+  "remaining": [
+    "real Customer/principal/role/grant authorization and credential location",
+    "distinct scoped HTTP role keys",
+    "real HTTPS S3 bucket/credentials/retention/checksum verification",
+    "clock/rollout uncertainty policy",
+    "scheduled/off-site DB backup and full application recovery",
+    "cutover/rollback plan",
+    "Passive/Canary/48h/spend-zero and operation activation",
+    "production Circuit baseline and financial capability"
+  ]
+}

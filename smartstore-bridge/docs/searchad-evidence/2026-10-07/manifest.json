@@ -1,0 +1,34 @@
+{
+  "sourceCommit": "6013903de2b8c2a7457698381dfb8c7e27723690",
+  "sourceTree": "b1a485674361937e3c75c88c8e3cc239162f69f0",
+  "provenance": "Exact original excerpts/artifacts recovered from saved execution history. No fresh test run or new review. Full private session transcripts are not published.",
+  "reviewType": "Internal separate AI reviewer, not official GitHub APPROVED or external human approval.",
+  "fullLocalTapRetained": false,
+  "historicalLocalTapSha256": "e4ef605cd0f8f136cdc964c7fb3e45cb7a1cf45230ee22d62658d5cbc563aa40",
+  "files": {
+    "final-review-initial.md": {
+      "bytes": 19315,
+      "sha256": "7347561729b165ab3bd84ea14ed70e5caa7f7751c067ca3fe3c1f029c798c6d5"
+    },
+    "final-review.md": {
+      "bytes": 19363,
+      "sha256": "edeecabbcb654d8b22eb90f9cb914a7f17480c903238e7baa1095e04137c6a1a"
+    },
+    "final-fix-review.md": {
+      "bytes": 9878,
+      "sha256": "8b97a8226c76447f520d48fd3c15d2bdc0937a028b917433a05d72a5de74ab3f"
+    },
+    "final-fix-full-result.json": {
+      "bytes": 1500,
+      "sha256": "3b4a10271331fb9929b0148d2c40960cbdb4226e2dcbc660c4f0910e0001c966"
+    },
+    "local-run-terminal.json": {
+      "bytes": 1825,
+      "sha256": "a172d0a8f3d371b31e3b6c7638615f7fd4ed6ed34cdb2be54c284ecb75a66bb5"
+    },
+    "reviewer-tap-verification.txt": {
+      "bytes": 281,
+      "sha256": "2dcc308e023c06f62ec9ecb5f62f4acc8ffd63abe18eaefc1fe9a9bfbc2947a6"
+    }
+  }
+}

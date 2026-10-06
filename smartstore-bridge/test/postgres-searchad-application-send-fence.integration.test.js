@@ -1,0 +1,396 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { bootstrapV05 } from '../src/bootstrap-v05.js';
+import { createHttpApiV05 } from '../src/http/server-v05.js';
+import { createPostgresPool, closePostgresPool } from '../src/infrastructure/postgres/pool.js';
+import { runPostgresMigrations } from '../src/infrastructure/postgres/migrator.js';
+import { CANARY_OPERATION_KEYS } from '../src/naver/searchad/canary/production-recipe.js';
+import { credentialFingerprintForCustomer } from '../src/naver/searchad/canary/credential-fingerprint.js';
+
+const logger = { info() {}, warn() {}, error() {} };
+const origin = 'https://api.searchad.naver.com';
+const customerId = '1001';
+const keys = Object.fromEntries(['generic', 'admin', 'executor'].map(role => [role, `application-fence-${role}-`.repeat(4)]));
+
+// Actual application bootstrap, role HTTP, native activation and account control.
+// Only upstream replies and the explicitly marked authority evidence are synthetic.
+// The claim/authorization wrappers create scheduling gaps, not permission doubles.
+test('application send fence uses native account storage independently of plan storage and restart', { timeout: 120000 }, async t => {
+  if (!process.env.TEST_DATABASE_URL) return t.skip('TEST_DATABASE_URL is required');
+  const adminPool = createPostgresPool({ connectionString: process.env.TEST_DATABASE_URL, sslMode: 'disable', logger });
+  const nativeFetch = globalThis.fetch;
+  const savedEnv = new Map();
+  let forbiddenCalls = 0;
+  globalThis.fetch = async () => { forbiddenCalls += 1; throw new Error('Live transport is forbidden'); };
+  const setEnv = (name, value) => {
+    if (!savedEnv.has(name)) savedEnv.set(name, process.env[name]);
+    process.env[name] = value;
+  };
+
+  async function fixture(st, storageMode = 'sqlite', canary = false) {
+    const storage = storageMode === 'shared' ? 'postgres' : storageMode;
+    const schema = `app_fence_${randomUUID().replaceAll('-', '')}`;
+    const planSchema = `${schema}_plans`;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'haar-app-fence-'));
+    const schemas = [];
+    let pool, planPool, current;
+    st.after(async () => {
+      try { await current?.api.close(); }
+      finally {
+        try { if (planPool) await closePostgresPool(planPool); }
+        finally {
+          try { if (pool) await closePostgresPool(pool); }
+          finally {
+            for (const name of schemas.reverse()) await adminPool.query(`DROP SCHEMA "${name}" CASCADE`);
+            fs.rmSync(dir, { recursive: true, force: true });
+          }
+        }
+      }
+    });
+    async function database(name) {
+      await adminPool.query(`CREATE SCHEMA "${name}"`); schemas.push(name);
+      const url = new URL(process.env.TEST_DATABASE_URL);
+      url.searchParams.set('options', `-csearch_path=${name}`);
+      const p = createPostgresPool({ connectionString: url.toString(), sslMode: 'disable', logger });
+      await runPostgresMigrations({ pool: p, migrationsDir: path.resolve('migrations/postgres'), logger });
+      return { pool: p, url: url.toString() };
+    }
+    const control = await database(schema); pool = control.pool;
+    let planUrl;
+    if (storage === 'postgres' && storageMode !== 'shared') {
+      const plans = await database(planSchema); planPool = plans.pool; planUrl = plans.url;
+      // A deliberately stale mirror cannot overrule the native activation database.
+      await planPool.query('INSERT INTO searchad_canary_accounts(customer_id,suspended,updated_at) VALUES($1,false,now())', [customerId]);
+    }
+    const catalogRoot = path.join(dir, 'catalog'); fs.mkdirSync(catalogRoot);
+    fs.writeFileSync(path.join(catalogRoot, 'catalog_manifest.json'), JSON.stringify({ source: 'fixture', total_products: 0, total_completed: 0, products: {} }));
+    const templateFile = path.join(dir, 'template.json'); fs.writeFileSync(templateFile, '{}');
+    const configPath = path.join(dir, 'config.json');
+    const raw = JSON.parse(fs.readFileSync('config/atelier-popo.example.json', 'utf8'));
+    fs.writeFileSync(configPath, JSON.stringify({ ...raw, catalogRoot, templateFile, workDir: dir, databasePath: path.join(dir, 'ledger.sqlite') }));
+    for (const [name, value] of Object.entries({ NAVER_CLIENT_ID: 'fixture-commerce', NAVER_CLIENT_SECRET: 'fixture-commerce-secret', NAVER_ALLOW_WRITES: 'false',
+      ATELIER_WORK_DIR: dir, ATELIER_DATABASE_PATH: path.join(dir, 'ledger.sqlite'), ATELIER_CATALOG_ROOT: catalogRoot, ATELIER_TEMPLATE_FILE: templateFile })) setEnv(name, value);
+    let env = {
+      ATELIER_API_KEY: keys.generic, DATABASE_URL: control.url,
+      NAVER_SEARCHAD_ACCESS_LICENSE: 'fixture-license', NAVER_SEARCHAD_SECRET_KEY: 'fixture-secret',
+      NAVER_SEARCHAD_CUSTOMERS_JSON: JSON.stringify([customerId]), ATELIER_CATALOG_PROVIDER: 'local',
+      ATELIER_POSTGRES_SSL_MODE: 'disable', ATELIER_SEARCHAD_WRITE_STORAGE: storage,
+      ATELIER_SEARCHAD_WRITE_DB_PATH: path.join(dir, 'searchad.sqlite'),
+      ...(planUrl ? { ATELIER_SEARCHAD_WRITE_DATABASE_URL: planUrl } : {}),
+      ATELIER_SEARCHAD_WRITE_EXECUTION_ENABLED: 'true', ATELIER_SEARCHAD_ALLOW_CHANGE_PLANS: 'true',
+      ATELIER_HTTP_ALLOW_WRITES: 'true', ATELIER_SEARCHAD_ALLOW_WRITES: 'true', ATELIER_SEARCHAD_ALLOW_ROLLBACK: 'true',
+      ATELIER_SEARCHAD_ALLOW_CREATES: 'false', ATELIER_SEARCHAD_ALLOW_DELETES: 'false', ATELIER_SEARCHAD_ALLOW_BATCH_WRITES: 'false',
+      ATELIER_SEARCHAD_ALLOW_ACTIVE_CANARY: String(canary), ATELIER_SEARCHAD_ACTIVATION_MODE: 'canary',
+      ATELIER_SEARCHAD_CANARY_DAILY_BUDGET_KRW: '1000', ATELIER_SEARCHAD_CANARY_BUDGET_DELTA_KRW: '100',
+      ATELIER_SEARCHAD_CANARY_MAX_DAILY_BUDGET_KRW: '1200', ATELIER_SEARCHAD_CANARY_MAX_BUDGET_DELTA_KRW: '100',
+      ATELIER_SEARCHAD_CANARY_STATS_SINCE: '2026-09-12', ATELIER_SEARCHAD_CANARY_STATS_UNTIL: '2026-09-12',
+      ATELIER_SEARCHAD_MAX_RETRIES: '0', ATELIER_WRITE_RATE_LIMIT_PER_MINUTE: '1000'
+    };
+    for (const role of ['admin', 'executor']) {
+      env[`ATELIER_SEARCHAD_${role.toUpperCase()}_API_KEY`] = keys[role];
+      env[`ATELIER_SEARCHAD_${role.toUpperCase()}_CUSTOMERS`] = customerId;
+      env[`ATELIER_SEARCHAD_${role.toUpperCase()}_PRINCIPAL_ID`] = `fixture-${role}`;
+    }
+    let state = { nccCampaignId: 'cmp-fixture', dailyBudget: 1000, userLock: true };
+    let nextPutResponseLoss = null;
+    const calls = [], transportFailures = [];
+    const simulatedUpstream = async (url, init) => {
+      try {
+        assert.equal(new URL(url).origin, origin);
+        assert.equal(new URL(url).pathname, '/ncc/campaigns/cmp-fixture');
+        assert.equal(init.headers['X-Customer'], customerId);
+        assert.ok(init.headers['X-Signature']);
+        assert.ok(['GET', 'PUT'].includes(init.method));
+      } catch (error) { transportFailures.push(error.message); throw error; }
+      calls.push(init.method);
+      if (init.method === 'PUT') {
+        const responseLoss = nextPutResponseLoss; nextPutResponseLoss = null;
+        if (responseLoss !== false) state = { ...state, ...JSON.parse(init.body) };
+        // Fail only after the real signer, client and native send fence entered
+        // this closed upstream. The service cannot know whether it applied.
+        if (responseLoss !== null) throw Object.assign(new Error('simulated response loss after PUT initiation'), { code: 'ECONNRESET' });
+      }
+      return new Response(JSON.stringify(state), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    async function start() {
+      const app = await bootstrapV05(configPath, { env, fetchImpl: simulatedUpstream });
+      const api = createHttpApiV05({ app, env, logger }); current = { app, api };
+      assert.equal(app.searchAdActivationStartupError, null);
+      assert.equal(app.searchAdActivationRuntime.status().ready, true);
+      if (canary) assert.equal(app.searchAdActiveCanaryRuntime.status().ready, true);
+      await api.listen({ host: '127.0.0.1', port: 0 });
+    }
+    const call = async (role, method, route, body) => {
+      const response = await nativeFetch(`http://127.0.0.1:${current.api.server.address().port}${route}`, {
+        method, headers: { Authorization: `Bearer ${keys[role]}`, 'Content-Type': 'application/json' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    const account = async action => {
+      const result = await call('admin', 'POST', `/api/v1/searchad/accounts/${customerId}/${action}`, {});
+      assert.equal(result.status, 200, JSON.stringify(result));
+      assert.equal((await pool.query('SELECT suspended FROM searchad_canary_accounts WHERE customer_id=$1', [customerId])).rows[0].suspended, action === 'suspend');
+      if (planPool) assert.equal((await planPool.query('SELECT suspended FROM searchad_canary_accounts WHERE customer_id=$1', [customerId])).rows[0].suspended, false);
+    };
+    const seed = async (passive = false) => {
+      const app = current.app, runtime = app.searchAdActivationRuntime, now = Date.now();
+      const recipe = app.searchAdActiveCanaryRuntime?.recipe;
+      const evidence = await runtime.repository.createEvidence({ evidenceId: randomUUID(), customerId,
+        evidenceType: passive ? 'passive_capability' : 'active_canary', specSha: runtime.status().specSha, upstreamBaseUrl: origin,
+        credentialFingerprint: credentialFingerprintForCustomer(app.searchAdCredentials, customerId),
+        operationKeys: passive ? [...recipe.requiredOperationKeys] : [CANARY_OPERATION_KEYS.updateCampaign],
+        fieldScope: passive ? [...recipe.verifiedOperationScope.fieldScope] : ['campaign.dailyBudget', 'campaign.userLock'],
+        result: 'verified', sourceRunId: 'synthetic-ci-not-live', details: { fixtureOnly: true },
+        createdAt: new Date(now).toISOString(), expiresAt: new Date(now + 600000).toISOString() });
+      if (!passive) assert.equal((await call('admin', 'POST', '/api/v1/searchad/activations', { evidenceId: evidence.evidenceId })).status, 201);
+      return evidence.evidenceId;
+    };
+    const approve = async (dailyBudget = 800) => {
+      const registry = current.app.searchAdRegistry, update = registry.get(CANARY_OPERATION_KEYS.updateCampaign);
+      const read = registry.findByPath('GET', '/ncc/campaigns/{campaignId}') || registry.findByPath('GET', '/ncc/campaigns/{nccCampaignId}');
+      const pathParams = { campaignId: 'cmp-fixture', nccCampaignId: 'cmp-fixture' };
+      const descriptor = body => ({ operationKey: update.operationKey, pathParams, query: { fields: 'budget' }, body, confirmation: update.confirmation });
+      const planned = await call('admin', 'POST', '/api/v1/searchad/changes/plan', { customerId, reason: 'application send fence fixture',
+        mutation: descriptor({ nccCampaignId: 'cmp-fixture', dailyBudget, userLock: true }),
+        verification: { read: { operationKey: read.operationKey, pathParams }, expectedPatch: { dailyBudget } },
+        rollback: { mutation: descriptor({ nccCampaignId: 'cmp-fixture', userLock: true }), bodyFromBefore: { dailyBudget: 'dailyBudget' } } });
+      assert.equal(planned.status, 201, JSON.stringify(planned));
+      const approval = await call('executor', 'POST', `/api/v1/searchad/changes/${planned.body.plan_id}/approve`, { confirmation: 'APPROVE_SEARCHAD_CHANGE' });
+      assert.equal(approval.status, 200, JSON.stringify(approval));
+      assert.equal(current.app.searchAdWriteRuntime.status().storage.runtime, storage);
+      return { planId: planned.body.plan_id, customerId, ...approval.body, idempotencyKey: randomUUID() };
+    };
+    const tokenUsed = async input => (await current.app.searchAdWriteRuntime.repository.getApproval(input.approvalId)).used_at;
+    const execute = (input, generic = false) => call('executor', 'POST', generic
+      ? `/api/v1/searchad/operations/${encodeURIComponent(CANARY_OPERATION_KEYS.updateCampaign)}/execute`
+      : `/api/v1/searchad/changes/${input.planId}/execute`, { planId: input.planId, customerId, executionToken: input.executionToken, idempotencyKey: input.idempotencyKey });
+    await start();
+    st.after(() => assert.deepEqual(transportFailures, [], 'transport contract failures cannot be swallowed by production error handling'));
+    return { get app() { return current.app; }, pool, planPool, call, account, seed, approve, tokenUsed, execute, calls,
+      mutations: () => calls.filter(method => method !== 'GET').length,
+      loseNextPutResponse: ({ applied }) => { nextPutResponseLoss = applied; },
+      async restart(overrides = {}) { await current.api.close(); env = { ...env, ...overrides }; await start(); } };
+  }
+
+  try {
+    for (const storage of ['sqlite', 'postgres', 'shared']) {
+      for (const generic of [false, true]) await t.test(`${storage} / generic=${generic}: suspension committed after real claim prevents HTTP PUT`, async st => {
+        const h = await fixture(st, storage); await h.seed(); const input = await h.approve();
+        const claim = h.app.searchAdWriteRuntime.approvalService.claim.bind(h.app.searchAdWriteRuntime.approvalService);
+        let gapReached = false;
+        h.app.searchAdWriteRuntime.approvalService.claim = async (...args) => {
+          const result = await claim(...args); await h.account('suspend'); gapReached = true; return result;
+        };
+        const denied = await h.execute(input, generic);
+        assert.equal(gapReached, true, JSON.stringify(denied));
+        assert.equal(h.mutations(), 0, 'APPLICATION_SENT_AFTER_COMMITTED_SUSPENSION');
+        assert.equal(denied.status, 403, JSON.stringify(denied));
+        assert.equal(denied.body.error.code, 'SEARCHAD_SEND_FENCE_SUSPENDED');
+        const usedAt = await h.tokenUsed(input); assert.ok(usedAt);
+        assert.equal((await h.app.searchAdWriteRuntime.repository.getPlan(input.planId)).status, 'failed');
+        const oldRuntime = h.app.searchAdActivationRuntime;
+        await h.restart({ ATELIER_HTTP_ALLOW_WRITES: 'false', ATELIER_SEARCHAD_ALLOW_WRITES: 'false' });
+        assert.notEqual(h.app.searchAdActivationRuntime, oldRuntime);
+        await assert.rejects(() => oldRuntime.repository.listEvidence({ customerIds: [customerId] }));
+        const callsBeforeReads = h.calls.length;
+        const detail = await h.call('executor', 'GET', `/api/v1/searchad/changes/${input.planId}`);
+        assert.equal(detail.status, 200, JSON.stringify(detail));
+        assert.equal(detail.body.status, 'failed');
+        assert.equal(detail.body.last_error_json.code, 'SEARCHAD_SEND_FENCE_SUSPENDED');
+        assert.deepEqual(detail.body.attempts.filter(a => a.phase === 'execute').map(a => [a.status, a.error_json?.code]),
+          [['failed', 'SEARCHAD_SEND_FENCE_SUSPENDED']]);
+        const listed = await h.call('executor', 'GET', `/api/v1/searchad/changes?customerId=${customerId}`);
+        assert.equal(listed.status, 200, JSON.stringify(listed));
+        assert.equal(listed.body.items.find(p => p.plan_id === input.planId)?.status, 'failed');
+        const rejected = await h.call('executor', 'POST', `/api/v1/searchad/changes/${input.planId}/reconcile`, {});
+        assert.equal(rejected.status, 409, JSON.stringify(rejected));
+        assert.equal(rejected.body.error.code, 'SEARCHAD_CHANGE_PLAN_NOT_RECONCILABLE');
+        assert.deepEqual(rejected.body.error.details, { planId: input.planId, status: 'failed' });
+        assert.equal(h.calls.length, callsBeforeReads, 'known local failure needs no remote recovery');
+        assert.equal(await h.tokenUsed(input), usedAt);
+        await h.account('resume'); await h.restart({ ATELIER_HTTP_ALLOW_WRITES: 'true', ATELIER_SEARCHAD_ALLOW_WRITES: 'true' });
+        const replay = await h.execute(input, !generic);
+        assert.equal(replay.status, 409, JSON.stringify(replay));
+        assert.equal(replay.body.error.code, 'SEARCHAD_CHANGE_PLAN_NOT_EXECUTABLE');
+        assert.equal(replay.body.error.details.status, 'failed');
+        assert.equal(await h.tokenUsed(input), usedAt);
+        assert.equal(h.mutations(), 0);
+      });
+
+      await t.test(`${storage}: HTTP rollback rechecks native account state after authorization`, async st => {
+        const h = await fixture(st, storage); await h.seed(); const input = await h.approve();
+        const applied = await h.execute(input);
+        if (storage !== 'shared') { assert.ok(applied.status >= 400, JSON.stringify(applied)); assert.equal(h.mutations(), 0); return; }
+        assert.equal(applied.status, 200, JSON.stringify(applied));
+        assert.equal(h.mutations(), 1);
+        const service = h.app.searchAdWriteRuntime.executionService, authorize = service.assertActivation.bind(service);
+        let gapReached = false;
+        service.assertActivation = async (...args) => { const result = await authorize(...args); await h.account('suspend'); gapReached = true; return result; };
+        const denied = await h.call('executor', 'POST', `/api/v1/searchad/changes/${input.planId}/rollback`, {
+          confirmation: 'ROLLBACK_SEARCHAD_CHANGE', idempotencyKey: randomUUID() });
+        assert.equal(gapReached, true, JSON.stringify(denied));
+        assert.equal(h.mutations(), 1, 'APPLICATION_ROLLBACK_SENT_AFTER_COMMITTED_SUSPENSION');
+        assert.ok(denied.status >= 400, JSON.stringify(denied));
+        assert.ok(await h.tokenUsed(input));
+      });
+
+      await t.test(`${storage}: a pre-claim suspension survives restart without consuming approval`, async st => {
+        const h = await fixture(st, storage); await h.seed(); const input = await h.approve();
+        await h.account('suspend'); await h.restart();
+        const denied = await h.execute(input, true);
+        assert.equal(denied.body.error?.code, 'SEARCHAD_ACCOUNT_SUSPENDED', JSON.stringify(denied));
+        assert.equal(await h.tokenUsed(input), null); assert.equal(h.mutations(), 0);
+        await h.account('resume'); const applied = await h.execute(input);
+        if (storage !== 'shared') { assert.ok(applied.status >= 400, JSON.stringify(applied)); assert.equal(h.mutations(), 0); return; }
+        assert.equal(applied.status, 200, JSON.stringify(applied)); assert.equal(h.mutations(), 1);
+        assert.ok(await h.tokenUsed(input));
+      });
+    }
+
+    for (const applied of [false, true]) await t.test(`shared signed PUT response loss / applied=${applied}: restart recovery is GET-only with writes OFF, Circuit paused and account suspended`, async st => {
+      const h = await fixture(st, 'shared'); await h.seed(); const input = await h.approve();
+      h.loseNextPutResponse({ applied });
+      const unknown = await h.execute(input);
+      assert.equal(unknown.status, 409, JSON.stringify(unknown));
+      assert.equal(unknown.body.error.code, 'SEARCHAD_UNKNOWN_OUTCOME');
+      assert.equal(unknown.body.error.details.original.code, 'SEARCHAD_NETWORK_ERROR');
+      assert.deepEqual(h.calls, ['GET', 'GET', 'PUT'], 'one real signed initiation, no retry or inferred verification');
+      const usedAt = await h.tokenUsed(input); assert.ok(usedAt);
+      assert.equal((await h.app.searchAdWriteRuntime.repository.getPlan(input.planId)).status, 'unknown_outcome');
+      const paused = await h.call('admin', 'POST', '/api/v1/searchad/circuit/pause', { customerId, reason: 'read recovery must remain available' });
+      assert.equal(paused.status, 200, JSON.stringify(paused));
+      await h.account('suspend');
+      await h.restart({ ATELIER_HTTP_ALLOW_WRITES: 'false', ATELIER_SEARCHAD_ALLOW_WRITES: 'false' });
+      const detail = await h.call('executor', 'GET', `/api/v1/searchad/changes/${input.planId}`);
+      assert.equal(detail.status, 200, JSON.stringify(detail));
+      assert.equal(detail.body.status, 'unknown_outcome');
+      assert.equal(h.app.searchAdWriteRuntime.status().allowWrites, false);
+      const before = await h.call('executor', 'GET', `/api/v1/searchad/circuit?customerId=${customerId}`);
+      assert.equal(before.status, 200, JSON.stringify(before));
+      assert.equal(before.body.state.manualPaused, true);
+      assert.equal(before.body.state.unknownCount, 1);
+      const authoritySnapshot = async () => {
+        const tables = ['searchad_daily_risk_capacity', 'searchad_risk_reservations', 'searchad_canary_runs', 'searchad_verification_evidence'];
+        return Promise.all(tables.map(table => h.pool.query(`SELECT * FROM ${table} WHERE customer_id=$1`, [customerId]).then(r => r.rows)));
+      };
+      const authorityBefore = await authoritySnapshot();
+      const callsBeforeRecovery = h.calls.length;
+      const recovered = await h.call('executor', 'POST', `/api/v1/searchad/changes/${input.planId}/reconcile`, {});
+      const status = applied ? 'applied_reconciled' : 'not_applied';
+      assert.equal(recovered.status, 200, JSON.stringify(recovered));
+      assert.equal(recovered.body.status, status);
+      assert.deepEqual(h.calls.slice(callsBeforeRecovery), ['GET']);
+      const stored = await h.call('executor', 'GET', `/api/v1/searchad/changes/${input.planId}`);
+      assert.equal(stored.status, 200, JSON.stringify(stored));
+      assert.equal(stored.body.status, status);
+      assert.deepEqual(stored.body.attempts.filter(a => a.phase !== 'plan').map(a => [a.phase, a.status]),
+        [['execute', 'unknown_outcome'], ['reconcile', status]]);
+      assert.equal(await h.tokenUsed(input), usedAt);
+      assert.deepEqual(await authoritySnapshot(), authorityBefore, 'read recovery cannot restore risk or mint Canary PASS/evidence');
+      const after = await h.call('executor', 'GET', `/api/v1/searchad/circuit?customerId=${customerId}`);
+      assert.equal(after.status, 200, JSON.stringify(after));
+      assert.equal(after.body.state.manualPaused, true);
+      assert.equal(after.body.state.unknownCount, 0, 'exact linked read proof settles only this mutation');
+      assert.equal((await h.pool.query('SELECT suspended FROM searchad_canary_accounts WHERE customer_id=$1', [customerId])).rows[0].suspended, true);
+      const gated = await h.execute(input, true);
+      assert.equal(gated.status, 403, JSON.stringify(gated));
+      assert.equal(gated.body.error.code, 'HTTP_WRITES_DISABLED');
+      await h.account('resume');
+      await h.restart({ ATELIER_HTTP_ALLOW_WRITES: 'true', ATELIER_SEARCHAD_ALLOW_WRITES: 'true' });
+      const replay = await h.execute(input, true);
+      assert.equal(replay.status, 409, JSON.stringify(replay));
+      assert.equal(replay.body.error.code, 'SEARCHAD_CHANGE_PLAN_NOT_EXECUTABLE');
+      assert.equal(replay.body.error.details.status, status);
+      const reapproval = await h.call('executor', 'POST', `/api/v1/searchad/changes/${input.planId}/approve`, { confirmation: 'APPROVE_SEARCHAD_CHANGE' });
+      assert.equal(reapproval.status, 409, JSON.stringify(reapproval));
+      assert.equal(reapproval.body.error.code, 'SEARCHAD_CHANGE_PLAN_NOT_APPROVABLE');
+      assert.equal(await h.tokenUsed(input), usedAt);
+      assert.deepEqual(h.calls.slice(callsBeforeRecovery), ['GET'], 'recovery and restart never repeat the PUT');
+      assert.equal(h.mutations(), 1);
+    });
+
+    await t.test('shared production increase denies missing actual Customer net-loss evidence', async st => {
+      const h=await fixture(st,'shared'); await h.seed(); const input=await h.approve(1200);
+      const denied=await h.execute(input);
+      assert.ok(denied.status>=400,JSON.stringify(denied)); assert.equal(h.mutations(),0);
+      assert.ok(JSON.stringify(denied.body).includes('LOSS_EVIDENCE_UNAVAILABLE'),JSON.stringify(denied));
+    });
+
+    await t.test('shared-store production ordinary HTTP send is denied by Circuit pause after projection preflight', async st => {
+      const h = await fixture(st, 'shared'); await h.seed(); const input = await h.approve();
+      const circuit = h.app.searchAdCompletionRuntime.circuitService;
+      const prepare = circuit.prepareDispatch.bind(circuit);
+      circuit.prepareDispatch = async dispatch => { await prepare(dispatch); await circuit.pause({ customerId, reason: 'competitor' }, { principal: { principalId: 'fixture-admin', role: 'admin', customerIds: [customerId] } }); };
+      const outcome = await h.execute(input);
+      assert.ok(outcome.status >= 400, JSON.stringify(outcome)); assert.equal(h.mutations(), 0); assert.ok(await h.tokenUsed(input));
+      assert.equal((await h.pool.query('SELECT status FROM searchad_write_change_plans WHERE plan_id=$1', [input.planId])).rows[0].status, 'failed');
+    });
+    await t.test('shared production rollback survives Circuit pause and concurrent replay has one durable intent', async st => {
+      const h=await fixture(st,'shared'); await h.seed(); const input=await h.approve();
+      assert.equal((await h.execute(input)).status,200);
+      await h.app.searchAdCompletionRuntime.circuitService.pause({customerId,reason:'rollback remains separately gated'},{principal:{principalId:'fixture-admin',role:'admin',customerIds:[customerId]}});
+      const rollback=()=>h.call('executor','POST',`/api/v1/searchad/changes/${input.planId}/rollback`,{confirmation:'ROLLBACK_SEARCHAD_CHANGE',idempotencyKey:randomUUID()});
+      const results=await Promise.all([rollback(),rollback()]);
+      assert.equal(results.filter(r=>r.status===200).length,1,JSON.stringify(results)); assert.equal(h.mutations(),2);
+      assert.equal((await h.pool.query("SELECT count(*)::int AS n FROM searchad_write_attempts WHERE plan_id=$1 AND phase='rollback' AND status='send_intent'",[input.planId])).rows[0].n,1);
+      await h.restart(); assert.ok((await rollback()).status>=400); assert.equal(h.mutations(),2);
+    });
+    await t.test('committed rollback marker with lost acknowledgement never sends or grants restart replay', async st => {
+      const h=await fixture(st,'shared'); await h.seed(); const input=await h.approve();
+      assert.equal((await h.execute(input)).status,200);
+      const repository=h.app.searchAdWriteRuntime.repository, claim=repository.claimRollbackDispatch.bind(repository);
+      repository.claimRollbackDispatch=async input=>{await claim(input);throw new Error('simulated acknowledgement loss after native COMMIT');};
+      const rollback=()=>h.call('executor','POST',`/api/v1/searchad/changes/${input.planId}/rollback`,{confirmation:'ROLLBACK_SEARCHAD_CHANGE',idempotencyKey:randomUUID()});
+      assert.ok((await rollback()).status>=400); assert.equal(h.mutations(),1);
+      assert.equal((await h.pool.query("SELECT count(*)::int AS n FROM searchad_write_attempts WHERE plan_id=$1 AND phase='rollback' AND status='send_intent'",[input.planId])).rows[0].n,1);
+      await h.restart(); assert.ok((await rollback()).status>=400); assert.equal(h.mutations(),1);
+      const next=await h.approve(); assert.ok((await h.execute(next)).status>=400); assert.equal(h.mutations(),1);
+    });
+
+    await t.test('primary PostgreSQL applied outcome survives projection error and next dispatch fails closed', async st => {
+      const h = await fixture(st, 'shared'); await h.seed(); const input = await h.approve();
+      const circuit = h.app.searchAdCompletionRuntime.circuitService;
+      circuit.projectOutcome = async () => { throw new Error('private projection failure'); };
+      const applied = await h.execute(input);
+      assert.equal(applied.status, 200, JSON.stringify(applied)); assert.equal(applied.body.status, 'applied'); assert.equal(h.mutations(), 1);
+      assert.equal((await h.pool.query('SELECT status FROM searchad_write_change_plans WHERE plan_id=$1', [input.planId])).rows[0].status, 'applied');
+      const next = await h.approve(); circuit.projection.catchUp = async () => ({ ready: false, cursors: {} });
+      const denied = await h.execute(next);
+      assert.ok(denied.status >= 400, JSON.stringify(denied)); assert.equal(h.mutations(), 1);
+      assert.equal((await h.pool.query('SELECT status FROM searchad_write_change_plans WHERE plan_id=$1', [input.planId])).rows[0].status, 'applied');
+    });
+
+    await t.test('bootstrapped Canary start observes Circuit pause committed after its own intent projection', async st => {
+      const h = await fixture(st, 'shared', true); const evidenceId = await h.seed(true);
+      const circuit = h.app.searchAdCompletionRuntime.circuitService;
+      const prepare = circuit.prepareDispatch.bind(circuit);
+      circuit.prepareDispatch = async dispatch => { await prepare(dispatch); await circuit.pause({ customerId, reason: 'competitor' }, { principal: { principalId: 'fixture-admin', role: 'admin', customerIds: [customerId] } }); };
+      const outcome = await h.app.searchAdActiveCanaryRuntime.service.start({ customerId, passiveEvidenceId: evidenceId }, { principal: { principalId: 'fixture-admin', role: 'admin', customerIds: [customerId] } }).catch(error => error);
+      assert.ok(outcome instanceof Error); assert.equal(h.mutations(), 0); assert.equal(h.calls.length, 0);
+      assert.equal((await h.pool.query("SELECT count(*)::int AS n FROM searchad_canary_events WHERE status='send_intent'")).rows[0].n, 1);
+    });
+
+    await t.test('bootstrapped Canary preserves suspended account on restart and cannot reserve risk or send', async st => {
+      const h = await fixture(st, 'sqlite', true); const evidenceId = await h.seed(true);
+      await h.account('suspend'); await h.restart();
+      const runtime = h.app.searchAdActiveCanaryRuntime;
+      const riskBefore = (await h.pool.query('SELECT count(*)::int AS n FROM searchad_risk_reservations')).rows[0].n;
+      const outcome = await runtime.service.start({ customerId, passiveEvidenceId: evidenceId }, {
+        principal: { principalId: 'fixture-admin', role: 'admin', customerIds: [customerId] }, requestId: randomUUID() }).catch(error => error);
+      assert.equal(outcome?.code, 'SEARCHAD_CANARY_ACCOUNT_SUSPENDED');
+      assert.equal(h.calls.length, 0);
+      assert.equal((await h.pool.query('SELECT count(*)::int AS n FROM searchad_risk_reservations')).rows[0].n, riskBefore);
+      assert.equal((await h.pool.query('SELECT suspended FROM searchad_canary_accounts WHERE customer_id=$1', [customerId])).rows[0].suspended, true);
+    });
+    assert.equal(forbiddenCalls, 0);
+  } finally {
+    globalThis.fetch = nativeFetch;
+    for (const [name, value] of savedEnv) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
+    await closePostgresPool(adminPool);
+  }
+});

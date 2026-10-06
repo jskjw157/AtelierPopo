@@ -1,0 +1,73 @@
+name: atelier-searchad-infra
+
+# Infrastructure only. No application, worker, published port or existing volume.
+services:
+  searchad-postgres:
+    image: ${SEARCHAD_POSTGRES_IMAGE:?Set an inspected PostgreSQL 16 image digest}
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.75
+    shm_size: 128m
+    environment:
+      POSTGRES_USER: searchad_admin
+      POSTGRES_DB: searchad
+      POSTGRES_PASSWORD_FILE: /run/secrets/searchad_admin_password
+      POSTGRES_INITDB_ARGS: --data-checksums --auth-local=scram-sha-256 --auth-host=scram-sha-256
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/run/searchad-tls/server.crt
+      - -c
+      - ssl_key_file=/run/searchad-tls/server.key
+      - -c
+      - ssl_min_protocol_version=TLSv1.2
+      - -c
+      - hba_file=/etc/searchad/pg_hba.conf
+      - -c
+      - password_encryption=scram-sha-256
+      - -c
+      - max_connections=40
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - log_statement=none
+      - -c
+      - log_min_error_statement=panic
+    secrets:
+      - searchad_admin_password
+      - searchad_owner_password
+    volumes:
+      - searchad-pgdata:/var/lib/postgresql/data
+      - ./tls:/run/searchad-tls:ro
+      - ./pg_hba.conf:/etc/searchad/pg_hba.conf:ro
+      - ./init-owner.sh:/docker-entrypoint-initdb.d/10-owner.sh:ro
+    networks:
+      - searchad-private
+    healthcheck:
+      test: [CMD, pg_isready, -U, searchad_admin, -d, searchad]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+secrets:
+  searchad_admin_password:
+    file: ./private/admin-password
+  searchad_owner_password:
+    file: ./private/owner-password
+
+volumes:
+  searchad-pgdata:
+    name: atelier_searchad_pgdata
+
+networks:
+  searchad-private:
+    name: atelier_searchad_private
+    internal: true

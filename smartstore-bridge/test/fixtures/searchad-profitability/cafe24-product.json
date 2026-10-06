@@ -1,0 +1,8 @@
+{
+  "product": {
+    "product_no": 123,
+    "display": "T",
+    "selling": "T",
+    "product_name": "ignored"
+  }
+}

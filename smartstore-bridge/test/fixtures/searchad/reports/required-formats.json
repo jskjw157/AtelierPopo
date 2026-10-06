@@ -1,0 +1,42 @@
+[
+  {
+    "kind": "stat",
+    "reportType": "AD_CONVERSION",
+    "line": "2026-10-01\t1001\tcmp-1\tgrp-1\tkw-1\tad-1\tbiz-1\t1\tP\t1\tpurchase\t2\t300"
+  },
+  {
+    "kind": "stat",
+    "reportType": "EXPKEYWORD",
+    "line": "2026-10-01\t1001\tcmp-1\tgrp-1\t신발\t1\tP\t5\t100\t2\t110\t0"
+  },
+  {
+    "kind": "stat",
+    "reportType": "ADEXTENSION",
+    "line": "2026-10-01\t1001\tcmp-1\tgrp-1\tkw-1\tad-1\text-1\tbiz-1\t1\tP\t100\t2\t110\t10\t0"
+  },
+  {
+    "kind": "stat",
+    "reportType": "ADEXTENSION_CONVERSION",
+    "line": "2026-10-01\t1001\tcmp-1\tgrp-1\tkw-1\tad-1\text-1\tbiz-1\t1\tP\t1\tpurchase\t2\t300"
+  },
+  {
+    "kind": "master",
+    "reportType": "Campaign",
+    "line": "1001\tcmp-1\t캠페인\t1\t1\t0\t\t\t2026-10-01T00:00:00Z\t\t0\t"
+  },
+  {
+    "kind": "master",
+    "reportType": "Adgroup",
+    "line": "1001\tgrp-1\tcmp-1\t그룹\t70\t0\t0\t70\t100\t100\tbiz-1\tbiz-2\t2026-10-01T00:00:00Z\t\t\t1\t\t0\t1"
+  },
+  {
+    "kind": "master",
+    "reportType": "Keyword",
+    "line": "1001\tgrp-1\tkw-1\t신발\t70\t\t\t0\t20\t1\t2026-10-01T00:00:00Z\t\t0"
+  },
+  {
+    "kind": "master",
+    "reportType": "Ad",
+    "line": "1001\tgrp-1\tad-1\t20\t제목\t설명\t\t\t0\t2026-10-01T00:00:00Z\t"
+  }
+]
