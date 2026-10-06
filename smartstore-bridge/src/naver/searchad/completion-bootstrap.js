@@ -18,6 +18,22 @@ import { createPostgresPool, closePostgresPool } from '../../infrastructure/post
 import { loadSearchAdReportingConfig } from './reporting/config.js';
 import { createReportingRuntime } from './reporting/runtime.js';
 import { reportingError } from './reporting/contracts.js';
+import { reportSchemas } from './reporting/schema-registry.js';
+function completionBlockers(providers = new Map()) {
+  const entries = [
+    ['parent_remote_absence_unproven', 'Parent cleanup requires remote snapshot and writer-exclusion authority that is not established.'],
+    ['live_validation_not_performed', 'Offline fixtures establish software behavior; no live validation was performed.'],
+    ['actual_profitability_unavailable', 'Configured financial providers do not establish complete reconciled actual profitability.'],
+    ['estimate_read_capability_unavailable', 'Pinned estimates are create-gated POST operations; verified read-only estimate and balance evidence is unavailable.'],
+    ['circuit_baseline_unavailable', 'Production reporting supplies no comparable Customer spend baseline.']
+  ].map(([code, reason]) => ({ code, reason, descriptiveOnly: true, executionAuthority: false }));
+  for (const [channelId, reason] of [
+    ['haar_naver_smartstore', 'SETTLEMENT_RECONCILIATION_REQUIRED'],
+    ['haar_own_mall', 'CAFE24_FINANCIAL_CAPABILITIES_UNVERIFIED']
+  ]) entries.push({ code: providers.has(channelId) ? 'provider_capability_unverified' : 'provider_not_configured', channelId, reason, descriptiveOnly: true, executionAuthority: false });
+  for (const descriptor of reportSchemas.descriptors.filter(item => !item.supported)) entries.push({ code: 'report_schema_unsupported', kind: descriptor.kind, reportType: descriptor.reportType, reason: descriptor.reason, descriptiveOnly: true, executionAuthority: false });
+  return entries;
+}
 const TABLES = ['searchad_profitability_snapshots','searchad_recommendations','searchad_customer_channel_bindings','searchad_commerce_observations','searchad_product_cost_inputs','searchad_stats_observations', 'searchad_report_blobs', 'searchad_report_ingestions', 'searchad_report_rows_staging', 'searchad_daily_metrics', 'searchad_conversion_metrics', 'searchad_search_terms', 'searchad_master_snapshots', 'searchad_spend_evidence', 'searchad_circuit_policies', 'searchad_circuit_state', 'searchad_circuit_events', 'searchad_circuit_projection_cursors', 'searchad_automation_reservations', 'searchad_automation_policy_revisions', 'searchad_write_execution_claims', 'searchad_write_execution_outcomes'];
 async function assertSchema(pool) {
   try {
@@ -39,7 +55,7 @@ export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = proce
       if(workerConfig.enabled)throw Object.assign(new Error(),{code:'SEARCHAD_WORKER_DEPENDENCIES'});
       const runtime=await createReportingRuntime({ reportingConfig: { ...reportingConfig, enabled: false } });
       runtime.validationService=validationService;
-      const status=runtime.status.bind(runtime);runtime.status=()=>({...status(),worker:{required:false,initialized:false,ready:false}});
+      const status=runtime.status.bind(runtime);runtime.status=()=>({...status(),blockers:completionBlockers(),worker:{required:false,initialized:false,ready:false}});
       return {runtime,startupError:null};
     }
     if (!app.searchAdGateway || !app.searchAdCredentials || !app.searchAdRegistry) throw reportingError('SEARCHAD_REPORTING_DEPENDENCIES_REQUIRED', 503);
@@ -94,7 +110,7 @@ export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = proce
     runtime.workerRuntime=await createWorkerRuntime({completion:runtime,pool,env,clock,logger});
     const closeReporting=runtime.close.bind(runtime);
     runtime.close=async()=>{await runtime.workerRuntime?.close();await closeReporting();};
-    runtime.status = () => ({ ...reportingStatus(), worker:runtime.workerRuntime?.status() || {required:false,initialized:false,ready:false}, circuit: { ready: !runtime.isClosing(), mode: 'observe', automationEnabled }, automation: { ready: !runtime.isClosing(), defaultMode: 'observe', autoAvailable: automationEnabled } });
+    runtime.status = () => ({ ...reportingStatus(), blockers:completionBlockers(runtime.commerceProviders), worker:runtime.workerRuntime?.status() || {required:false,initialized:false,ready:false}, circuit: { ready: !runtime.isClosing(), mode: 'observe', automationEnabled }, automation: { ready: !runtime.isClosing(), defaultMode: 'observe', autoAvailable: automationEnabled } });
     return { runtime, startupError: null };
   } catch (error) {
     if(partialRuntime)await partialRuntime.close();else await closePostgresPool(ownedPool);

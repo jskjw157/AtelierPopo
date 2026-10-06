@@ -1,27 +1,18 @@
 # HAAR SearchAd — Recovery Dashboard
 
-## RESUME HERE — 2026-10-05 KST
+## RESUME HERE — composed completion candidate
 
-**Current verified code/test HEAD is `ac4164168e745eea0361eede76917bbf10bf2ccd` on `codex/searchad-extended-cleanup-20260914` / Draft PR #28. Issue #26 remains OPEN.**
+Tasks5–10 are accepted on `codex/searchad-extended-cleanup-20260914`; the exact accepted predecessor is `577367b3a79322fa8ecfbed5cd6463583b798d85`. Task10 final local acceptance was1553/1553 with fail/cancel/skip/todo0. Controller-observed [CI37482686719](https://github.com/jskjw157/AtelierPopo/actions/runs/37482686719), job112334648947, succeeded on that exact SHA with all15 migrations, immediate/post-full no-op repeats and audit0. This predecessor is not Task11 evidence.
 
-Do **not** repeat root campaign, adgroup, keyword/creative sibling public creation wiring, leaf cleanup/read-only recovery, descendant inventory scan, generic hierarchy reconciliation, account suspension send fences, or role-scoped hierarchy OpenAPI work. Those bounded units are already implemented and verified.
+Task11 adds [composed acceptance](SEARCHAD_COMPLETION_ACCEPTANCE_2026-10-05.md) and the [completion runbook](SEARCHAD_COMPLETION_RUNBOOK.md). Its exact source/tree, focused/static/full artifacts, independent review and later fresh CI are recorded in the controller-owned `.superpowers/sdd/2026-10-05-searchad-completion/task-11-report.md` and manifests. Check that matching record before claiming acceptance or publication; no future CI success is implied here.
 
-The current application exposes a bounded server-owned hierarchy lifecycle, but **campaign/adgroup parent deletion is intentionally not public**. Empty/list inventory observations remain non-authorizing and cannot prove trustworthy complete remote absence.
+The supported runtime composes reporting, Circuit, deterministic automation, separate durable worker/scheduler, descriptive126-operation validation, HAAR/provider evidence, profitability/recommendations and bounded limited auto through the existing writer/approval/activation/account fence. Defaults remain observe and operational gatesOFF. Native/manual/provider facts still leave actual profitability partial, verified estimate/balance unavailable and production Circuit baseline absent. Explicit synthetic positive fixtures establish software behavior only.
 
-| Checkpoint | Value |
-| --- | --- |
-| Branch | `codex/searchad-extended-cleanup-20260914` |
-| Draft PR | [#28](https://github.com/jskjw157/AtelierPopo/pull/28) |
-| Work issue | [#26](https://github.com/jskjw157/AtelierPopo/issues/26) |
-| Master | [#23](https://github.com/jskjw157/AtelierPopo/issues/23) |
-| Verified code/test HEAD | `ac4164168e745eea0361eede76917bbf10bf2ccd` |
-| Latest verification | [run 37232432564](https://github.com/jskjw157/AtelierPopo/actions/runs/37232432564), job 111524788448, completed SUCCESS |
-| Full regression | **1059/1059 PASS**, 453 top-level, 0 failed |
-| Schema | 0009 retained; this checkpoint adds no migration |
-| Live SearchAd calls | **0** |
-| Main/deploy/production gate changes | **none** |
+[Draft PR28](https://github.com/jskjw157/AtelierPopo/pull/28) remains open/unmerged. [Issue26](https://github.com/jskjw157/AtelierPopo/issues/26) remains unresolved: parent campaign/adgroup DELETE is absent and public cleanupfalse before/after restart. Empty inventory establishes no remote absence or writer-exclusion authority. Live validation/deployment is separate unstarted#22; no live calls, production database/config/gates, main/base merge or deployment are included.
 
-This dashboard supersedes the old 2026-09-13 resume text for progress. Historical checkpoints remain available in Git history and in PR #28 / issues #26 and #23 comments.
+`runtime.status().blockers` exposes sanitized descriptive/no-authority reasons for parent absence, unperformed live validation, unsupported/quarantined schemas, provider financial limitations, unavailable read-only estimate/balance and Circuit baseline. Missing required PostgreSQL/storage is unready; readiness describes infrastructure only. KST SQL DATE handling uses calendar text while retaining approval/risk/identity/expiry bindings. Full `npm test` keeps everyfile in `test/*.test.js` with concurrency1 and unchanged deadlines; SQLite ExperimentalWarningT6-M1 remains visible for final review.
+
+The material below is the historical October5 hierarchy checkpoint. Its old HEAD/counts, work-board statuses and pending subsystem descriptions are preserved as history and superseded by the composed acceptance record above. The parent deletion, unknown outcome and account/activation safety boundaries remain authoritative.
 
 ## Current public hierarchy surface
 

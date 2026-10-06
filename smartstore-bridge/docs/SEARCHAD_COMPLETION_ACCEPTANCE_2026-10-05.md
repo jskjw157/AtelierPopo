@@ -1,0 +1,34 @@
+# SearchAd composed completion acceptance
+
+This acceptance covers the supported software in issues #18–#21. Operational activation, live validation and deployment are separate work. PR #28 stays open and Draft; #26 remains unresolved and #22 is unstarted.
+
+The accepted predecessor is Task10 commit `577367b3a79322fa8ecfbed5cd6463583b798d85`, tree `c187e5b794939c78810573d1393df050a0afbafb`. Its final fixed local suite passed 1553/1553 with no failed, cancelled, skipped or todo tests. The Task11 candidate's exact commit/tree/source and artifact hashes, focused results, final full results and independent review live in `.superpowers/sdd/2026-10-05-searchad-completion/task-11-report.md` and its manifests at the repository root. These are local controller handoff artifacts. A predecessor result or pending CI is never evidence for another SHA. Fresh remote CI run/job/SHA must be appended by the controller after observation; this document does not fabricate future CI success.
+
+## Composed acceptance owners
+
+`test/postgres-searchad-completion-http.integration.test.js` constructs the actual `bootstrapV05` and `createHttpApiV05` on a unique disposable PostgreSQL schema. A separate invocation of the actual headless worker entrypoint reconstructs bootstrap and borrows the same explicitly injected fake upstream and report storage. It does not construct a substitute orchestration graph.
+
+The workflow covers HTTP report registration, poll, archived ingestion and policy stabilization for seven server-selected D-9 through D-3 KST days. D+1/D+2/D+3 collection plus fresh selected generations feed the real selectors. Current statistics, canonical HAAR mappings, configured SmartStore product/order/adjustment/settlement reads and Cafe24 product/variant reads then feed profitability and deterministic recommendations. Current provider/manual provenance leaves actual runtime profitability partial and contribution null; the native limited-auto path stays blocked.
+
+Only the positive bounded-auto fixture supplies private, explicitly synthetic financial source facts. Its seven-day history comes from the native ingestions. Actual eligibility, policy delegation, activation, Circuit checks, plan, transient approval, accepted execution claim, account fence and writer run unchanged. One budget reduction is initiated once; deliberately lost verification leaves an unresolved durable outcome. GET reconciliation under Circuit pause verifies the result without replay, and full bootstrap/HTTP restart preserves the pause, outcome and consumed token. Synthetic fixtures are never live evidence.
+
+Other assertions cover Reader/Operator/Executor/Admin ownership, wrong Customer denial, rejected caller authority, rotated identity, expired activation, missing database/required storage readiness, failed headless startup, duplicate schedule slots, idempotent disposal, closed-service denial and secrets/PII/temporary URLs/raw approval tokens absent from responses, captured logs and every persisted SearchAd table. Public parent DELETE routes return404 both before and after restart; cleanup staysfalse even when local hierarchy inventory is empty.
+
+`test/searchad-completion-openapi.test.js` compares every documented method to its actual route owner and minimum role. It rejects undocumented or duplicate owners, speculative cleanup/activation endpoints, nonexact POST request schemas and Customer-less GET scopes. Descriptive blocker metadata grants no permission. Existing approval/execute endpoints retain their original documentation and ownership.
+
+The native campaign test runs under `TZ=Asia/Seoul` in focused CI, together with the existing adgroup HTTP and campaign repository consumers locally. The observed pre-fix failure was `SEARCHAD_CAMPAIGN_CREATE_HANDOFF_INVALID`: pg converted SQL DATE to local midnight, then UTC normalization moved the calendar day. The narrow fix reads `risk_date::text`; risk amount/day, identity, approval, expiry and send checks are unchanged. Full acceptance also runs in UTC. No timezone workaround or timeout relaxation supplies acceptance.
+
+## Required evidence
+
+- `npm ci`, `npm run check`, syntax checks for every tracked source/script.
+- Required native focused report, worker, Auto and composed/KST jobs with zero failed, cancelled, skipped and todo tests.
+- `npm test` retains the entire `test/*.test.js` glob and uses concurrency1. Existing native tests previously reached their unchanged180s timeout under high host load; the bound controls resource pressure without excluding tests or changing deadlines. SQLite's Node22 ExperimentalWarning remains visible (deferred T6-M1).
+- Both safety scanners, exact126 validation records/117 runtime descriptors/9 internal records, SearchAd and116 Commerce coverage, diff/secret scans and production dependency audit. A network-blocked audit is unverified.
+- Frozen migration0001–0015 hashes, exact clean application in a disposable schema and immediate `applied:[]` repeat. Public/production schema and the controller-owned PostgreSQL lifecycle are untouched.
+- Exact final source/TAP pairing, independent review and fresh remote CI for that SHA before controller acceptance/publication.
+
+## Operational disposition
+
+`runtime.status().blockers` is sanitized descriptive data: parent remote absence unproven; live validation not performed; unsupported report schemas quarantined; Naver settlement reconciliation/unique-ledger identity missing; Cafe24 financial capabilities unverified; verified estimate/balance unavailable; comparable production Circuit baseline unavailable. Every blocker has `descriptiveOnly:true` and `executionAuthority:false`. Status, manual mapping/cost inputs, empty inventories and registry records cannot issue activation or cleanup authority.
+
+Defaults remain observe, disabled policies and reporting/worker/automation/write gates OFF. Parent deletion has `cleanup:false`, `completeAbsence:false`, `snapshotConsistency:'unproven'` and `cleanupAuthority:false`. Missing financial facts never become zero cost or actual profit. Estimate operations remain create-gated POSTs; no POST estimate calls are made to manufacture eligibility. Read/reconcile remain available under Circuit pause, while rollback preserves its gate, identity, account and after-hash checks. No live Naver/Commerce/storage request, production database/config/gate change, external message, merge or deploy is included.

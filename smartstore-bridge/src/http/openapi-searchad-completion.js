@@ -64,5 +64,8 @@ export function searchAdCompletionOpenApi({ role = 'reader' } = {}) {
     paths['/api/v1/searchad/circuit/recover-rule']={post:{...post('Audit recovery of server-selected exact known terminal versions; unknown, inflight and backlog deny recovery. Tokens, risk, holds and source history remain.',automationBody({policyId:uuid,expectedRevision:{type:'integer',minimum:1},reason:{type:'string',minLength:1,maxLength:500},confirmation:{type:'string',enum:['RECOVER_SEARCHAD_KNOWN_FAILURES']}},['policyId','expectedRevision','reason','confirmation']),{type:'object'}),'x-minimum-role':'admin'}};
   }
   Object.assign(paths,productEvidencePaths(role));
-  return { openapi: '3.0.3', info: { title: `SearchAd completion (${role})`, version: '0.8.0' }, paths, components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } } };
+  return { openapi: '3.0.3', info: { title: `SearchAd completion (${role})`, version: '0.8.0' },
+    'x-execution-authority':false,
+    'x-operational-blockers':{source:'runtime.status().blockers',descriptiveOnly:true,executionAuthority:false,parentCleanup:false,liveVerified:false,unsupportedSchemas:'quarantined',providerFinances:'partial_or_unknown',estimates:'create_gated_post_unavailable',circuitBaseline:'unavailable'},
+    paths, components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } } };
 }

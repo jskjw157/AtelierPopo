@@ -10,7 +10,6 @@ const IDENT = { specSha:'spec_sha', credentialFingerprint:'credential_fingerprin
 const REMOTE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$/;
 export function fail(code, message, status=409) { throw new SearchAdWriteError(code,message,{},status); }
 export function record(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
-const riskDay = v => v instanceof Date ? v.toISOString().slice(0,10) : v;
 const epoch = v => v instanceof Date ? v.getTime() : Date.parse(v);
 const active = (a,b,n) => Number.isFinite(epoch(a)) && Number.isFinite(epoch(b)) && epoch(a)<=n && epoch(b)>n;
 function sameSet(a,b) { return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&new Set(a).size===a.length&&new Set(b).size===b.length&&a.every(x=>typeof x==='string'&&x.length>0&&b.includes(x)); }
@@ -118,9 +117,11 @@ export class PostgresCampaignCreateRepository {
         intent.details_json.planId!==s.planId||intent.details_json.intentId!==receipt.intentId||intent.details_json.requestFingerprint!==s.requestFingerprint||g.events.some(e=>e.phase==='transport_intent'))
         fail('SEARCHAD_CAMPAIGN_CREATE_HANDOFF_INVALID','A unique matching immutable dispatch intent is required.');
       const approval=(await c.query('SELECT * FROM searchad_write_approvals WHERE approval_id=$1 AND plan_id=$2',[intent.details_json.approvalId,s.planId])).rows[0];
-      const risk=(await c.query('SELECT * FROM searchad_risk_reservations WHERE intent_id=$1',[receipt.intentId])).rows[0];
+      // SQL DATE is a calendar value. Casting avoids pg's local-midnight Date
+      // conversion shifting the day when a client runs in Asia/Seoul.
+      const risk=(await c.query('SELECT *,risk_date::text AS risk_date FROM searchad_risk_reservations WHERE intent_id=$1',[receipt.intentId])).rows[0];
       if(!approval||!Number.isFinite(epoch(approval.used_at))||epoch(approval.used_at)!==epoch(intent.created_at)||epoch(approval.used_at)>n||approval.confirmation!==SEARCHAD_APPROVAL_CONFIRMATION||!active(approval.created_at,approval.expires_at,n)||!active(g.plan.created_at,g.plan.expires_at,n)||
-        !risk||risk.state!=='consumed'||risk.customer_id!==s.customerId||risk.owner_kind!=='hierarchy_canary'||risk.owner_run_id!==s.hierarchyRunId||risk.operation_key!==OPS.campaign.create||risk.lifecycle_kind!=='create'||risk.units!==intent.details_json.riskUnits||riskDay(risk.risk_date)!==intent.details_json.riskDate||epoch(risk.consumed_at)!==epoch(intent.created_at))
+        !risk||risk.state!=='consumed'||risk.customer_id!==s.customerId||risk.owner_kind!=='hierarchy_canary'||risk.owner_run_id!==s.hierarchyRunId||risk.operation_key!==OPS.campaign.create||risk.lifecycle_kind!=='create'||risk.units!==intent.details_json.riskUnits||risk.risk_date!==intent.details_json.riskDate||epoch(risk.consumed_at)!==epoch(intent.created_at))
         fail('SEARCHAD_CAMPAIGN_CREATE_HANDOFF_INVALID','The consumed approval and risk must still bind this exact campaign.');
       const a=await this.#authority(c,s.customerId,g.run.activation_id,identity,n);
       const validUntil=Math.min(epoch(g.plan.expires_at),epoch(approval.expires_at),a.validUntil);
