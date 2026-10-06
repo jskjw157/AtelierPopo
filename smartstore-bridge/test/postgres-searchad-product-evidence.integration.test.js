@@ -24,3 +24,68 @@ test('configured Cafe24 product and variants use real app client with fixed own-
 test('shared mapping requires exact weights, binding identity rotation fails closed and scope cannot cross canonical products',{skip:!enabled},async t=>{const f=await setup(t);await bind(f);await f.call(adminKey,'POST','/api/v1/searchad/product-mappings',mapping(f));const other=randomUUID();await f.pool.query("INSERT INTO haar_products(haar_product_id,product_name) VALUES($1,'other')",[other]);await f.pool.query("INSERT INTO channel_products(channel_id,haar_product_id,channel_product_no,remote_product_id,channel_product_key,product_name) VALUES('haar_naver_smartstore',$1,'456','456','haar_naver_smartstore:456','other')",[other]);assert.equal((await f.call(adminKey,'POST','/api/v1/searchad/product-mappings',{...mapping(f),haarProductId:other})).status,404);const input={...mapping(f),haarProductId:other,channelProductKey:'haar_naver_smartstore:456'};assert.equal((await f.call(adminKey,'POST','/api/v1/searchad/product-mappings',input)).status,400);assert.equal((await f.call(adminKey,'POST','/api/v1/searchad/product-mappings',{...input,allocation:{weights:[{haarProductId:f.id,weight:'0.6'},{haarProductId:other,weight:'0.4'}]}})).status,200);f.app.searchAdCompletionRuntime.commerceProviders.get('haar_naver_smartstore').sourceIdentity='f'.repeat(64);assert.equal((await f.call(completionOperatorKey,'POST','/api/v1/searchad/product-evidence/collect',collect(f))).status,409);assert.equal(f.commerceCalls.length,0);});
 test('default Commerce gate remains OFF for unverified operations and errors never become zero evidence',{skip:!enabled},async t=>{const f=await setup(t);await bind(f);await f.call(adminKey,'POST','/api/v1/searchad/product-mappings',mapping(f));f.app.commerceGateway.config.allowUnverifiedOperations=false;const result=await f.call(completionOperatorKey,'POST','/api/v1/searchad/product-evidence/collect',collect(f));assert.equal(result.status,200);assert.equal(result.body.quality,'unknown');assert.equal(result.body.contributionKrw,null);assert.equal(result.body.settlementAmountKrw,null);assert.equal(f.commerceCalls.length,0);assert.ok(result.body.missingReasons.includes('PROVIDER_READ_UNAVAILABLE'));});
 test('headless disposal drains a pending product collection and rejects subsequent work',{skip:!enabled},async t=>{const f=await setup(t);await bind(f);await f.call(adminKey,'POST','/api/v1/searchad/product-mappings',mapping(f));let release,entered;const block=new Promise(r=>release=r),waiting=new Promise(r=>entered=r);const previous=f.app.client.fetchImpl;f.app.client.fetchImpl=async(...args)=>{entered();await block;return previous(...args);};const ctx={principal:{principalId:'op',role:'operator',customerIds:['1001']},requestId:'drain-test'};const pending=f.app.searchAdCompletionRuntime.productEvidenceService.collect(collect(f),ctx);await waiting;let closed=false;const close=f.app.close().then(()=>closed=true);await new Promise(resolve=>setImmediate(resolve));assert.equal(closed,false);release();await pending;await close;assert.equal(closed,true);await assert.rejects(()=>f.app.searchAdCompletionRuntime.productEvidenceService.collect(collect(f),ctx),{code:'SEARCHAD_REPORTING_NOT_READY'});});
+
+const manualCost=f=>({customerId:'1001',haarProductId:f.id,component:'cogs',amountKrw:'1000',sourceReference:'fixture cost',reason:'fixture estimate',validFrom:'2026-10-02T00:00:00Z'});
+test('fix1 T8-I1 provider rebind requires a new product mapping before reads or evidence selection',{skip:!enabled},async t=>{
+  const f=await setup(t);const originalBinding=await bind(f);
+  assert.equal((await f.call(adminKey,'POST','/api/v1/searchad/product-mappings',mapping(f))).status,200);
+  assert.equal((await f.call(completionOperatorKey,'POST','/api/v1/searchad/product-evidence/collect',collect(f))).status,200);
+  const runtime=f.app.searchAdCompletionRuntime;
+  runtime.commerceProviders.get('haar_naver_smartstore').sourceIdentity='f'.repeat(64);
+  const currentBinding=await bind(f);assert.equal(currentBinding.status,200);assert.notEqual(currentBinding.body.bindingId,originalBinding.body.bindingId);
+  f.commerceCalls.length=0;let appendAttempts=0;
+  const append=runtime.productRepository.appendCommerceObservation.bind(runtime.productRepository);
+  runtime.productRepository.appendCommerceObservation=async input=>{appendAttempts++;return append(input);};
+  const denied=await f.call(completionOperatorKey,'POST','/api/v1/searchad/product-evidence/collect',collect(f));
+  assert.equal(denied.status,409,'rebind must not reinterpret the old mapping under a different provider account');
+  assert.equal(f.commerceCalls.length,0);assert.equal(appendAttempts,0);
+  assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_commerce_observations')).rows[0].n,4);
+  assert.equal((await f.call(completionReaderKey,'GET',`/api/v1/searchad/profitability/products/${f.id}?customerId=1001&since=2026-10-01&until=2026-10-01`)).status,409);
+  const remap=await f.call(adminKey,'POST','/api/v1/searchad/product-mappings',{...mapping(f),validFrom:'2026-10-02T00:00:00Z'});
+  assert.equal(remap.status,200);assert.equal(remap.body.bindingId,currentBinding.body.bindingId);
+  const before=await f.call(completionReaderKey,'GET',`/api/v1/searchad/profitability/products/${f.id}?customerId=1001&since=2026-10-01&until=2026-10-01`);
+  assert.equal(before.status,200);assert.deepEqual(before.body.observations,[],'old account evidence remains unusable after explicit remapping');
+  const accepted=await f.call(completionOperatorKey,'POST','/api/v1/searchad/product-evidence/collect',collect(f));
+  assert.equal(accepted.status,200);assert.equal(f.commerceCalls.length,4);assert.equal(appendAttempts,4);assert.equal(accepted.body.observations.length,4);
+  const bindings=(await f.pool.query('SELECT binding_id,count(*)::int AS n FROM searchad_commerce_observations GROUP BY binding_id')).rows;
+  assert.deepEqual(bindings.map(row=>[row.binding_id,row.n]).sort(),[[originalBinding.body.bindingId,4],[currentBinding.body.bindingId,4]].sort());
+  assert.equal((await f.pool.query('SELECT count(DISTINCT observed_at)::int AS n FROM searchad_commerce_observations')).rows[0].n,1,'old and new generations deliberately share a collection clock');
+  const currentIds=(await f.pool.query('SELECT observation_id FROM searchad_commerce_observations WHERE binding_id=$1',[currentBinding.body.bindingId])).rows.map(row=>row.observation_id).sort();
+  assert.deepEqual(accepted.body.observations.map(row=>row.observationId).sort(),currentIds,'only current-binding observations survive latest-generation selection');
+});
+test('fix1 T8-I1 provider rebind cannot authorize costs through an older mapping',{skip:!enabled},async t=>{
+  const f=await setup(t);await bind(f);await f.call(adminKey,'POST','/api/v1/searchad/product-mappings',mapping(f));
+  f.app.searchAdCompletionRuntime.commerceProviders.get('haar_naver_smartstore').sourceIdentity='f'.repeat(64);await bind(f);
+  assert.equal((await f.call(adminKey,'POST','/api/v1/searchad/product-costs',manualCost(f))).status,409);
+  assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_product_cost_inputs')).rows[0].n,0);assert.equal(f.commerceCalls.length,0);
+  assert.equal((await f.call(adminKey,'POST','/api/v1/searchad/product-mappings',{...mapping(f),validFrom:'2026-10-02T00:00:00Z'})).status,200);
+  assert.equal((await f.call(adminKey,'POST','/api/v1/searchad/product-costs',manualCost(f))).status,200);
+});
+async function observationScope(t){
+  const f=await setup(t);await bind(f);
+  const binding=(await f.pool.query('SELECT * FROM searchad_customer_channel_bindings')).rows[0];
+  const other=randomUUID(),otherChannel=randomUUID();
+  await f.pool.query("INSERT INTO searchad_customer_accounts(customer_id) VALUES('2002')");
+  await f.pool.query("INSERT INTO haar_products(haar_product_id,product_name) VALUES($1,'other canonical')",[other]);
+  await f.pool.query("INSERT INTO channel_products(channel_product_id,channel_id,haar_product_id,channel_product_no,remote_product_id,channel_product_key,product_name) VALUES($1,'haar_own_mall',$2,'123','123','haar_own_mall:123','other channel')",[otherChannel,f.id]);
+  return {...f,other,otherChannel,observation:{customerId:'1001',haarProductId:f.id,channelProductId:f.cp,bindingId:binding.binding_id,identityHash:binding.identity_hash,sourceIdentity:binding.source_identity,capability:'productState',since:'2026-10-01',until:'2026-10-01',rows:[],complete:false,missingReasons:['PRODUCT_STATE_MISSING'],observedAt:'2026-10-02T00:00:00Z'}};
+}
+const rawObservation=(pool,o)=>pool.query(`INSERT INTO searchad_commerce_observations(customer_id,haar_product_id,channel_product_id,binding_id,capability,since,until,identity_hash,source_identity,source_hash,rows_json,complete,missing_reasons,observed_at) VALUES($1,$2,$3,$4,'productState','2026-10-01','2026-10-01',$5,$6,$7,'[]',false,'["PRODUCT_STATE_MISSING"]','2026-10-02T00:00:00Z') RETURNING observation_id`,[o.customerId,o.haarProductId,o.channelProductId,o.bindingId,o.identityHash,o.sourceIdentity,'a'.repeat(64)]);
+for(const [name,override] of [
+  ['foreign Customer binding',f=>({customerId:'2002'})],
+  ['other HAAR product',f=>({haarProductId:f.other})],
+  ['other sales channel',f=>({channelProductId:f.otherChannel})],
+  ['different SearchAd identity',()=>({identityHash:'b'.repeat(64)})],
+  ['different provider source identity',()=>({sourceIdentity:'c'.repeat(64)})]
+])test(`fix1 T8-I2 raw observation insert rejects ${name}`,{skip:!enabled},async t=>{
+  const f=await observationScope(t);const invalid={...f.observation,...override(f)};
+  await assert.rejects(()=>rawObservation(f.pool,invalid),/commerce observation scope mismatch/);
+  assert.equal(await f.app.searchAdCompletionRuntime.productRepository.appendCommerceObservation(invalid),null,'repository guard also denies the mismatched tuple');
+  assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_commerce_observations')).rows[0].n,0);
+});
+test('fix1 T8-I2 valid raw observation insert is accepted and remains immutable',{skip:!enabled},async t=>{
+  const f=await observationScope(t);assert.equal((await rawObservation(f.pool,f.observation)).rowCount,1);
+  await assert.rejects(()=>f.pool.query('UPDATE searchad_commerce_observations SET complete=true'),/immutable/);
+  await assert.rejects(()=>f.pool.query('DELETE FROM searchad_commerce_observations'),/immutable/);
+  assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM searchad_commerce_observations')).rows[0].n,1);
+});

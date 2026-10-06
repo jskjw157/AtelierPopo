@@ -72,6 +72,19 @@ CREATE TABLE searchad_commerce_observations (
   UNIQUE(customer_id,haar_product_id,channel_product_id,capability,since,until,identity_hash,source_identity,observed_at,source_hash)
 );
 CREATE INDEX searchad_commerce_selection ON searchad_commerce_observations(customer_id,haar_product_id,channel_product_id,capability,observed_at DESC);
+-- Every writer must preserve the same Customer/product/channel/source tuple.
+CREATE FUNCTION searchad_validate_commerce_observation() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM searchad_customer_channel_bindings b
+    JOIN channel_products cp ON cp.channel_id=b.channel_id
+    WHERE b.binding_id=NEW.binding_id AND b.customer_id=NEW.customer_id
+      AND b.identity_hash=NEW.identity_hash AND b.source_identity=NEW.source_identity
+      AND cp.channel_product_id=NEW.channel_product_id AND cp.haar_product_id=NEW.haar_product_id
+  ) THEN RAISE EXCEPTION 'commerce observation scope mismatch' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER searchad_commerce_observation_scope BEFORE INSERT ON searchad_commerce_observations FOR EACH ROW EXECUTE FUNCTION searchad_validate_commerce_observation();
 -- Reserved Task9 durable outputs; Task8 cannot insert actual-profit or executable evidence.
 CREATE TABLE searchad_profitability_snapshots (
   snapshot_id uuid PRIMARY KEY DEFAULT gen_random_uuid(), customer_id text NOT NULL REFERENCES searchad_customer_accounts(customer_id),
