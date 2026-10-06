@@ -3,6 +3,7 @@ import { hash, fail, uuid } from './contracts.js';
 import { contentHash } from '../write/canonical.js';
 import { deterministicId } from './recommendation-rules.js';
 const iso=v=>v instanceof Date?v.toISOString():v;
+const overlaps=(rows,start,end)=>rows.some((a,i)=>rows.slice(i+1).some(b=>Math.max(start,Date.parse(a.validFrom),Date.parse(b.validFrom))<Math.min(end+1,a.validTo?Date.parse(a.validTo):Infinity,b.validTo?Date.parse(b.validTo):Infinity)));
 const covers=(row,start,end)=>Date.parse(row.validFrom)<=start&&(!row.validTo||Date.parse(row.validTo)>end);
 /** All financial inputs are selected from durable scoped producers, never HTTP. */
 export class ProfitabilityService {
@@ -35,9 +36,21 @@ export class ProfitabilityService {
     // when one product-level revision covers the entire KST sales range. Variant
     // and multiple-supplier candidates need line-level identity and stay missing.
     for(const [db,key]of [['cogs','cogs'],['fees','fees'],['shipping','shipping'],['seller_discount','sellerDiscount'],['return_provision','returnProvision']]){
-      const candidates=data.costs.filter(c=>c.component===db&&covers(c,start,end));
-      let chosen=candidates.length===1&&!candidates[0].haarVariantId?candidates[0]:null;
-      if(key==='cogs'&&!chosen&&!candidates.length){const eligible=data.sourceCosts.filter(c=>c.currency==='KRW'&&covers(c,start,end));if(eligible.length===1&&!eligible[0].variantSpecific)chosen=eligible[0];else if(eligible.some(c=>c.variantSpecific))missing.add('VARIANT_COST_ASSIGNMENT_UNRESOLVED');else if(eligible.length>1)missing.add('SUPPLIER_COST_ASSIGNMENT_UNRESOLVED');}
+      const candidates=data.costs.filter(c=>c.component===db);
+      if(candidates.some(c=>!covers(c,start,end)))missing.add(`${db.toUpperCase()}_COST_RANGE_PARTIAL`);
+      if(overlaps(candidates,start,end))missing.add(`${db.toUpperCase()}_COST_INTERVAL_AMBIGUOUS`);
+      let chosen=candidates.length===1&&covers(candidates[0],start,end)&&!candidates[0].haarVariantId?candidates[0]:null;
+      if(key==='cogs'&&!candidates.length){
+        const sourceCosts=data.sourceCosts;
+        const linkCovers=c=>covers(c.sourceLink,start,end)&&(!c.variantSpecific||c.variantLinks.length===1&&covers(c.variantLinks[0],start,end));
+        if(sourceCosts.some(c=>!covers(c,start,end)))missing.add('SOURCE_COST_RANGE_PARTIAL');
+        if(sourceCosts.some(c=>!linkCovers(c)))missing.add('SOURCE_COST_LINK_RANGE_PARTIAL');
+        if(sourceCosts.some(c=>c.currency!=='KRW'))missing.add('SOURCE_COST_CURRENCY_UNSUPPORTED');
+        if(sourceCosts.some(c=>overlaps(sourceCosts.filter(x=>x.sourceReference===c.sourceReference),start,end)))missing.add('SUPPLIER_COST_INTERVAL_AMBIGUOUS');
+        if(sourceCosts.length>1)missing.add('SUPPLIER_COST_ASSIGNMENT_UNRESOLVED');
+        if(sourceCosts.some(c=>c.variantSpecific))missing.add('VARIANT_COST_ASSIGNMENT_UNRESOLVED');
+        if(sourceCosts.length===1&&!sourceCosts[0].variantSpecific&&sourceCosts[0].currency==='KRW'&&covers(sourceCosts[0],start,end)&&linkCovers(sourceCosts[0]))chosen=sourceCosts[0];
+      }
       if(candidates.some(c=>c.haarVariantId))missing.add('VARIANT_COST_ASSIGNMENT_UNRESOLVED');
       components[key]=component(chosen?multiply(chosen.amountKrw,orders.quantity):null,chosen||[],{quality:'estimated',reconciled:false,basis:'per_remaining_unit_estimate'});
     }
@@ -57,12 +70,13 @@ export class ProfitabilityService {
     const timestamps=provenance.map(o=>Date.parse(o.observedAt)).concat(ads.generations.map(g=>Date.parse(g.generationWindow.lower))).filter(Number.isFinite);
     const asOf=timestamps.length?new Date(Math.min(...timestamps)).toISOString():null;
     const calculation=calculateProfitability({...input,asOf,components,counts:{conversions:null,clicks:null},missingReasons:[...missing],mappingVerified:false,allocationVerified:false});
-    const sources={identityHash,bindings:scopes,mappings,commerce:provenance,costs:data.costs,sourceCosts:data.sourceCosts,ads:ads.generations,adRows:ads.rows.map(r=>({sourceKey:r.sourceKey,rowSha:r.rowSha,generationSha:r.generationSha})),conversionRows:ads.conversions.map(r=>({sourceKey:r.sourceKey,rowSha:r.rowSha,generationSha:r.generationSha}))};
+    const catalog=data.catalog.filter(c=>scopes.some(s=>s.channelProductId===c.channelProductId)).sort((a,b)=>a.channelProductId.localeCompare(b.channelProductId));
+    const sources={catalog,identityHash,bindings:scopes,mappings,commerce:provenance,costs:data.costs,sourceCosts:data.sourceCosts,ads:ads.generations,adRows:ads.rows.map(r=>({sourceKey:r.sourceKey,rowSha:r.rowSha,generationSha:r.generationSha})),conversionRows:ads.conversions.map(r=>({sourceKey:r.sourceKey,rowSha:r.rowSha,generationSha:r.generationSha}))};
     const inputHash=contentHash({input,sources,calculation});
     const current=await this.productEvidenceService.scopes(input);
     if(contentHash(current.scopes)!==contentHash(scopes)||contentHash(current.mappings)!==contentHash(mappings))throw fail('SEARCHAD_COMMERCE_IDENTITY_CHANGED',409);
     const snapshot={...input,...calculation,inputHash,snapshotId:deterministicId({input,inputHash}),sourceSetHash:contentHash(sources),sources,mappingVerified:false,allocationVerified:false,unallocatedSpendKrw:allocated.unallocatedKrw,searchTerms:ads.searchTerms,liveVerified:false,autoEligible:false,contributionKrw:calculation.metrics.contributionKrw,netRevenueKrw:calculation.metrics.netRevenueKrw,settlementAmountKrw:null,
-      observations:observations.map(({bindingId,sourceIdentity,identityHash,...o})=>o),mappings:mappings.map(({bindingId,identityHash,...m})=>m),costs:data.costs,sourceCosts:data.sourceCosts,catalog:data.catalog.filter(c=>scopes.some(s=>s.channelProductId===c.channelProductId))};
+      observations:observations.map(({bindingId,sourceIdentity,identityHash,...o})=>o),mappings:mappings.map(({bindingId,identityHash,...m})=>m),costs:data.costs,sourceCosts:data.sourceCosts,catalog};
     return snapshot;
   }
   async calculate(input,context){this.productEvidenceService.validate(input,context,'operator');return this.repository.appendSnapshot(await this.select(input));}

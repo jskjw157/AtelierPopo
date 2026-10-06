@@ -9,7 +9,7 @@ export function exact(input,keys){exactKeys(input,keys,'SEARCHAD_PRODUCT_INPUT')
 export function access(customerId,context,role='reader'){scopedCustomer(customerId);assertReportingScope(customerId,context,{readOnly:role==='reader'});if(role==='admin'&&context.principal.role!=='admin')throw fail('SEARCHAD_PRODUCT_ROLE_FORBIDDEN',403);}
 export function range(input){if(!validDate(input.since)||!validDate(input.until)||input.since>input.until||Date.parse(input.until)-Date.parse(input.since)>30*86400000)throw fail();return {since:input.since,until:input.until};}
 export function effective(input,clock){const validFrom=input.validFrom===undefined?new Date(clock()).toISOString():utcTimestamp(input.validFrom);const validTo=input.validTo==null?null:utcTimestamp(input.validTo);if(validTo&&validTo<=validFrom)throw fail();return {validFrom,validTo};}
-export function money(value){if(typeof value!=='number'&&typeof value!=='string')return null;const text=String(value);return /^-?(0|[1-9]\d{0,14})(\.\d{1,4})?$/.test(text)&&Number.isFinite(Number(text))?text:null;}
+export function money(value){if(typeof value!=='number'&&typeof value!=='string'||typeof value==='number'&&!Number.isSafeInteger(value))return null;const text=String(value);return /^-?(0|[1-9]\d{0,14})(\.\d{1,4})?$/.test(text)&&Number.isFinite(Number(text))?text:null;}
 export const count=value=>{const result=money(value);return result!==null&&/^(0|[1-9]\d*)$/.test(result)?result:null;};
 export const enumValue=(value,values)=>values.includes(value)?value:null;
 export function dateValue(value){return validDate(value)?value:null;}
