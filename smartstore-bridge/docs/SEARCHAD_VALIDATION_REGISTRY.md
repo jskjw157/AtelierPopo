@@ -70,8 +70,14 @@ metadata records below; object or variable spelling does not establish data.
 The local proof excludes getters, functions and spreads, rejects ambiguous or
 reassigned bindings, and is disabled by member writes in the module. It is not
 a general interprocedural type proof. Unshadowed, unmodified one-argument
-`JSON.stringify` is a serialization sink for request candidates; replacers and
-known fetch capabilities retain escape checks. Harmless callbacks and data
+`JSON.stringify` is a serialization sink only for a bare request candidate or
+an explicit shallow object of static ordinary fields. Generic acceptance rejects
+`toJSON` anywhere in the visible value, computed keys, getters, methods, spreads,
+arrays and candidate-container aliases; local member writes also disable this
+proof. A function used as `toJSON` is executable, even under JSON serialization.
+Replacers, changed serializer bindings and known fetch capabilities retain escape
+checks. This bounded source check does not model hooks installed elsewhere at
+runtime. Harmless callbacks and data
 objects remain valid.
 
 `REVIEWED_TRANSPORT_BOUNDARIES` contains **55 explicit contextual records for
@@ -171,7 +177,11 @@ module and demonstrates one fake POST before requiring scanner rejection;
 its destructured equivalent, callback/container/return transfers, data mutation
 and serializer-shadowing cases are covered. Plain request-data exports pass.
 Metadata record mutation controls reject changed contexts and added raw calls;
-forged data records cannot approve known fetch or raw invocations.
+forged data records cannot approve known fetch or raw invocations. Serializer
+regressions execute fake `toJSON` functions through direct objects, arrays,
+container/callable aliases, computed keys, spreads and getters before requiring
+scanner rejection. Bare candidate and plain ordinary-field controls invoke the
+fake zero times. These fixture calls make no real network or database requests.
 CI names both new test files explicitly, requires PostgreSQL with zero skips,
 and runs the two new scripts in its static acceptance step.
 

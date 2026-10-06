@@ -235,3 +235,31 @@ test('T7_F1_I1_data_records_cannot_approve_known_network_or_raw_invocation',t=>{
   assert.ok(scanExecutionSources({root,transportAllowlist:[],requestDataAllowlist:[record]}).violations.some(v=>v.kind==='network_capability_transfer'));
   assert.throws(()=>scanExecutionSources({root,transportAllowlist:[],requestDataAllowlist:[{...record,kind:'raw_client_delegation'}]}),/REQUEST_DATA_RECORD_INVALID/);
 });
+
+test('T7_F2_I1_stringify_toJSON_capability_invokes_fake_and_is_rejected',async t=>{
+  for(const body of [
+    'return JSON.stringify({toJSON:upstream.request});',
+    'return JSON.stringify([{toJSON:upstream.request}]);',
+    'const payload={toJSON:upstream.request};return JSON.stringify(payload);',
+    'const alias=upstream.request;return JSON.stringify({toJSON:alias});',
+    'return JSON.stringify({["to"+"JSON"]:upstream.request});',
+    'return JSON.stringify({...{toJSON:upstream.request}});',
+    'const value=upstream.request;value.toJSON=value;return JSON.stringify({request:value});',
+    'return JSON.stringify({get toJSON(){return upstream.request;}});'
+  ])await t.test(body,async()=>{
+    const root=fixture(t);write(root,'package.json','{"type":"module"}');write(root,'src/service.js','export function execute(upstream){'+body+'}');
+    const {pathToFileURL}=await import('node:url');const {execute}=await import(pathToFileURL(path.join(root,'src/service.js')).href);
+    let calls=0;const value=execute({request:()=>{calls++;return {fakeRawRequest:true};}});
+    assert.equal(calls,1);assert.ok(value.includes('"fakeRawRequest":true'));
+    const result=scanExecutionSources({root,transportAllowlist:[],requestDataAllowlist:[]});assert.deepEqual(result.scannedFiles,['src/service.js']);
+    assert.ok(result.violations.some(v=>['network_capability_transfer','network_capability_return'].includes(v.kind)));
+  });
+});
+test('T7_F2_I1_stringify_bare_candidate_and_plain_request_field_do_not_invoke_fake',async t=>{
+  for(const [expression,expected] of [['upstream.request',undefined],['{request:upstream.request}','{}']])await t.test(expression,async()=>{
+    const root=fixture(t);write(root,'package.json','{"type":"module"}');write(root,'src/service.js','export function execute(upstream){return JSON.stringify('+expression+');}');
+    const {pathToFileURL}=await import('node:url');const {execute}=await import(pathToFileURL(path.join(root,'src/service.js')).href);
+    let calls=0;assert.equal(execute({request:()=>{calls++;return {fakeRawRequest:true};}}),expected);assert.equal(calls,0);
+    assert.deepEqual(scanExecutionSources({root,transportAllowlist:[],requestDataAllowlist:[]}).violations,[]);
+  });
+});

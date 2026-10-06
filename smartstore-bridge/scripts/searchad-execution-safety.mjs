@@ -296,6 +296,18 @@ function inspect(source, ast, {root,file}) {
   const containsCapability=node=>capabilityKinds.has(signature(node)) || Boolean(node?.type==='Identifier' && [...bindings].some(([name,value])=>name.startsWith(node.name+'.')&&capabilityKinds.has(value)));
 
   const candidateOnly=node=>candidateKinds.has(signature(node)) && !Boolean(node?.type==='Identifier'&&[...bindings].some(([name,value])=>name.startsWith(node.name+'.')&&networkKinds.has(value)));
+  function inertCandidateSerialization(value){
+    // Only a bare candidate or a shallow literal of ordinary fields can use
+    // this generic sink. Hooks/containers/aliases require their own data record.
+    if(memberWritten)return false;
+    let hook=false;walk(value,node=>{
+      if(node.type==='ArrayExpression'||node.type==='SpreadElement'||node.computed||node.type==='Property'&&(node.kind!=='init'||node.method||(node.key.name||node.key.value)==='toJSON'))hook=true;
+    });
+    if(hook)return false;
+    const bare=node=>['Identifier','MemberExpression'].includes(node.type)&&signature(node)==='request_candidate';
+    return bare(value)||value.type==='ObjectExpression'&&value.properties.every(field=>bare(field.value)||literalData(field.value));
+  }
+
 
   for(const node of nodes){
     if(node.type==='ExportNamedDeclaration'||node.type==='ExportDefaultDeclaration'){
@@ -322,9 +334,9 @@ function inspect(source, ast, {root,file}) {
       else {
         const capabilities=node.arguments.map(argument=>argument.argument||argument).filter(containsCapability);
         const onlyCandidates=capabilities.length>0&&capabilities.every(candidateOnly);
-        // Unshadowed one-argument JSON serialization cannot invoke a function
-        // merely supplied as its value. A replacer or changed binding is not safe.
-        const serializesCandidate=onlyCandidates&&key(node.callee)==='JSON.stringify'&&node.arguments.length===1&&plainJsonStringify();
+        // JSON serialization invokes toJSON hooks; candidate containers are
+        // not generically safe merely because the serializer is unchanged.
+        const serializesCandidate=onlyCandidates&&key(node.callee)==='JSON.stringify'&&node.arguments.length===1&&plainJsonStringify()&&inertCandidateSerialization(node.arguments[0]);
         if(capabilities.length&&!serializesCandidate)finding(node,'network_capability_transfer','Known or potentially callable outbound capability passed to a call or constructor',onlyCandidates);
       }
     }
