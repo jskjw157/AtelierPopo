@@ -1,0 +1,12 @@
+TAP SHA256 e4ef605cd0f8f136cdc964c7fb3e45cb7a1cf45230ee22d62658d5cbc563aa40
+  ...
+1..882
+# tests 1601
+# suites 0
+# pass 1601
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 314342.083417
+Full-result SHA256 3b4a10271331fb9929b0148d2c40960cbdb4226e2dcbc660c4f0910e0001c966
