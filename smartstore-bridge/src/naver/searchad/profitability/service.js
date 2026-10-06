@@ -3,6 +3,7 @@ import { hash, fail, uuid } from './contracts.js';
 import { contentHash } from '../write/canonical.js';
 import { deterministicId } from './recommendation-rules.js';
 const iso=v=>v instanceof Date?v.toISOString():v;
+const intersects=(rows,start,end)=>Math.max(start,...rows.map(r=>Date.parse(r.validFrom)))<Math.min(end+1,...rows.map(r=>r.validTo?Date.parse(r.validTo):Infinity));
 const overlaps=(rows,start,end)=>rows.some((a,i)=>rows.slice(i+1).some(b=>Math.max(start,Date.parse(a.validFrom),Date.parse(b.validFrom))<Math.min(end+1,a.validTo?Date.parse(a.validTo):Infinity,b.validTo?Date.parse(b.validTo):Infinity)));
 const covers=(row,start,end)=>Date.parse(row.validFrom)<=start&&(!row.validTo||Date.parse(row.validTo)>end);
 /** All financial inputs are selected from durable scoped producers, never HTTP. */
@@ -41,7 +42,11 @@ export class ProfitabilityService {
       if(overlaps(candidates,start,end))missing.add(`${db.toUpperCase()}_COST_INTERVAL_AMBIGUOUS`);
       let chosen=candidates.length===1&&covers(candidates[0],start,end)&&!candidates[0].haarVariantId?candidates[0]:null;
       if(key==='cogs'&&!candidates.length){
-        const sourceCosts=data.sourceCosts;
+        // Descriptive history remains in sources; only relationships applicable
+        // during sales may influence assignment ambiguity. Intersect cost, source
+        // link and variant link together so disjoint effective periods stay inert.
+        const sourceCosts=data.sourceCosts.map(c=>({...c,variantLinks:c.variantLinks.filter(v=>intersects([c,c.sourceLink,v],start,end))})).filter(c=>intersects([c,c.sourceLink],start,end)&&(!c.variantSpecific||c.variantLinks.length>0));
+        if(data.sourceCosts.length&&!sourceCosts.length)missing.add('SOURCE_COST_LINK_RANGE_PARTIAL');
         const linkCovers=c=>covers(c.sourceLink,start,end)&&(!c.variantSpecific||c.variantLinks.length===1&&covers(c.variantLinks[0],start,end));
         if(sourceCosts.some(c=>!covers(c,start,end)))missing.add('SOURCE_COST_RANGE_PARTIAL');
         if(sourceCosts.some(c=>!linkCovers(c)))missing.add('SOURCE_COST_LINK_RANGE_PARTIAL');

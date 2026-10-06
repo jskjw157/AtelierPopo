@@ -87,3 +87,21 @@ for(const [name,options,reason] of [['source link after sales',{linkFrom:'2026-1
 test('T9-I3 overlapping manual revisions and partial day coverage stay explicit and missing',{skip:!enabled},async t=>{const f=await setup(t);await f.collect();await addCost(f);await addCost(f,{amountKrw:'900',validFrom:'2026-09-15T00:00:00Z'});await addCost(f,{component:'fees',validFrom:'2026-10-01T03:00:00Z'});const s=await f.read();assert.equal(s.body.metrics.cogsKrw,null);assert.equal(s.body.metrics.feesKrw,null);assert.ok(s.body.missingReasons.includes('COGS_COST_INTERVAL_AMBIGUOUS'));assert.ok(s.body.missingReasons.includes('FEES_COST_RANGE_PARTIAL'));});
 
 test('T9-I3 overlapping supplier costs and a partial cost range cannot supply COGS',{skip:!enabled},async t=>{const f=await setup(t);await f.collect();await addSupplier(f,{replacement:false});await f.pool.query("INSERT INTO supplier_cost_history(source_id,source_product_id,supply_cost,effective_from) VALUES('historical-source','SKU',200,'2026-10-01T03:00:00Z')");const s=await f.read();assert.equal(s.body.metrics.cogsKrw,null);assert.equal(s.body.sourceCosts.length,2);assert.ok(s.body.missingReasons.includes('SUPPLIER_COST_INTERVAL_AMBIGUOUS'));assert.ok(s.body.missingReasons.includes('SOURCE_COST_RANGE_PARTIAL'));});
+
+for(const [name,linkFrom,linkTo,variant,expected] of [
+  ['future supplier','2026-10-02T00:00:00Z',null,false,'100'],
+  ['expired supplier','2026-09-01T00:00:00Z','2026-09-30T00:00:00Z',false,'100'],
+  ['future variant link','2026-10-02T00:00:00Z',null,true,'100'],
+  ['expired variant link','2026-09-01T00:00:00Z','2026-09-30T00:00:00Z',true,'100'],
+  ['partially intersecting supplier','2026-10-01T03:00:00Z',null,false,null],
+  ['truly overlapping supplier','2026-09-01T00:00:00Z',null,false,null]
+])test(`T9-I3 fix2 applicable historical supplier plus ${name}`,{skip:!enabled},async t=>{
+  const f=await setup(t);await f.collect();await addSupplier(f,{linkTo:'2026-10-02T00:00:00Z',replacement:false});assert.equal((await f.read()).body.metrics.cogsKrw,'100');
+  await f.pool.query("INSERT INTO catalog_sources(source_id,source_name,source_type,provider_type) VALUES('other-source','other','supplier','manual_upload')");await f.pool.query("INSERT INTO source_products(source_id,source_product_id,source_product_name) VALUES('other-source','SKU','other ring')");
+  await f.pool.query("INSERT INTO haar_product_source_links(haar_product_id,source_id,source_product_id,valid_from,valid_to) VALUES($1,'other-source','SKU',$2,$3)",[f.id,variant?'2026-09-01T00:00:00Z':linkFrom,variant?null:linkTo]);
+  if(variant){const id=randomUUID();await f.pool.query('INSERT INTO haar_product_variants(haar_variant_id,haar_product_id) VALUES($1,$2)',[id,f.id]);await f.pool.query("INSERT INTO source_product_variants(source_id,source_product_id,source_variant_id) VALUES('other-source','SKU','V1')");await f.pool.query("INSERT INTO source_variant_links(haar_variant_id,source_id,source_product_id,source_variant_id,valid_from,valid_to) VALUES($1,'other-source','SKU','V1',$2,$3)",[id,linkFrom,linkTo]);}
+  await f.pool.query("INSERT INTO supplier_cost_history(source_id,source_product_id,source_variant_id,supply_cost,effective_from) VALUES('other-source','SKU',$1,900,'2026-09-01')",[variant?'V1':null]);
+  const s=await f.read();assert.equal(s.status,200);assert.equal(s.body.metrics.cogsKrw,expected);assert.equal(s.body.sourceCosts.length,2,'descriptive history retains the disjoint relationship');
+  if(expected!==null){assert.equal(s.body.missingReasons.includes('SUPPLIER_COST_ASSIGNMENT_UNRESOLVED'),false);assert.equal(s.body.missingReasons.includes('SOURCE_COST_LINK_RANGE_PARTIAL'),false);assert.equal(s.body.missingReasons.includes('VARIANT_COST_ASSIGNMENT_UNRESOLVED'),false);}else assert.ok(s.body.missingReasons.includes('SUPPLIER_COST_ASSIGNMENT_UNRESOLVED'));
+  if(name==='partially intersecting supplier')assert.ok(s.body.missingReasons.includes('SOURCE_COST_LINK_RANGE_PARTIAL'));
+});
