@@ -2,6 +2,10 @@
 
 Initial repository/GitHub inspection for [issue #22](https://github.com/jskjw157/AtelierPopo/issues/22). This is a preparation record, not deployment, full historical-branch review, production dry-run or live qualification. Reference software is `6013903`, exact [CI37497778627](https://github.com/jskjw157/AtelierPopo/actions/runs/37497778627) SUCCESS / 1601 tests passed. See the [preserved evidence and limitations](SEARCHAD_COMPLETION_EVIDENCE_2026-10-07.md).
 
+## Subsequent preparation progress
+
+Read the [main integration and actual deployment/restore findings](SEARCHAD_MAIN_INTEGRATION_2026-10-07.md). The initial inventory below is preserved as its earlier checkpoint: actual VPS identity and v0.3 Commerce were subsequently verified; production SearchAd/PostgreSQL configuration is absent, actual SQLite restore passed, and local main-schema PostgreSQL upgrade/restore passed. These are separate from live SearchAd capability or a production PostgreSQL-data rehearsal.
+
 ## Integration inventory
 
 Refs were fetched from origin before this inventory. At the recorded code checkpoint:

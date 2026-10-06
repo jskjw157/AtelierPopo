@@ -1,7 +1,7 @@
 # HAAR 실계정 연결·검증·전체 기능 활성화 Runbook
 
-> 대상: 네이버 스마트스토어, HAAR 자사몰(Cafe24), 네이버 SearchAd, Google Drive  
-> 원칙: 기존 상품 가져오기는 원격 읽기 + HAAR 내부 DB 쓰기이며, 채널 간 자동 동기화는 하지 않는다.  
+> 대상: 네이버 스마트스토어, HAAR 자사몰(Cafe24), 네이버 SearchAd, Google Drive<br>
+> 원칙: 기존 상품 가져오기는 원격 읽기 + HAAR 내부 DB 쓰기이며, 채널 간 자동 동기화는 하지 않는다.<br>
 > SearchAd 원칙: 공식 조회·쓰기·생성·수정·배치·원격 삭제 처리·롤백·자동화 기능을 모두 구현하고, 최초 Capability·Canary 검증 전까지만 원격 실행 Gate를 임시로 닫는다.
 
 ## 0. 배포 기록

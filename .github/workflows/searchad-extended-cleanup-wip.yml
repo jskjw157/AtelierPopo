@@ -1,9 +1,17 @@
-name: SearchAd Extended Cleanup WIP
+name: SearchAd Completion CI
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'smartstore-bridge/**'
+      - '.github/workflows/searchad-extended-cleanup-wip.yml'
   push:
     branches:
       - codex/searchad-extended-cleanup-20260914
+      - codex/searchad-main-integration-20261007
+      - main
     paths:
       - 'smartstore-bridge/**'
       - '.github/workflows/searchad-extended-cleanup-wip.yml'
@@ -257,10 +265,10 @@ jobs:
       - name: Whole-repository static, safety and coverage acceptance
         run: |
           set -euo pipefail
-          base=18a4201e5a2467e7ffed914f34c956eabdf5ad42
+          base=b7ca236bdcfc0d1e9f730880c0d68fe0b4e0efb6
           git fetch --no-tags --depth=1 origin "$base"
           git diff --check "$base" HEAD
-          changed="$(git diff --name-only "$base" HEAD -- smartstore-bridge .github/workflows/searchad-extended-cleanup-wip.yml)"
+          changed="$(git diff --name-only "$base" HEAD -- smartstore-bridge .github/workflows)"
           if test -n "$changed"; then
             if printf '%s\n' "$changed" | xargs -r grep -nE -- '-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}' ; then
               echo "Secret-like token pattern found in changed files"
@@ -281,3 +289,11 @@ jobs:
       - name: Production dependency audit
         working-directory: smartstore-bridge
         run: npm audit --omit=dev --audit-level=high
+      - name: Retain full and focused TAP evidence
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: searchad-completion-tap
+          path: /tmp/searchad-*.tap
+          if-no-files-found: warn
+          retention-days: 14

@@ -9,12 +9,6 @@ on:
     paths:
       - 'smartstore-bridge/**'
       - '.github/workflows/searchad-write-ci.yml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'smartstore-bridge/**'
-      - '.github/workflows/searchad-write-ci.yml'
 
 permissions:
   contents: read

@@ -21,6 +21,25 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: haar_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d haar_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/haar_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/haar_test
+      ATELIER_POSTGRES_SSL_MODE: disable
+      TZ: UTC
     defaults:
       run:
         working-directory: smartstore-bridge
@@ -33,13 +52,22 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install --no-package-lock --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Static checks
         run: npm run check
 
       - name: Full test suite
-        run: npm test
+        run: |
+          set -euo pipefail
+          test -n "$TEST_DATABASE_URL"
+          npm test | tee /tmp/full-regression.tap
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const tap = fs.readFileSync('/tmp/full-regression.tap', 'utf8');
+          for (const counter of ['fail', 'cancelled', 'skipped', 'todo']) assert.match(tap, new RegExp(`^# ${counter} 0$`, 'm'));
+          NODE
 
       - name: Verify Commerce coverage
         run: npm run commerce:coverage
