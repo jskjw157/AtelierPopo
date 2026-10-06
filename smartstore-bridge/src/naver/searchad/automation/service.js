@@ -1,5 +1,6 @@
 import { automationError,authorize,exact,validatePolicy,logicalSlot,decisionIdentity } from './policy.js';
 import { buildRecipe,observeCurrent } from './recipes.js';
+import { evaluateAutoEligibility } from './eligibility.js';
 export class AutomationService {
   constructor({repository,evidenceSelector,circuit,getWriteRuntime,identityResolver,clock=Date.now}) { Object.assign(this,{repository,evidenceSelector,circuit,getWriteRuntime,identityResolver,clock}); }
   async createPolicy(input,context) { const actor=authorize(input?.customerId,context,'admin'); const policy=validatePolicy(input); return this.repository.createPolicyRevision({...policy,actor,now:this.clock()}); }
@@ -58,11 +59,13 @@ export class AutomationService {
     }
     catch(error) { if (error?.code === 'SEARCHAD_AUTOMATION_IDENTITY_CHANGED') throw error; }
     const selected={...(await this.evidenceSelector.select({...policy,identity,now})),identity,current};
+    if(policy.mode==='limited_auto')selected.auto=await this.repository.selectAutoFacts({policy,selected,now});
     const recipe=buildRecipe(policy,current),reasons=[...recipe.reasons];
     if (!policy.enabled) reasons.push('POLICY_DISABLED');
     if (!selected.stats) reasons.push('STATS_UNAVAILABLE');
     const decision=await this.circuit.evaluate({customerId:policy.customerId,entityType:policy.entityType,entityId:policy.entityId,ruleId:policy.ruleId,actionClass:recipe.actionClass,incrementalSpendKrw:recipe.incrementalSpendKrw},context);
     reasons.push(...decision.reasons);
+    if(policy.mode==='limited_auto')reasons.push(...evaluateAutoEligibility({...selected.auto,policy,now}).reasons);
     return this.repository.createDecisionOnce({customerId:policy.customerId,policyId:policy.policyId,policyRevision:policy.revision,...decisionIdentity(policy,selected,slotAt),state:policy.mode==='observe'?'observed':reasons.length?'blocked':policy.mode==='recommend'?'recommended':'ready',decision:{mode:policy.mode,slotAt,allowed:reasons.length===0,reasons:[...new Set(reasons)],selected,recipe:recipe.input,actionClass:recipe.actionClass,incrementalSpendKrw:recipe.incrementalSpendKrw},now});
   }
 }

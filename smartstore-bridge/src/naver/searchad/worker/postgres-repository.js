@@ -4,7 +4,9 @@ import { contentHash } from '../write/canonical.js';
 import { workerError, safeResult, publicJob, validateSchedule, identifier } from './config.js';
 import { slotFor } from './scheduler.js';
 const sourceScope=new AsyncLocalStorage();
+const ownerScope=new AsyncLocalStorage();
 export function currentWorkerSource() { return sourceScope.getStore(); }
+export function currentWorkerDispatch() { return ownerScope.getStore(); }
 const iso=value=>new Date(value).toISOString();
 const hash=value=>createHash('sha256').update(value).digest('hex');
 function job(row) { return row && {jobId:row.job_id,customerId:row.customer_id,scheduleId:row.schedule_id,slotAt:iso(row.slot_at),kind:row.kind,payload:row.payload_json,requestHash:row.request_hash,state:row.state,leaseGeneration:row.lease_generation,attempts:row.attempts,maxAttempts:row.max_attempts,result:row.result_json,createdAt:iso(row.created_at),updatedAt:iso(row.updated_at)}; }
@@ -13,6 +15,16 @@ function source(row) { return row && {customerId:row.customer_id,jobId:row.job_i
 export class PostgresWorkerRepository {
   #permits=new WeakMap();
   constructor({pool}) { this.pool=pool; }
+  async withOwner(owner,task) {
+    const binding=structuredClone(owner),ownerHash=hash(binding.ownerToken);
+    return ownerScope.run(Object.freeze({pool:this.pool,customerId:binding.customerId,assertRun:async(client,runId,now)=>{
+      const row=(await client.query(`SELECT j.lease_until FROM searchad_worker_jobs j JOIN searchad_worker_sources s ON s.job_id=j.job_id AND s.customer_id=j.customer_id
+        WHERE j.job_id=$1 AND j.customer_id=$2 AND j.owner_hash=$3 AND j.lease_generation=$4 AND j.state='running' AND j.lease_until>$5
+        AND s.source_key='decision' AND s.kind='automation' AND s.state='linked' AND s.run_id=$6 FOR UPDATE OF j`,[binding.jobId,binding.customerId,ownerHash,binding.leaseGeneration,iso(now),runId])).rows[0];
+      if(!row)throw workerError('LEASE_LOST',409);
+      return Date.parse(row.lease_until);
+    }}),task);
+  }
   async transaction(task) {
     const client=await this.pool.connect(); let discard=false;
     try { await client.query('BEGIN');const value=await task(client);await client.query('COMMIT');return value; }

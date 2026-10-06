@@ -17,6 +17,7 @@ export function createProductionSearchAdWriteRuntime({
   gateway,
   activationGuard = null,
   circuitGuard = null,
+  automationRepository = null,
   env = process.env,
   baseDir,
   database,
@@ -55,6 +56,8 @@ export function createProductionSearchAdWriteRuntime({
   // Plan storage is not the account-control authority. SQLite plans using native
   // activation must use its fence too; a missing native pool must not fall back.
   const guard = circuitGuard || createCircuitGuard({ pool: accountPool, clock });
+  if(automationRepository && repository.pool===automationRepository.pool) repository.automation=automationRepository;
+  guard.activationGuard=activationGuard;
   if(repository.pool && guard.repository?.pool===accountPool) guard.automationRepository=repository.automation;
   const readGateway = gateway instanceof SearchAdOperationGateway && gateway.client instanceof NaverSearchAdClient ? new SearchAdOperationGateway({
     registry:gateway.registry,credentialsRegistry:gateway.credentialsRegistry,config:gateway.config,logger:gateway.logger,
@@ -115,6 +118,6 @@ export function createProductionSearchAdWriteRuntime({
 /** One lazy application-owned writer, shared by HTTP and completion services. */
 export function getApplicationSearchAdWriteRuntime({app,env=process.env}) {
   if (!app.searchAdGateway) throw new SearchAdWriteError('SEARCHAD_NOT_READY','SearchAd gateway is unavailable.',{},503);
-  if (!app.searchAdWriteRuntime) app.searchAdWriteRuntime=createProductionSearchAdWriteRuntime({gateway:app.searchAdGateway,env,baseDir:app.config?.workDir || process.cwd(),activationGuard:app.searchAdActivationRuntime?.guard,circuitGuard:app.searchAdCompletionRuntime?.circuitService,postgresPool:!env.ATELIER_SEARCHAD_WRITE_DATABASE_URL || env.ATELIER_SEARCHAD_WRITE_DATABASE_URL===env.DATABASE_URL ? app.searchAdActivationRuntime?.repository?.pool : undefined,clock:app.clock});
+  if (!app.searchAdWriteRuntime) app.searchAdWriteRuntime=createProductionSearchAdWriteRuntime({gateway:app.searchAdGateway,env,baseDir:app.config?.workDir || process.cwd(),activationGuard:app.searchAdActivationRuntime?.guard,circuitGuard:app.searchAdCompletionRuntime?.circuitService,automationRepository:app.searchAdCompletionRuntime?.automationRepository,postgresPool:!env.ATELIER_SEARCHAD_WRITE_DATABASE_URL || env.ATELIER_SEARCHAD_WRITE_DATABASE_URL===env.DATABASE_URL ? app.searchAdActivationRuntime?.repository?.pool : undefined,clock:app.clock});
   return app.searchAdWriteRuntime;
 }

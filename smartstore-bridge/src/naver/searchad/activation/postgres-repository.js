@@ -117,8 +117,8 @@ export class PostgresSearchAdActivationRepository {
     return evidenceRow(result.rows[0]);
   }
 
-  async getEvidence(evidenceId) {
-    const result = await this.pool.query(
+  async getEvidence(evidenceId, client=this.pool) {
+    const result = await client.query(
       'SELECT * FROM searchad_verification_evidence WHERE evidence_id=$1',
       [String(evidenceId)]
     );
@@ -224,8 +224,8 @@ export class PostgresSearchAdActivationRepository {
     return result.rows.map(activationRow);
   }
 
-  async findUsableActivation({ customerId, operationKey, now = new Date() } = {}) {
-    const result = await this.pool.query(
+  async findUsableActivation({ customerId, operationKey, now = new Date() } = {}, client=this.pool) {
+    const result = await client.query(
       `SELECT * FROM searchad_activation_grants
        WHERE customer_id=$1
          AND expires_at>$2
@@ -237,8 +237,8 @@ export class PostgresSearchAdActivationRepository {
     return activationRow(result.rows[0]);
   }
 
-  async getAccount(customerId) {
-    const result = await this.pool.query(
+  async getAccount(customerId, client=this.pool) {
+    const result = await client.query(
       'SELECT * FROM searchad_canary_accounts WHERE customer_id=$1',
       [String(customerId)]
     );

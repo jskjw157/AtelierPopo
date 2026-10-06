@@ -53,10 +53,19 @@ export function createWorkerHandlers({repository,completion,principal,clock=Date
     async evaluate_automation(job) {
       const context=await guard(job);
       const source=await repository.claimSource(job,{sourceKey:'decision',kind:'automation',requestHash:job.requestHash,now:clock()});
-      if(source.runId) { const run=await completion.automationService.getRun({customerId:job.customerId,runId:source.runId},context);return {state:'succeeded',result:{runId:run.runId,code:'SOURCE_LINKED'}}; }
-      if(!source.created)return {state:'manual_review',result:{code:'SOURCE_UNRESOLVED'}};
-      await guard(job);
-      const run=await repository.withSource(source.permit,()=>completion.automationService.evaluate({customerId:job.customerId,policyId:job.payload.policyId,slotAt:job.slotAt},context));
+      let run;
+      if(source.runId) run=await completion.automationService.getRun({customerId:job.customerId,runId:source.runId},context);
+      else{
+        if(!source.created)return {state:'manual_review',result:{code:'SOURCE_UNRESOLVED'}};
+        await guard(job);
+        run=await repository.withSource(source.permit,()=>completion.automationService.evaluate({customerId:job.customerId,policyId:job.payload.policyId,slotAt:job.slotAt},context));
+      }
+      if(run.decision.mode==='limited_auto'){
+        if(run.state==='ready'){
+          await guard(job);
+          run=await repository.withOwner(job,()=>completion.automationService.executeAuto({customerId:job.customerId,runId:run.runId},context));
+        }else if(!['observed','recommended','blocked','applied','applied_reconciled','not_applied'].includes(run.state))return {state:'manual_review',result:{runId:run.runId,code:'SOURCE_UNRESOLVED'}};
+      }
       return {state:'succeeded',result:{runId:run.runId,code:'SOURCE_LINKED'}};
     },
     async reconcile_automation(job) {

@@ -1,9 +1,10 @@
-import { currentWorkerSource } from '../worker/postgres-repository.js';
+import { currentWorkerSource, currentWorkerDispatch } from '../worker/postgres-repository.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { contentHash } from '../write/canonical.js';
 import { randomUUID } from 'node:crypto';
 import { automationError, UUID } from './policy.js';
 import { CAMPAIGN_READ } from './recipes.js';
+import { evaluateAutoEligibility,delegationValid } from './eligibility.js';
 const preparations=new AsyncLocalStorage();
 export function currentAutomationPreparation() { return preparations.getStore(); }
 const iso=value=>new Date(value).toISOString();
@@ -11,7 +12,11 @@ function policy(row) { return row ? { ...row.policy_json, policyId:row.policy_id
 export function publicRun(row) { return row ? { runId:row.run_id,customerId:row.customer_id,policyId:row.policy_id,policyRevision:row.policy_revision,ruleId:row.rule_id,decisionKey:row.decision_key,inputHash:row.input_hash,state:row.state,planId:row.plan_id,approvalId:row.approval_id,revokedAt:row.revoked_at,decision:row.decision_json,createdAt:iso(row.created_at) } : null; }
 export class PostgresAutomationRepository {
   #permits=new WeakMap();
-  constructor({ pool, clock=Date.now, identityResolver=null }) { Object.assign(this,{pool,clock,identityResolver}); }
+  constructor({ pool, clock=Date.now, identityResolver=null,autoEvidenceSelector=null,automationEnabled=false }) { Object.assign(this,{pool,clock,identityResolver,autoEvidenceSelector,automationEnabled}); }
+  async selectAutoFacts({policy,selected,now,client}) {
+    const facts=this.autoEvidenceSelector?await this.autoEvidenceSelector.select(policy,{client,now}):{};
+    return {mapping:facts.mapping||null,profitability:facts.profitability||null,history:facts.history||{},evidence:{...facts.evidence,identity:selected.identity,current:selected.current,stats:selected.stats},capability:{...facts.capability,automationEnabled:this.automationEnabled}};
+  }
   async transaction(customerId, task) {
     const client=await this.pool.connect();
     try { await client.query('BEGIN'); if ((await client.query('SELECT customer_id FROM searchad_canary_accounts WHERE customer_id=$1 FOR UPDATE',[customerId])).rows.length!==1) throw automationError('ACCOUNT_UNAVAILABLE',503); const result=await task(client); await client.query('COMMIT'); return result; }
@@ -26,7 +31,7 @@ export class PostgresAutomationRepository {
     if (!raw) { if(planId)return null; throw automationError('RUN_NOT_FOUND',404); }
     const run=publicRun(raw), p=await this.findPolicy({customerId,policyId:run.policyId,client});
     const observation=run.decision.selected?.current;
-    if (!Number.isFinite(now) || !p || p.revision!==run.policyRevision || !p.enabled || p.mode!=='approve' || run.revokedAt || !run.decision.allowed || (states && !states.includes(run.state)) || !observation || now<observation.observedAt || now>=observation.observedAt+p.maxCurrentAgeMs) throw automationError('AUTHORITY_REVOKED');
+    if (!Number.isFinite(now) || !p || p.revision!==run.policyRevision || !p.enabled || !['approve','limited_auto'].includes(p.mode) || run.revokedAt || !run.decision.allowed || (states && !states.includes(run.state)) || !observation || now<observation.observedAt || now>=observation.observedAt+p.maxCurrentAgeMs) throw automationError('AUTHORITY_REVOKED');
     if (!this.identityResolver || contentHash(await this.identityResolver(customerId))!==contentHash(run.decision.selected.identity)) throw automationError('IDENTITY_CHANGED');
     const identity=run.decision.selected.identity, stats=run.decision.selected.stats;
     const currentSource=(await client.query(`SELECT * FROM searchad_automation_current_observations
@@ -37,9 +42,26 @@ export class PostgresAutomationRepository {
       WHERE customer_id=$1 AND observation_id=$2 AND entity_type=$3 AND entity_id=$4
       AND spec_sha=$5 AND credential_fingerprint=$6 AND upstream_base_url=$7 AND response_sha=$8`,[customerId,stats.observationId,p.entityType,p.entityId,identity.specSha,identity.credentialFingerprint,identity.upstreamBaseUrl,stats.responseSha])).rows[0];
     const observedAt=Date.parse(statsSource?.observed_at), cycleAt=Date.parse(statsSource?.cycle_at);
-    const validUntil=Math.min(observation.observedAt+p.maxCurrentAgeMs,observedAt+p.maxCurrentAgeMs,cycleAt+p.maxCurrentAgeMs);
+    let validUntil=Math.min(observation.observedAt+p.maxCurrentAgeMs,observedAt+p.maxCurrentAgeMs,cycleAt+p.maxCurrentAgeMs);
     if(!Number.isFinite(validUntil) || now>=validUntil || observedAt>now || cycleAt>now)throw automationError('EVIDENCE_EXPIRED');
+    const worker=currentWorkerDispatch();
+    if(worker){
+      if(worker.pool!==this.pool || worker.customerId!==customerId)throw automationError('STORE_MISMATCH',503);
+      validUntil=Math.min(validUntil,await worker.assertRun(client,run.runId,now));
+    }
+    if(p.mode==='limited_auto'){
+      const facts=await this.selectAutoFacts({policy:p,selected:run.decision.selected,now,client:client===this.pool?undefined:client});
+      const result=evaluateAutoEligibility({...facts,policy:p,now});
+      if(!result.eligible||contentHash(facts)!==contentHash(run.decision.selected.auto))throw automationError('AUTO_INELIGIBLE');
+      validUntil=Math.min(validUntil,Date.parse(p.delegation.expiresAt),Date.parse(facts.profitability.asOf)+86400000,Date.parse(facts.evidence.spend.generation_lower)+86400000,...facts.evidence.commerce.map(o=>Date.parse(o.observedAt)+900000),...facts.history.generations.map(g=>Date.parse(g.generationWindow.lower)+86400000));
+    }
     const reservation=(await client.query('SELECT * FROM searchad_automation_reservations WHERE customer_id=$1 AND run_id=$2',[customerId,run.runId])).rows[0] || null;
+    if(p.mode==='limited_auto' && reservation){
+      const day=new Date(now+9*3600000).toISOString().slice(0,10),d=reservation.dispatch_json,limits=p.delegation;
+      if(d.autoDayKst!==day||d.policyRevision!==p.revision||d.authorizedByPrincipalId!==limits.authorizedByPrincipalId||d.incrementalSpendKrw!==run.decision.incrementalSpendKrw)throw automationError('RESERVATION_BINDING');
+      const total=(await client.query("SELECT count(*)::int operations,COALESCE(sum((dispatch_json->>'incrementalSpendKrw')::numeric),0)::text spend FROM searchad_automation_reservations WHERE customer_id=$1 AND dispatch_json->>'autoDayKst'=$2",[customerId,day])).rows[0];
+      if(total.operations>limits.maxDailyOperations||BigInt(total.spend)>BigInt(limits.maxIncrementalSpendKrw))throw automationError('DAILY_LIMIT');
+    }
     if(['approved','claim_pending','executing'].includes(run.state)){
       const approval=(await client.query('SELECT * FROM searchad_write_approvals WHERE approval_id=$1 AND plan_id=$2',[run.approvalId,run.planId])).rows[0];
       if(run.state==='executing'){
@@ -63,9 +85,18 @@ export class PostgresAutomationRepository {
     let attempting=false, result;
     try { result=await this.transaction(customerId,async client=>{
       const bound=await this.authority({customerId,runId,client,now,states:['ready']});
+      const dispatch={ruleId:bound.policy.ruleId};
+      if(bound.policy.mode==='limited_auto'){
+        const day=new Date(now+9*3600000).toISOString().slice(0,10),limits=bound.policy.delegation;
+        const total=(await client.query("SELECT count(*)::int operations,COALESCE(sum((dispatch_json->>'incrementalSpendKrw')::numeric),0)::text spend FROM searchad_automation_reservations WHERE customer_id=$1 AND dispatch_json->>'autoDayKst'=$2",[customerId,day])).rows[0];
+        const incremental=bound.run.decision.incrementalSpendKrw;
+        if(!Number.isSafeInteger(incremental)||incremental<0||total.operations>=limits.maxDailyOperations||BigInt(total.spend)+BigInt(incremental)>BigInt(limits.maxIncrementalSpendKrw))throw automationError('DAILY_LIMIT');
+        Object.assign(dispatch,{autoDayKst:day,incrementalSpendKrw:incremental,policyRevision:bound.policy.revision,authorizedByPrincipalId:limits.authorizedByPrincipalId});
+        if((await client.query("SELECT reservation_id FROM searchad_automation_reservations WHERE customer_id=$1 AND entity_type=$2 AND entity_id=$3 AND state IN('reserved','unknown') LIMIT 1",[customerId,bound.policy.entityType,bound.policy.entityId])).rows.length)throw automationError('ENTITY_HELD');
+      }
       attempting=true;
       const reservationId=randomUUID();
-      await client.query(`INSERT INTO searchad_automation_reservations(reservation_id,customer_id,dispatch_key,run_id,entity_type,entity_id,state,dispatch_json,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,'reserved',$7,$8,$8)`,[reservationId,customerId,bound.run.decisionKey,runId,bound.policy.entityType,bound.policy.entityId,{ruleId:bound.policy.ruleId},iso(now)]);
+      await client.query(`INSERT INTO searchad_automation_reservations(reservation_id,customer_id,dispatch_key,run_id,entity_type,entity_id,state,dispatch_json,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,'reserved',$7,$8,$8)`,[reservationId,customerId,bound.run.decisionKey,runId,bound.policy.entityType,bound.policy.entityId,dispatch,iso(now)]);
       await client.query("UPDATE searchad_automation_runs SET state='preparing',updated_at=$3 WHERE customer_id=$1 AND run_id=$2",[customerId,runId,iso(now)]);
       await this.event(client,bound.run,'prepare_reserved',{reservationId},now);
       return {customerId,runId,reservationId};
@@ -128,6 +159,10 @@ export class PostgresAutomationRepository {
       const rule=(await client.query(`INSERT INTO searchad_automation_rules(rule_id,customer_id,entity_type,entity_id) VALUES($1,$2,$3,$4) ON CONFLICT(customer_id,entity_type,entity_id) DO UPDATE SET entity_id=EXCLUDED.entity_id RETURNING rule_id`,[randomUUID(),input.customerId,input.entityType,input.entityId])).rows[0];
       const policyId=input.policyId || randomUUID(), revision=(previous?.revision || 0)+1;
       const value={mode:input.mode,enabled:input.enabled,entityType:input.entityType,entityId:input.entityId,recipe:input.recipe,maxCurrentAgeMs:input.maxCurrentAgeMs,reason:input.reason};
+      if(input.mode==='limited_auto'){
+        value.delegation={...input.delegation,customerId:input.customerId,authorizedByPrincipalId:input.actor,authorizedAt:iso(input.now),policyRevision:revision};
+        if(!delegationValid({...value,customerId:input.customerId,revision},input.now))throw automationError('DELEGATION',400);
+      }
       const row=(await client.query(`INSERT INTO searchad_automation_policies(policy_id,customer_id,revision,rule_id,mode,enabled,entity_type,entity_id,policy_json,created_by,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         ON CONFLICT(policy_id) DO UPDATE SET revision=EXCLUDED.revision,mode=EXCLUDED.mode,enabled=EXCLUDED.enabled,policy_json=EXCLUDED.policy_json RETURNING *`,[policyId,input.customerId,revision,rule.rule_id,input.mode,input.enabled,input.entityType,input.entityId,value,input.actor,iso(input.now)])).rows[0];
       await client.query('INSERT INTO searchad_automation_policy_revisions(customer_id,policy_id,revision,rule_id,policy_json,created_by,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)',[input.customerId,policyId,revision,rule.rule_id,value,input.actor,iso(input.now)]);

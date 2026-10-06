@@ -38,13 +38,18 @@ export class CircuitService {
   }
   async decision(dispatch, { client, now }) {
     if (['rollback','report_registration'].includes(dispatch.purpose)) return { allowed: true, reasons: [] };
-    let authority=null, owner=bindings.get(dispatch);
+    let authority=null, activation=null, owner=bindings.get(dispatch);
     if(dispatch.purpose==='ordinary' && owner?.planId && this.automationRepository){
       authority=await this.automationRepository.planAuthority(owner.planId,{client,now,states:['executing']});
       if(authority){
         if(authority.reservation?.state!=='consumed' || dispatch.operationKey!==authority.run.decision.recipe.mutation.operationKey || dispatch.entityId!==authority.policy.entityId)throw circuitError('AUTOMATION_AUTHORITY',409);
         dispatch={...dispatch,ruleId:authority.policy.ruleId,entityType:authority.policy.entityType,entityId:authority.policy.entityId};
         owner={...owner,reservationId:authority.reservation.reservation_id};
+        if(authority.policy.mode==='limited_auto'){
+          if(this.activationGuard?.repository?.pool!==this.repository.pool)throw circuitError('AUTOMATION_AUTHORITY',503);
+          activation=await this.activationGuard.assertMutationAllowed({customerId:dispatch.customerId,descriptor:authority.run.decision.recipe.mutation},{client});
+          if(activation?.allowed!==true || typeof activation.validateSnapshot!=='function')throw circuitError('AUTOMATION_AUTHORITY',403);
+        }
       }
     }
     if (await this.repository.hasBacklog({ customerId: dispatch.customerId, client })) return { allowed: false, reasons: ['PROJECTION_BACKLOG'] };
@@ -67,8 +72,9 @@ export class CircuitService {
       validUntil = Math.min(validUntil, evidence.validUntil);
     }
     return { ...decision, validateSnapshot: () => {
+      activation?.validateSnapshot();
       const current = this.clock();
-      if (!Number.isFinite(current) || current < now || current > validUntil ||
+      if (!Number.isFinite(current) || current < now || current > validUntil || (authority && current >= authority.validUntil) ||
           ((dispatch.actionClass === 'increase' || dispatch.ruleId) && new Date(current + 9 * 3600000).toISOString().slice(0, 10) !== statDateKst)) throw circuitError('EVIDENCE_EXPIRED', 409);
     } };
 

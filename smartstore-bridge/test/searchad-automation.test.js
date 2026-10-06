@@ -29,7 +29,7 @@ test('payload cannot select evidence current value or internal approval authorit
   const service=new AutomationService({}),context={principal:{principalId:'operator',role:'operator',customerIds:['1001']}};
   for(const key of ['evidence','evidenceId','currentValue','planId','ruleId','reservationId','purpose','executionToken'])await assert.rejects(service.evaluate({customerId:'1001',policyId:'00000000-0000-0000-0000-000000000001',[key]:'forged'},context),{code:'SEARCHAD_AUTOMATION_INPUT'});
 });
-test('role OpenAPI exposes complete automation inputs and explicit recovery without auto or token persistence contracts',()=>{
+test('role OpenAPI exposes exact delegated Auto and existing explicit recovery without token persistence',()=>{
   const reader=searchAdCompletionOpenApi({role:'reader'}),operator=searchAdCompletionOpenApi({role:'operator'}),executor=searchAdCompletionOpenApi({role:'executor'}),admin=searchAdCompletionOpenApi({role:'admin'});
   assert.ok(reader.paths['/api/v1/searchad/automation/runs/{runId}']?.get);
   assert.equal(reader.paths['/api/v1/searchad/automation/evaluate'],undefined);
@@ -37,7 +37,9 @@ test('role OpenAPI exposes complete automation inputs and explicit recovery with
   assert.equal(operator.paths['/api/v1/searchad/automation/runs/{runId}/execute-approved'],undefined);
   assert.ok(executor.paths['/api/v1/searchad/automation/runs/{runId}/execute-approved']?.post);
   const schema=admin.paths['/api/v1/searchad/automation/policies']?.post?.requestBody.content['application/json'].schema;
-  assert.equal(schema?.additionalProperties,false);assert.deepEqual(schema.properties.mode.enum,['observe','recommend','approve']);
+  assert.equal(schema?.additionalProperties,false);assert.deepEqual(schema.properties.mode.enum,['observe','recommend','approve','limited_auto']);
+  assert.equal(reader.paths['/api/v1/searchad/automation/runs/{runId}/execute-auto'],undefined);assert.equal(operator.paths['/api/v1/searchad/automation/runs/{runId}/execute-auto'],undefined);assert.equal(executor.paths['/api/v1/searchad/automation/runs/{runId}/execute-auto'].post['x-minimum-role'],'executor');
+  assert.equal(schema.properties.delegation.additionalProperties,false);assert.equal(schema.properties.delegation.properties.maxDailyOperations.maximum,200);assert.deepEqual(schema.oneOf[1].required,['mode','delegation']);
   assert.ok(admin.paths['/api/v1/searchad/circuit/recover-rule']?.post);
   const body=operator.paths['/api/v1/searchad/automation/evaluate'].post.requestBody.content['application/json'].schema;
   assert.deepEqual(Object.keys(body.properties).sort(),['customerId','policyId','slotAt']);

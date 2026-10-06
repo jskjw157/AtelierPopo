@@ -103,14 +103,20 @@ export class SearchAdActivationGuard {
     this.clock = clock;
   }
 
-  async assertMutationAllowed({ customerId, descriptor } = {}) {
+  async assertMutationAllowed({ customerId, descriptor } = {}, {client=null}={}) {
     const id = String(customerId || '').trim();
     if (!id) fail('SEARCHAD_CUSTOMER_ID_REQUIRED', 'customerId is required.', 400);
     if (!descriptor || typeof descriptor !== 'object' || !String(descriptor.operationKey || '').trim()) {
       fail('SEARCHAD_OPERATION_DESCRIPTOR_REQUIRED', 'SearchAd mutation descriptor with operationKey is required.', 400);
     }
 
-    const account = await this.repository.getAccount(id);
+    if(client){
+      if(!this.repository.pool || typeof client.query!=='function')fail('SEARCHAD_ACTIVATION_STORE_REQUIRED','Native activation store is required.',503);
+      // Prevent a new grant or evidence revocation after the final selection.
+      // The account fence releases these locks immediately after initiation.
+      await client.query('LOCK TABLE searchad_activation_grants, searchad_verification_evidence IN SHARE MODE');
+    }
+    const account = await this.repository.getAccount(id,client||undefined);
     if (!account) fail('SEARCHAD_ACCOUNT_NOT_FOUND', 'SearchAd Customer account control state was not found.', 404);
     if (account.suspended) {
       fail('SEARCHAD_ACCOUNT_SUSPENDED', 'SearchAd Customer is suspended; new mutations are blocked.', 403);
@@ -127,7 +133,7 @@ export class SearchAdActivationGuard {
       customerId: id,
       operationKey,
       now: new Date(nowMs)
-    });
+    },client||undefined);
     if (!grant) {
       fail('SEARCHAD_ACTIVATION_REQUIRED', 'A current SearchAd activation grant is required.', 403);
     }
@@ -139,7 +145,7 @@ export class SearchAdActivationGuard {
       fail('SEARCHAD_ACTIVE_CANARY_ACTIVATION_REQUIRED', 'Normal SearchAd writes require activation backed by Active Canary evidence.', 403);
     }
 
-    const evidence = await this.repository.getEvidence(grant.evidenceId);
+    const evidence = await this.repository.getEvidence(grant.evidenceId,client||undefined);
     const evidenceExpires = Date.parse(evidence?.expiresAt || '');
     if (!evidence || evidence.result !== 'verified' || String(evidence.evidenceType || '') !== 'active_canary' ||
         !Number.isFinite(evidenceExpires) || evidenceExpires <= nowMs) {
@@ -170,7 +176,7 @@ export class SearchAdActivationGuard {
       fail('SEARCHAD_ACTIVATION_FIELD_SCOPE_MISMATCH', 'SearchAd mutable fields are outside the activated evidence scope.', 403);
     }
 
-    return {
+    const result={
       allowed: true,
       activationId: grant.activationId,
       evidenceId: grant.evidenceId,
@@ -178,6 +184,11 @@ export class SearchAdActivationGuard {
       operationKey,
       mutableFields
     };
+    if(client)result.validateSnapshot=()=>{
+      const current=Number(this.clock());
+      if(!Number.isFinite(current)||current<nowMs||current>=Math.min(grantExpires,evidenceExpires)||!operationStillVerified(this.gateway,operationKey))fail('SEARCHAD_ACTIVATION_EXPIRED','SearchAd activation is no longer current.',403);
+    };
+    return result;
   }
 }
 
