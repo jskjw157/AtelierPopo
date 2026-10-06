@@ -1,3 +1,4 @@
+import { productEvidencePaths } from './openapi-searchad-profitability.js';
 import { VALIDATION_STATES } from '../naver/searchad/validation/registry.js';
 import { SEARCHAD_ROLE_RANK } from './searchad-access-control.js';
 import { REPORT_TYPES } from '../naver/searchad/reporting/operations.js';
@@ -59,5 +60,6 @@ export function searchAdCompletionOpenApi({ role = 'reader' } = {}) {
     paths['/api/v1/searchad/automation/policies'].post={...post('Append an immutable policy revision. Existing revisions and failures remain; Auto unavailable.',automationBody({policyId:uuid,expectedRevision:{type:'integer',minimum:1,description:'Required when updating a policy.'},entityType:{type:'string',enum:['campaign']},entityId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,200}$'},mode:{type:'string',enum:['observe','recommend','approve'],default:'observe'},enabled:{type:'boolean',default:false},maxCurrentAgeMs:{type:'integer',minimum:1,maximum:1800000,default:1800000},recipe:{oneOf:[{type:'object',additionalProperties:false,required:['kind','userLock'],properties:{kind:{type:'string',enum:['campaign_user_lock']},userLock:{type:'boolean',enum:[true]}}},{type:'object',additionalProperties:false,required:['kind','dailyBudgetKrw'],properties:{kind:{type:'string',enum:['campaign_budget']},dailyBudgetKrw:{type:'integer',minimum:0,maximum:100000,description:'At most 20 percent from the selected current budget.'}}}]},reason:{type:'string',minLength:1,maxLength:500}},['entityType','entityId','recipe','reason']),{type:'object'},201),'x-minimum-role':'admin'};
     paths['/api/v1/searchad/circuit/recover-rule']={post:{...post('Audit recovery of server-selected exact known terminal versions; unknown, inflight and backlog deny recovery. Tokens, risk, holds and source history remain.',automationBody({policyId:uuid,expectedRevision:{type:'integer',minimum:1},reason:{type:'string',minLength:1,maxLength:500},confirmation:{type:'string',enum:['RECOVER_SEARCHAD_KNOWN_FAILURES']}},['policyId','expectedRevision','reason','confirmation']),{type:'object'}),'x-minimum-role':'admin'}};
   }
+  Object.assign(paths,productEvidencePaths(role));
   return { openapi: '3.0.3', info: { title: `SearchAd completion (${role})`, version: '0.8.0' }, paths, components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } } };
 }

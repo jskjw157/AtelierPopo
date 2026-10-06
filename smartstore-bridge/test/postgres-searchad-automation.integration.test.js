@@ -440,8 +440,8 @@ test('owned plan binding rejects foreign existing plans and migrations repeat wi
   const files=listMigrationFiles('migrations/postgres');
   const metadata=(await f.pool.query('SELECT version,file_name,checksum FROM schema_migrations ORDER BY version')).rows;
   assert.deepEqual(metadata,files.map(file=>({version:file.version,file_name:file.fileName,checksum:file.checksum})));
-  assert.equal(files.length,14);assert.equal(files.at(-1).fileName,'0014_searchad_worker.sql');
-  assert.deepEqual(await runPostgresMigrations({pool:f.pool,migrationsDir:'migrations/postgres',logger:{info(){}}}),{applied:[],currentVersion:'0014'});
+  assert.equal(files.length,15);assert.equal(files.at(-1).fileName,'0015_searchad_profitability.sql');
+  assert.deepEqual(await runPostgresMigrations({pool:f.pool,migrationsDir:'migrations/postgres',logger:{info(){}}}),{applied:[],currentVersion:'0015'});
   assert.deepEqual((await f.pool.query('SELECT version,file_name,checksum FROM schema_migrations ORDER BY version')).rows,metadata);
 });
 

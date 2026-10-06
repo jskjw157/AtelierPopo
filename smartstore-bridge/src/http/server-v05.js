@@ -1,3 +1,4 @@
+import { createSearchAdProfitabilityRoutes } from './routes-searchad-profitability.js';
 import { disposeApplicationV05 } from '../bootstrap-v05.js';
 import { createSearchAdWorkerRoutes } from './routes-searchad-worker.js';
 import { createSearchAdAutomationRoutes } from './routes-searchad-automation.js';
@@ -117,6 +118,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createSearchAdReportingRoutes(routeContext),
     ...createSearchAdCircuitRoutes(routeContext),
     ...createSearchAdAutomationRoutes(routeContext),
+    ...createSearchAdProfitabilityRoutes(routeContext),
     ...createSearchAdWorkerRoutes(routeContext),
     ...createSearchAdWriteRoutesV3(routeContext),
     ...createSearchAdCanaryRoutes(routeContext),

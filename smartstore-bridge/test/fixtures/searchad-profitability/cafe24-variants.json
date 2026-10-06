@@ -1,0 +1,14 @@
+{
+  "variants": [
+    {
+      "variant_code": "P00000AA0001",
+      "selling": "T",
+      "display": "T",
+      "options": [
+        {
+          "value": "ignored"
+        }
+      ]
+    }
+  ]
+}

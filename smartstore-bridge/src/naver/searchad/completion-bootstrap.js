@@ -1,3 +1,7 @@
+import { createCommerceEvidenceProviders } from './profitability/commerce-provider.js';
+import { ProductMappingService } from './profitability/mapping-service.js';
+import { ProductEvidenceService } from './profitability/product-evidence-service.js';
+import { PostgresProductEvidenceRepository } from './profitability/postgres-repository.js';
 import { ValidationService } from './validation/service.js';
 import { loadValidationRegistry } from './validation/registry.js';
 import { createWorkerRuntime } from './worker/runtime.js';
@@ -10,12 +14,12 @@ import { createPostgresPool, closePostgresPool } from '../../infrastructure/post
 import { loadSearchAdReportingConfig } from './reporting/config.js';
 import { createReportingRuntime } from './reporting/runtime.js';
 import { reportingError } from './reporting/contracts.js';
-const TABLES = ['searchad_stats_observations', 'searchad_report_blobs', 'searchad_report_ingestions', 'searchad_report_rows_staging', 'searchad_daily_metrics', 'searchad_conversion_metrics', 'searchad_search_terms', 'searchad_master_snapshots', 'searchad_spend_evidence', 'searchad_circuit_policies', 'searchad_circuit_state', 'searchad_circuit_events', 'searchad_circuit_projection_cursors', 'searchad_automation_reservations', 'searchad_automation_policy_revisions', 'searchad_write_execution_claims', 'searchad_write_execution_outcomes'];
+const TABLES = ['searchad_customer_channel_bindings','searchad_commerce_observations','searchad_product_cost_inputs','searchad_stats_observations', 'searchad_report_blobs', 'searchad_report_ingestions', 'searchad_report_rows_staging', 'searchad_daily_metrics', 'searchad_conversion_metrics', 'searchad_search_terms', 'searchad_master_snapshots', 'searchad_spend_evidence', 'searchad_circuit_policies', 'searchad_circuit_state', 'searchad_circuit_events', 'searchad_circuit_projection_cursors', 'searchad_automation_reservations', 'searchad_automation_policy_revisions', 'searchad_write_execution_claims', 'searchad_write_execution_outcomes'];
 async function assertSchema(pool) {
   try {
     const result = await pool.query('SELECT name,to_regclass(name)::text AS relation FROM unnest($1::text[]) AS name', [TABLES]);
     if (result.rows?.length !== TABLES.length || result.rows.some(row => !row.relation)) throw new Error();
-    const migration = await pool.query("SELECT version FROM schema_migrations WHERE version='0013'");
+    const migration = await pool.query("SELECT version FROM schema_migrations WHERE version='0015'");
     if (migration.rows.length !== 1) throw new Error();
   } catch { throw reportingError('SEARCHAD_REPORTING_SCHEMA_NOT_READY', 503); }
 }
@@ -52,6 +56,12 @@ export async function bootstrapSearchAdCompletionRuntime({ app = {}, env = proce
 
     runtime.validationService=validationService;
     partialRuntime=runtime;
+    runtime.commerceProviders=createCommerceEvidenceProviders({app,env,clock,logger});
+    runtime.productRepository=new PostgresProductEvidenceRepository({pool,clock});
+    const mappingService=new ProductMappingService({repository:runtime.productRepository,providers:runtime.commerceProviders,identityResolver:runtime.identityResolver,clock});
+    const evidenceService=new ProductEvidenceService({repository:runtime.productRepository,mappingService,providers:runtime.commerceProviders,identityResolver:runtime.identityResolver,clock});
+    runtime.productMappingService=Object.fromEntries(['bindCustomerChannel','createRevision','appendCost'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>mappingService[method](input,context))]));
+    runtime.productEvidenceService=Object.fromEntries(['collect','summary'].map(method=>[method,(input,context)=>runtime.trackOperation(()=>evidenceService[method](input,context))]));
     const spendEvidence = reportingConfig.enabled && runtime.repository ? { async select(dispatch, { client, now }) {
       // Producer order is Customer advisory -> report date advisory -> job row.
       // The final account fence holds this shared producer lock through initiation.
