@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { scanExecutionSources, REVIEWED_TRANSPORT_BOUNDARIES } from '../scripts/searchad-execution-safety.mjs';
+import { scanExecutionSources, REVIEWED_TRANSPORT_BOUNDARIES, REVIEWED_REQUEST_DATA_ESCAPES } from '../scripts/searchad-execution-safety.mjs';
 function fixture(t){const root=fs.mkdtempSync(path.join(os.tmpdir(),'searchad-execution-safety-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;}
 function write(root,file,source){fs.mkdirSync(path.dirname(path.join(root,file)),{recursive:true});fs.writeFileSync(path.join(root,file),source);}
 const file='src/naver/searchad/automation/future/nested/service.js';
@@ -159,4 +159,79 @@ test('T7_I3_destructured_fetch_member_overwrite_invalidates_instance',t=>{
   const root=fixture(t);copyFence(root);
   write(root,'src/service.js','import {PostgresAccountSendFence as ActualFence} from "./naver/searchad/lifecycle/postgres-account-send-fence.js";const fence=new ActualFence();({replacement:fence.fetch}=source);fence.fetch("https://unapproved.invalid");');
   assert.ok(scanExecutionSources({root}).violations.some(v=>v.file==='src/service.js'));
+});
+
+test('T7_F1_I1_two_file_request_alias_export_executes_fake_POST_and_is_rejected',async t=>{
+  const root=fixture(t);write(root,'package.json','{"type":"module"}');
+  write(root,'src/producer.js','let send;export function configure(upstream){send=upstream.request;}export {send};');
+  write(root,'src/service.js','import {send} from "./producer.js";export function execute(){return send("/ncc/campaigns",{method:"POST"});}');
+  const {pathToFileURL}=await import('node:url');
+  const {configure}=await import(pathToFileURL(path.join(root,'src/producer.js')).href);
+  const {execute}=await import(pathToFileURL(path.join(root,'src/service.js')).href);
+  const calls=[];configure({request:(route,options)=>{calls.push({route,method:options.method});return {fake:true};}});
+  assert.deepEqual(execute(),{fake:true});assert.deepEqual(calls,[{route:'/ncc/campaigns',method:'POST'}]);
+  const result=scanExecutionSources({root,transportAllowlist:[]});assert.deepEqual(result.scannedFiles,['src/producer.js','src/service.js']);
+  assert.ok(result.violations.some(v=>v.file==='src/producer.js'&&v.kind==='network_export'));
+});
+test('T7_F1_I1_two_file_destructured_request_export_executes_fake_POST_and_is_rejected',async t=>{
+  const root=fixture(t);write(root,'package.json','{"type":"module"}');
+  write(root,'src/producer.js','export const calls=[];const upstream={request:(route,options)=>{calls.push({route,method:options.method});return {fake:true};}};const {request:send}=upstream;export {send};');
+  write(root,'src/service.js','import {send} from "./producer.js";export function execute(){return send("/ncc/campaigns",{method:"POST"});}');
+  const {pathToFileURL}=await import('node:url');
+  const {calls}=await import(pathToFileURL(path.join(root,'src/producer.js')).href);
+  const {execute}=await import(pathToFileURL(path.join(root,'src/service.js')).href);
+  assert.deepEqual(execute(),{fake:true});assert.deepEqual(calls,[{route:'/ncc/campaigns',method:'POST'}]);
+  const result=scanExecutionSources({root,transportAllowlist:[]});assert.deepEqual(result.scannedFiles,['src/producer.js','src/service.js']);
+  assert.ok(result.violations.some(v=>v.file==='src/producer.js'&&v.kind==='network_export'));
+});
+test('T7_F1_I1_request_member_argument_return_and_direct_call_remain_forbidden',async t=>{
+  for(const source of [
+    'export function configure(upstream){run(upstream.request);}',
+    'export function configure(upstream){const {request:send}=upstream;run(send);}',
+    'export function configure(upstream){run({nested:{send:upstream.request}});}',
+    'export function configure(upstream){return upstream.request;}',
+    'export function execute(upstream){return upstream.request("/ncc/campaigns",{method:"POST"});}'
+  ])await t.test(source,()=>{const root=fixture(t);write(root,file,source);assert.ok(scanExecutionSources({root,transportAllowlist:[]}).violations.length>0);});
+});
+test('T7_F1_I1_plain_request_data_exports_and_aliases_pass',t=>{
+  const root=fixture(t);
+  write(root,'src/producer.js','export const metadata={request:{path:"/record"}};export const details=metadata.request;const {request:body}=metadata;export {body};');
+  write(root,'src/service.js','import {metadata,details,body} from "./producer.js";export const paths=[metadata.request.path,details.path,body.path];');
+  assert.deepEqual(scanExecutionSources({root,transportAllowlist:[]}).violations,[]);
+});
+test('T7_F1_I1_data_proof_does_not_survive_request_writes_or_serializer_shadowing',async t=>{
+  for(const source of [
+    'const metadata={request:{path:"/record"}};metadata.request=upstream.request;export const send=metadata.request;',
+    'const metadata={request:{path:"/record"}};const alias=metadata;alias.request=upstream.request;export const send=metadata.request;',
+    'export function run(upstream,JSON){return JSON.stringify(upstream.request);}',
+    'JSON.stringify=callback=>callback("/ncc/campaigns",{method:"POST"});export function run(upstream){return JSON.stringify(upstream.request);}'
+  ])await t.test(source,()=>{const root=fixture(t);write(root,file,source);assert.ok(scanExecutionSources({root,transportAllowlist:[]}).violations.length>0);});
+});
+test('T7_F1_I1_candidate_data_distinction_retains_callable_choices_and_shadow_checks',async t=>{
+  for(const source of [
+    'const send=upstream.request||fallback;send("/ncc/campaigns",{method:"POST"});',
+    'const send=ready?globalThis.fetch:fallback;send("https://unapproved.invalid");',
+    'const metadata={request:{path:"/record"}};export function configure({metadata}){return metadata.request;}',
+    '({replacement:JSON.stringify}=source);export function run(upstream){return JSON.stringify(upstream.request);}'
+  ])await t.test(source,()=>{const root=fixture(t);write(root,file,source);assert.ok(scanExecutionSources({root,transportAllowlist:[]}).violations.length>0);});
+});
+
+test('T7_F1_I1_reviewed_request_data_contexts_do_not_approve_changed_context_or_new_calls',t=>{
+  const root=fixture(t);fs.cpSync(path.resolve('src'),path.join(root,'src'),{recursive:true});
+  const clean=scanExecutionSources({root});assert.deepEqual(clean.violations,[]);assert.equal(clean.reviewedRequestDataEscapes.length,28);assert.equal(clean.reviewedTransportBoundaries.length,56);
+  assert.ok(REVIEWED_REQUEST_DATA_ESCAPES.every(record=>record.producer&&record.shape&&record.contextSha256&&record.testRefs.length));
+  const name='src/catalog/channel-import/import-service.js',original=fs.readFileSync(path.join(root,name),'utf8');
+  write(root,name,original.replace('request: request || {}','request: request ?? {}'));
+  assert.ok(scanExecutionSources({root}).violations.some(v=>v.file===name&&v.kind==='reviewed_request_data_changed'));
+  for(const addition of ['function raw(upstream){return upstream.request("/ncc/campaigns",{method:"POST"});}','function escape(upstream){return upstream.request;}']){
+    write(root,name,original+'\n'+addition);assert.ok(scanExecutionSources({root}).violations.some(v=>v.file===name));
+  }
+  write(root,name,original);assert.deepEqual(scanExecutionSources({root}).violations,[]);
+});
+test('T7_F1_I1_data_records_cannot_approve_known_network_or_raw_invocation',t=>{
+  const root=fixture(t);write(root,file,'function run(){consume(globalThis.fetch);}');
+  const result=scanExecutionSources({root,transportAllowlist:[],requestDataAllowlist:[]}),finding=result.violations.find(v=>v.kind==='network_capability_transfer');assert.ok(finding);
+  const record={...finding,occurrences:1,producer:'test control',shape:'test control',testRefs:['test/searchad-execution-safety.test.js']};
+  assert.ok(scanExecutionSources({root,transportAllowlist:[],requestDataAllowlist:[record]}).violations.some(v=>v.kind==='network_capability_transfer'));
+  assert.throws(()=>scanExecutionSources({root,transportAllowlist:[],requestDataAllowlist:[{...record,kind:'raw_client_delegation'}]}),/REQUEST_DATA_RECORD_INVALID/);
 });

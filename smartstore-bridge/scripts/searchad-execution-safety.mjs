@@ -64,6 +64,36 @@ export const REVIEWED_TRANSPORT_BOUNDARIES = Object.freeze([
   Object.freeze({"file":"src/naver/searchad/transport/report-download.js","kind":"raw_client_delegation","nodeSha256":"b65f18a4e509f041e23b7594605c284ae7dee584a6dd8d9fe97bc6c5129327ee","contextSha256":"737e50e6a548baa6366fc5c370fc31908122033979c6eb638790f14dc9fe0d24","contextType":"MethodDefinition","contextName":"ReportDownloadTransport.download","occurrences":1,"reason":"Separate owned-job signed-download delegation: fixed path/origin/query, no redirects or retries, byte bound. Not a 127th operation.","testRefs":["test/searchad-reporting-ingestion.test.js","test/postgres-searchad-report-ingestion.integration.test.js"]}),
   Object.freeze({"file":"src/naver/searchad/write/runtime-production.js","kind":"network_capability_transfer","nodeSha256":"6d674c4a663c137912a8d6dd1f29459be8ee23351f72a981955380fc82efff3b","contextSha256":"e3c83db04300db766df0d808c1e1dce5e68d4608e2ed8a31426aef323918ddd2","contextType":"FunctionDeclaration","contextName":"createProductionSearchAdWriteRuntime","occurrences":1,"reason":"Exact reviewed transport injection/capability transfer; Ordinary writer composes its no-retry read client from the existing gateway transport.","testRefs":["test/postgres-searchad-write-runtime.integration.test.js"]}),
 ]);
+// These records describe existing data-only escape sites, never callable
+// transport approval. Each candidate-only escape remains context/count pinned.
+export const REVIEWED_REQUEST_DATA_ESCAPES = Object.freeze([
+  Object.freeze({"file":"src/catalog/channel-import/import-service.js","kind":"network_capability_transfer","nodeSha256":"f1da99806bef5d5afa2ec80ab05e598c4c759417bba986efc3301de9234bc75b","contextSha256":"6684adcb997b3861cd6e77e4441a5278248cdf559b9746a227da16f3bf2a73b7","contextType":"FunctionDeclaration","contextName":"requestFingerprint","occurrences":1,"producer":"ChannelImportService.run request options -> requestFingerprint/sha256Json or repository.createImportRun; source: src/catalog/channel-import/import-service.js and canonical-json.js","shape":"JSON import options with channelId/mode/request; fingerprint or persistence data only, never invoked","testRefs":["test/channel-import-service.test.js","test/channel-import-repository.test.js"]}),
+  Object.freeze({"file":"src/catalog/channel-import/import-service.js","kind":"network_capability_transfer","nodeSha256":"61b55f975c3a871093293c61a98a5be7a96a5d5ec98bba4ecb31b9eee7c93350","contextSha256":"b32a994025c1ed8e2ef021a47729a5688583d73be0dfffcf378429ee29dc39a0","contextType":"MethodDefinition","contextName":"ChannelImportService.run","occurrences":1,"producer":"ChannelImportService.run request options -> requestFingerprint/sha256Json or repository.createImportRun; source: src/catalog/channel-import/import-service.js and canonical-json.js","shape":"JSON import options with channelId/mode/request; fingerprint or persistence data only, never invoked","testRefs":["test/channel-import-service.test.js","test/channel-import-repository.test.js"]}),
+  Object.freeze({"file":"src/catalog/channel-import/import-service.js","kind":"network_capability_transfer","nodeSha256":"602e68376268bd2e28e4387e8e1e95bd5cd1452fe8298e2de5ca165f831c8814","contextSha256":"b32a994025c1ed8e2ef021a47729a5688583d73be0dfffcf378429ee29dc39a0","contextType":"MethodDefinition","contextName":"ChannelImportService.run","occurrences":1,"producer":"ChannelImportService.run request options -> requestFingerprint/sha256Json or repository.createImportRun; source: src/catalog/channel-import/import-service.js and canonical-json.js","shape":"JSON import options with channelId/mode/request; fingerprint or persistence data only, never invoked","testRefs":["test/channel-import-service.test.js","test/channel-import-repository.test.js"]}),
+  Object.freeze({"file":"src/catalog/channel-import/sqlite-repository.js","kind":"network_capability_transfer","nodeSha256":"290f53b42001728efd385e54d565f6078bee0f87007f9cddbb33e7ce78de2696","contextSha256":"67b0d7eea69c940a58f161fc04c194d9fc8dab6788ea8720a4dd9485deded312","contextType":"MethodDefinition","contextName":"SqliteChannelImportRepository.createImportRun","occurrences":1,"producer":"ChannelImportService.run -> SqliteChannelImportRepository.createImportRun(input) -> sha256Json; src/catalog/channel-import/import-service.js:125 and canonical-json.js","shape":"input.channelId/mode/request JSON options hashed as import fingerprint; not a client method","testRefs":["test/channel-import-repository.test.js","test/channel-import-service.test.js"]}),
+  Object.freeze({"file":"src/http/errors-v04.js","kind":"network_capability_transfer","nodeSha256":"c7153c143911126d933847bf11b20eb4decc0d7a27d1a78224ae0b3d4be7e528","contextSha256":"910d368ffa2dfd88ace98a809d0c6b285aee7583877d528d89426d647b52ee74","contextType":"FunctionDeclaration","contextName":"toHttpErrorV04","occurrences":1,"producer":"NaverCommerceClient.requestDetailed creates unknown.request={method:currentMethod,url:currentUrl.toString()} at src/naver/client.js:108","shape":"error detail record {outcome:\"unknown\",request:{method,url}} passed to HttpError; no request invocation","testRefs":["test/naver-client.test.js","test/ledger-operations.test.js"]}),
+  Object.freeze({"file":"src/http/routes-commerce.js","kind":"network_capability_transfer","nodeSha256":"ef78d2d8010ed7552307ad8536be820c48ac6e233ccc236cabe25298ccddc8a5","contextSha256":"ebfe7502f5ac521c735bd4fa7ac0ec5611a59585b32e73396c4b5c37499ec31d","contextType":"FunctionDeclaration","contextName":"createCommerceRoutes","occurrences":3,"producer":"CommerceOperationGateway.preview builds request record (src/naver/commerce/gateway.js:208); detail update/rollback routes build operationRequest from parsed JSON body (src/http/routes-commerce.js:210,245)","shape":"operationId/resourceKey/redacted request or channelProductNo/detailContent/backupId records; idempotency comparison or async ledger metadata; task callback is a separate field","testRefs":["test/commerce-http-api.test.js","test/commerce-gateway.test.js","test/ledger-operations.test.js"]}),
+  Object.freeze({"file":"src/http/routes-commerce.js","kind":"network_capability_transfer","nodeSha256":"e2f1a811142c7914efb6f2f7531d9f23aa9165678ec31ce4f4e8db8a71a7ca00","contextSha256":"ebfe7502f5ac521c735bd4fa7ac0ec5611a59585b32e73396c4b5c37499ec31d","contextType":"FunctionDeclaration","contextName":"createCommerceRoutes","occurrences":1,"producer":"CommerceOperationGateway.preview builds request record (src/naver/commerce/gateway.js:208); detail update/rollback routes build operationRequest from parsed JSON body (src/http/routes-commerce.js:210,245)","shape":"operationId/resourceKey/redacted request or channelProductNo/detailContent/backupId records; idempotency comparison or async ledger metadata; task callback is a separate field","testRefs":["test/commerce-http-api.test.js","test/commerce-gateway.test.js","test/ledger-operations.test.js"]}),
+  Object.freeze({"file":"src/http/routes-commerce.js","kind":"network_capability_transfer","nodeSha256":"6ba322320c439884baf3f9979ffee20973bf12393fb695d773179b32444aa358","contextSha256":"ebfe7502f5ac521c735bd4fa7ac0ec5611a59585b32e73396c4b5c37499ec31d","contextType":"FunctionDeclaration","contextName":"createCommerceRoutes","occurrences":1,"producer":"CommerceOperationGateway.preview builds request record (src/naver/commerce/gateway.js:208); detail update/rollback routes build operationRequest from parsed JSON body (src/http/routes-commerce.js:210,245)","shape":"operationId/resourceKey/redacted request or channelProductNo/detailContent/backupId records; idempotency comparison or async ledger metadata; task callback is a separate field","testRefs":["test/commerce-http-api.test.js","test/commerce-gateway.test.js","test/ledger-operations.test.js"]}),
+  Object.freeze({"file":"src/http/routes-commerce.js","kind":"network_capability_transfer","nodeSha256":"249aac46214bf91c6b7aff520fa437a26dc11e8a8c86c3ef98665e647aea85e9","contextSha256":"ebfe7502f5ac521c735bd4fa7ac0ec5611a59585b32e73396c4b5c37499ec31d","contextType":"FunctionDeclaration","contextName":"createCommerceRoutes","occurrences":1,"producer":"CommerceOperationGateway.preview builds request record (src/naver/commerce/gateway.js:208); detail update/rollback routes build operationRequest from parsed JSON body (src/http/routes-commerce.js:210,245)","shape":"operationId/resourceKey/redacted request or channelProductNo/detailContent/backupId records; idempotency comparison or async ledger metadata; task callback is a separate field","testRefs":["test/commerce-http-api.test.js","test/commerce-gateway.test.js","test/ledger-operations.test.js"]}),
+  Object.freeze({"file":"src/http/routes-drive.js","kind":"network_capability_transfer","nodeSha256":"d0a8d96cabe6be0b0101df6935636f729069d44f4bfd32166787c1171247ab6d","contextSha256":"f17222892f0fbae5c35cbeb17bfe7b43707fb4283a67b0c7a8243fe43d819b94","contextType":"FunctionDeclaration","contextName":"createDriveRoutes","occurrences":1,"producer":"createDriveRoutes constructs request metadata from parsed route body; upload uses inlineContentRequest+parentId at line348, permission uses fileId/type/role/recipientSha256 flags at line483; enqueueDriveMutation forwards only metadata to idempotency/ledger","shape":"Drive route request record; idempotency comparison/persistence distinct from separately provided task callback","testRefs":["test/http-drive-api.test.js","test/ledger-operations.test.js"]}),
+  Object.freeze({"file":"src/http/routes-drive.js","kind":"network_capability_transfer","nodeSha256":"705bbbc8a70a6a12528c50e062c25485c3acb971943adcad7b16d580c3c6ef2f","contextSha256":"f17222892f0fbae5c35cbeb17bfe7b43707fb4283a67b0c7a8243fe43d819b94","contextType":"FunctionDeclaration","contextName":"createDriveRoutes","occurrences":1,"producer":"createDriveRoutes constructs request metadata from parsed route body; upload uses inlineContentRequest+parentId at line348, permission uses fileId/type/role/recipientSha256 flags at line483; enqueueDriveMutation forwards only metadata to idempotency/ledger","shape":"Drive route request record; idempotency comparison/persistence distinct from separately provided task callback","testRefs":["test/http-drive-api.test.js","test/ledger-operations.test.js"]}),
+  Object.freeze({"file":"src/http/routes-drive.js","kind":"network_capability_transfer","nodeSha256":"6a3000cbe7f56269f97dd97b0224cbe8a74610b87b35c3f2e2baae03f095a5cb","contextSha256":"f17222892f0fbae5c35cbeb17bfe7b43707fb4283a67b0c7a8243fe43d819b94","contextType":"FunctionDeclaration","contextName":"createDriveRoutes","occurrences":1,"producer":"createDriveRoutes constructs request metadata from parsed route body; upload uses inlineContentRequest+parentId at line348, permission uses fileId/type/role/recipientSha256 flags at line483; enqueueDriveMutation forwards only metadata to idempotency/ledger","shape":"Drive route request record; idempotency comparison/persistence distinct from separately provided task callback","testRefs":["test/http-drive-api.test.js","test/ledger-operations.test.js"]}),
+  Object.freeze({"file":"src/http/routes-drive.js","kind":"network_capability_transfer","nodeSha256":"64be905c5f1e26d837e71f70ec0e9b6a3cb86b4d9a2448be8f47e334b184771b","contextSha256":"f17222892f0fbae5c35cbeb17bfe7b43707fb4283a67b0c7a8243fe43d819b94","contextType":"FunctionDeclaration","contextName":"createDriveRoutes","occurrences":1,"producer":"createDriveRoutes constructs request metadata from parsed route body; upload uses inlineContentRequest+parentId at line348, permission uses fileId/type/role/recipientSha256 flags at line483; enqueueDriveMutation forwards only metadata to idempotency/ledger","shape":"Drive route request record; idempotency comparison/persistence distinct from separately provided task callback","testRefs":["test/http-drive-api.test.js","test/ledger-operations.test.js"]}),
+  Object.freeze({"file":"src/http/runtime.js","kind":"network_capability_transfer","nodeSha256":"1846d23744e29d6db4278fbcf92e6b8feb58271bb58498b9ab86b6e6dc04ccfb","contextSha256":"b51f1216f374dfac741dd9d26f8977742434b813a5d552412bd7def7a1d158d7","contextType":"FunctionDeclaration","contextName":"ensureSameIdempotentOperation","occurrences":1,"producer":"HTTP routes and createAsyncOperation pass metadata into ensureSameIdempotentOperation; existing.request_json is JSON.parse output in src/http/runtime.js:148","shape":"JSON serialization comparison of persisted request metadata; request is not invoked","testRefs":["test/ledger-operations.test.js","test/commerce-http-api.test.js"]}),
+  Object.freeze({"file":"src/http/server-v03.js","kind":"network_capability_transfer","nodeSha256":"d0a8d96cabe6be0b0101df6935636f729069d44f4bfd32166787c1171247ab6d","contextSha256":"5c0e4f453bf93f9b5acb3ba41fbeb8151089956b81887eba17c2c82abc066049","contextType":"FunctionDeclaration","contextName":"createHttpApiV03","occurrences":1,"producer":"HTTP route composition passes server-built request metadata to createAsyncOperation; src/http/routes-commerce.js and src/http/routes-drive.js; Ledger.createOperation serializes it in src/infrastructure/ledger.js:113","shape":"operationType/sourceProductId/request metadata, compared for idempotency or serialized into ledger; executable task is kept separate","testRefs":["test/ledger-operations.test.js","test/commerce-http-api.test.js","test/http-drive-api.test.js"]}),
+  Object.freeze({"file":"src/http/server-v03.js","kind":"network_capability_transfer","nodeSha256":"947583f350974b2b10f0f42aa8bcd8306374b5313a53daa53565f95a00ea51c6","contextSha256":"5c0e4f453bf93f9b5acb3ba41fbeb8151089956b81887eba17c2c82abc066049","contextType":"FunctionDeclaration","contextName":"createHttpApiV03","occurrences":1,"producer":"HTTP route composition passes server-built request metadata to createAsyncOperation; src/http/routes-commerce.js and src/http/routes-drive.js; Ledger.createOperation serializes it in src/infrastructure/ledger.js:113","shape":"operationType/sourceProductId/request metadata, compared for idempotency or serialized into ledger; executable task is kept separate","testRefs":["test/ledger-operations.test.js","test/commerce-http-api.test.js","test/http-drive-api.test.js"]}),
+  Object.freeze({"file":"src/http/server-v03.js","kind":"network_capability_transfer","nodeSha256":"32d4500110806ca2664ab19bdf1cbe62dfe9f92d07fda873f7e73277e3475800","contextSha256":"5c0e4f453bf93f9b5acb3ba41fbeb8151089956b81887eba17c2c82abc066049","contextType":"FunctionDeclaration","contextName":"createHttpApiV03","occurrences":1,"producer":"HTTP route composition passes server-built request metadata to createAsyncOperation; src/http/routes-commerce.js and src/http/routes-drive.js; Ledger.createOperation serializes it in src/infrastructure/ledger.js:113","shape":"operationType/sourceProductId/request metadata, compared for idempotency or serialized into ledger; executable task is kept separate","testRefs":["test/ledger-operations.test.js","test/commerce-http-api.test.js","test/http-drive-api.test.js"]}),
+  Object.freeze({"file":"src/http/server-v04.js","kind":"network_capability_transfer","nodeSha256":"d0a8d96cabe6be0b0101df6935636f729069d44f4bfd32166787c1171247ab6d","contextSha256":"14039973dd3a4d714f831eec808d2014b907efe0c493667ca1330c13385848cd","contextType":"FunctionDeclaration","contextName":"createHttpApiV04","occurrences":1,"producer":"HTTP route composition passes server-built request metadata to createAsyncOperation; src/http/routes-commerce.js and src/http/routes-drive.js; Ledger.createOperation serializes it in src/infrastructure/ledger.js:113","shape":"operationType/sourceProductId/request metadata, compared for idempotency or serialized into ledger; executable task is kept separate","testRefs":["test/ledger-operations.test.js","test/commerce-http-api.test.js","test/http-drive-api.test.js"]}),
+  Object.freeze({"file":"src/http/server-v04.js","kind":"network_capability_transfer","nodeSha256":"947583f350974b2b10f0f42aa8bcd8306374b5313a53daa53565f95a00ea51c6","contextSha256":"14039973dd3a4d714f831eec808d2014b907efe0c493667ca1330c13385848cd","contextType":"FunctionDeclaration","contextName":"createHttpApiV04","occurrences":1,"producer":"HTTP route composition passes server-built request metadata to createAsyncOperation; src/http/routes-commerce.js and src/http/routes-drive.js; Ledger.createOperation serializes it in src/infrastructure/ledger.js:113","shape":"operationType/sourceProductId/request metadata, compared for idempotency or serialized into ledger; executable task is kept separate","testRefs":["test/ledger-operations.test.js","test/commerce-http-api.test.js","test/http-drive-api.test.js"]}),
+  Object.freeze({"file":"src/http/server-v04.js","kind":"network_capability_transfer","nodeSha256":"32d4500110806ca2664ab19bdf1cbe62dfe9f92d07fda873f7e73277e3475800","contextSha256":"14039973dd3a4d714f831eec808d2014b907efe0c493667ca1330c13385848cd","contextType":"FunctionDeclaration","contextName":"createHttpApiV04","occurrences":1,"producer":"HTTP route composition passes server-built request metadata to createAsyncOperation; src/http/routes-commerce.js and src/http/routes-drive.js; Ledger.createOperation serializes it in src/infrastructure/ledger.js:113","shape":"operationType/sourceProductId/request metadata, compared for idempotency or serialized into ledger; executable task is kept separate","testRefs":["test/ledger-operations.test.js","test/commerce-http-api.test.js","test/http-drive-api.test.js"]}),
+  Object.freeze({"file":"src/http/server-v05.js","kind":"network_capability_transfer","nodeSha256":"479ef64ba8f5f8df619f5391cfc5f35dd170cfbec71bfb67464492b979a268ca","contextSha256":"08c4641bc354b66e3088075227da1bc0a8d76b73e859d2b7ed8f0c20d6233f9a","contextType":"FunctionDeclaration","contextName":"createHttpApiV05","occurrences":1,"producer":"HTTP route composition passes server-built request metadata to createAsyncOperation; src/http/routes-commerce.js and src/http/routes-drive.js; Ledger.createOperation serializes it in src/infrastructure/ledger.js:113","shape":"operationType/sourceProductId/request metadata, compared for idempotency or serialized into ledger; executable task is kept separate","testRefs":["test/ledger-operations.test.js","test/commerce-http-api.test.js","test/http-drive-api.test.js"]}),
+  Object.freeze({"file":"src/http/server.js","kind":"network_capability_transfer","nodeSha256":"d0a8d96cabe6be0b0101df6935636f729069d44f4bfd32166787c1171247ab6d","contextSha256":"5222c633d9a1681c7816f16f482161c4c84fa717010a7354b5f9925b17c84a3c","contextType":"FunctionDeclaration","contextName":"createHttpApi","occurrences":1,"producer":"HTTP route composition passes server-built request metadata to createAsyncOperation; src/http/routes-commerce.js and src/http/routes-drive.js; Ledger.createOperation serializes it in src/infrastructure/ledger.js:113","shape":"operationType/sourceProductId/request metadata, compared for idempotency or serialized into ledger; executable task is kept separate","testRefs":["test/ledger-operations.test.js","test/commerce-http-api.test.js","test/http-drive-api.test.js"]}),
+  Object.freeze({"file":"src/http/server.js","kind":"network_capability_transfer","nodeSha256":"947583f350974b2b10f0f42aa8bcd8306374b5313a53daa53565f95a00ea51c6","contextSha256":"5222c633d9a1681c7816f16f482161c4c84fa717010a7354b5f9925b17c84a3c","contextType":"FunctionDeclaration","contextName":"createHttpApi","occurrences":1,"producer":"HTTP route composition passes server-built request metadata to createAsyncOperation; src/http/routes-commerce.js and src/http/routes-drive.js; Ledger.createOperation serializes it in src/infrastructure/ledger.js:113","shape":"operationType/sourceProductId/request metadata, compared for idempotency or serialized into ledger; executable task is kept separate","testRefs":["test/ledger-operations.test.js","test/commerce-http-api.test.js","test/http-drive-api.test.js"]}),
+  Object.freeze({"file":"src/http/server.js","kind":"network_capability_transfer","nodeSha256":"32d4500110806ca2664ab19bdf1cbe62dfe9f92d07fda873f7e73277e3475800","contextSha256":"5222c633d9a1681c7816f16f482161c4c84fa717010a7354b5f9925b17c84a3c","contextType":"FunctionDeclaration","contextName":"createHttpApi","occurrences":1,"producer":"HTTP route composition passes server-built request metadata to createAsyncOperation; src/http/routes-commerce.js and src/http/routes-drive.js; Ledger.createOperation serializes it in src/infrastructure/ledger.js:113","shape":"operationType/sourceProductId/request metadata, compared for idempotency or serialized into ledger; executable task is kept separate","testRefs":["test/ledger-operations.test.js","test/commerce-http-api.test.js","test/http-drive-api.test.js"]}),
+  Object.freeze({"file":"src/infrastructure/ledger.js","kind":"network_capability_transfer","nodeSha256":"7b93b1579398f1040d57496e567115bc5e9f181f4cf332a6791f677b95a0eaf8","contextSha256":"3764a805d2648cee08997053e50f4100ae4130682087d54d2db608248efddba1","contextType":"MethodDefinition","contextName":"Ledger.createOperation","occurrences":1,"producer":"HTTP createAsyncOperation -> Ledger.createOperation({request}); its stringify helper uses JSON serialization in src/infrastructure/ledger.js","shape":"request JSON persisted to request_json with SQL placeholders; stringify does not invoke request as a callable","testRefs":["test/ledger-operations.test.js"]}),
+  Object.freeze({"file":"src/naver/commerce/gateway.js","kind":"network_capability_return","nodeSha256":"882101dd8697a52e0480af0873d4640b6bb8b487665fdc6013a1e87120badb76","contextSha256":"de3bf3e6e719e012b944d158e090ad3ddb1532a146440d05fdc5dad8ccf69560","contextType":"MethodDefinition","contextName":"CommerceOperationGateway.execute","occurrences":1,"producer":"CommerceOperationGateway.preview constructs redacted request from operationId/method/apiPath/query/body/transport/fingerprint at src/naver/commerce/gateway.js:208-219","shape":"execute returns operation/request/resourceKey/upstream/data response record; preview.request is metadata, not the raw transport","testRefs":["test/commerce-gateway.test.js","test/commerce-http-api.test.js"]}),
+]);
 const networkModule = /^(?:(?:node:)?(?:https?|http2|net|tls)$|(?:undici|axios|node-fetch|cross-fetch|got|superagent|ws|websocket|@aws-sdk\/client-s3)(?:\/|$))/;
 const extensions = new Set(['.js', '.mjs', '.cjs']);
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -161,7 +191,49 @@ function inspect(source, ast, {root,file}) {
   const literal=node=>node?.type==='Literal' ? node.value : node?.type==='Identifier' ? constants.get(node.name) : node?.type==='BinaryExpression' && node.operator==='+' ? (typeof literal(node.left)==='string' && typeof literal(node.right)==='string' ? literal(node.left)+literal(node.right) : undefined) : node?.type==='TemplateLiteral' && !node.expressions.length ? node.quasis[0].value.cooked : undefined;
   const property=node=>node.computed ? literal(node.property) : node.property?.type==='PrivateIdentifier' ? `#${node.property.name}` : node.property?.name;
   const isFenceInstance=trustedFenceDelegation({root,file,nodes,key,property});
-  const capabilityKinds=new Set(['global','network','network_module','raw_client','network_container']);
+  const networkKinds=new Set(['global','network','network_module','raw_client','network_container']);
+  const candidateKinds=new Set(['request_candidate','request_container']);
+  const capabilityKinds=new Set([...networkKinds,...candidateKinds]);
+  const containerKind=values=>values.some(value=>networkKinds.has(value)) ? 'network_container' : values.some(value=>candidateKinds.has(value)) ? 'request_container' : null;
+  // A literal-data proof is local and conservative: no getters/functions/spreads,
+  // ambiguous declarations or request-member writes may establish data identity.
+  const mutationTargets=nodes.flatMap(node=>node.type==='AssignmentExpression'?[node.left]:node.type==='UpdateExpression'||node.type==='UnaryExpression'&&node.operator==='delete'?[node.argument]:[]);
+  const memberWritten=mutationTargets.some(target=>{let member=false;walk(target,node=>{if(node.type==='MemberExpression')member=true;});return member;});
+  const declaredNames=new Map();
+  function noteDeclaration(pattern){
+    if(!pattern)return;
+    if(pattern.type==='Identifier')declaredNames.set(pattern.name,(declaredNames.get(pattern.name)||0)+1);
+    else if(pattern.type==='AssignmentPattern')noteDeclaration(pattern.left);
+    else if(pattern.type==='RestElement')noteDeclaration(pattern.argument);
+    else if(pattern.type==='ObjectPattern')for(const field of pattern.properties)noteDeclaration(field.value||field.argument);
+    else if(pattern.type==='ArrayPattern')for(const field of pattern.elements)noteDeclaration(field);
+  }
+  for(const node of nodes){
+    if(node.type==='VariableDeclarator')noteDeclaration(node.id);
+    if(['FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(node.type)){noteDeclaration(node.id);for(const param of node.params)noteDeclaration(param);}
+    if(['ClassDeclaration','ClassExpression'].includes(node.type))noteDeclaration(node.id);
+    if(node.type==='ImportDeclaration')for(const specifier of node.specifiers)noteDeclaration(specifier.local);
+    if(node.type==='CatchClause')noteDeclaration(node.param);
+  }
+  function literalData(node,seen=new Set()){
+    if(!node||seen.has(node)||memberWritten)return false;seen.add(node);
+    if(node.type==='Literal')return true;
+    if(node.type==='ObjectExpression')return node.properties.every(field=>field.type==='Property'&&field.kind==='init'&&!field.method&&!field.computed&&literalData(field.value,new Set(seen)));
+    if(node.type==='ArrayExpression')return node.elements.every(item=>literalData(item,new Set(seen)));
+    if(node.type==='Identifier'){
+      const declarations=nodes.filter(item=>item.type==='VariableDeclarator'&&item.id.type==='Identifier'&&item.id.name===node.name);
+      const ambiguous=declaredNames.get(node.name)!==1||mutationTargets.some(target=>{let assigned=false;walk(target,item=>{if(item.type==='Identifier'&&item.name===node.name)assigned=true;});return assigned;});
+      return !ambiguous&&declarations.length===1&&parents.get(declarations[0])?.at(-1)?.kind==='const'&&literalData(declarations[0].init,seen);
+    }
+    return false;
+  }
+  function requestIsData(owner){
+    if(!literalData(owner))return false;
+    if(owner.type==='Identifier')owner=nodes.find(item=>item.type==='VariableDeclarator'&&item.id.name===owner.name)?.init;
+    return owner?.type==='ObjectExpression'&&owner.properties.some(field=>(field.key.name||field.key.value)==='request'&&literalData(field.value));
+  }
+  const plainJsonStringify=()=>!declaredNames.has('JSON')&&!mutationTargets.some(target=>{let changed=false;walk(target,node=>{if(node.type==='Identifier'&&node.name==='JSON')changed=true;});return changed;});
+
   const signature=node=>{
     if(!node)return null;
     if(node.type==='ChainExpression'||node.type==='AwaitExpression')return signature(node.expression||node.argument);
@@ -170,10 +242,10 @@ function inspect(source, ast, {root,file}) {
       if(['globalThis','window','global','self'].includes(node.name))return 'global';
       if(['fetch','fetchImpl','WebSocket','XMLHttpRequest'].includes(node.name))return 'network';
     }
-    if(node.type==='ObjectExpression' && node.properties.some(field=>capabilityKinds.has(signature(field.value||field.argument))))return 'network_container';
-    if(node.type==='ArrayExpression' && node.elements.some(item=>capabilityKinds.has(signature(item?.argument||item))))return 'network_container';
-    if(node.type==='LogicalExpression')return capabilityKinds.has(signature(node.left)) ? signature(node.left) : signature(node.right);
-    if(node.type==='ConditionalExpression')return capabilityKinds.has(signature(node.consequent)) ? signature(node.consequent) : signature(node.alternate);
+    if(node.type==='ObjectExpression')return containerKind(node.properties.map(field=>signature(field.value||field.argument)));
+    if(node.type==='ArrayExpression')return containerKind(node.elements.map(item=>signature(item?.argument||item)));
+    if(node.type==='LogicalExpression'){const values=[signature(node.left),signature(node.right)];return values.find(value=>networkKinds.has(value))||values.find(value=>candidateKinds.has(value))||null;}
+    if(node.type==='ConditionalExpression'){const values=[signature(node.consequent),signature(node.alternate)];return values.find(value=>networkKinds.has(value))||values.find(value=>candidateKinds.has(value))||null;}
     if(node.type==='ImportExpression')return networkModule.test(literal(node.source)||'') ? 'network_module' : null;
     if(node.type==='CallExpression' && node.callee.type==='MemberExpression' && property(node.callee)==='bind')return signature(node.callee.object);
     if(node.type==='MemberExpression'){
@@ -183,7 +255,7 @@ function inspect(source, ast, {root,file}) {
       if(owner==='network_module')return name==='createServer' ? 'inbound_server' : 'network';
       if(['bind','call','apply'].includes(name))return signature(node.object);
       if(['fetch','fetchImpl','#fetch'].includes(name))return 'network';
-      if(name==='request')return /client|http|axios|socket/i.test(key(node.object)||'') ? 'raw_client' : 'request_candidate';
+      if(name==='request')return requestIsData(node.object) ? 'request_data' : /client|http|axios|socket/i.test(key(node.object)||'') ? 'raw_client' : 'request_candidate';
       if(name==='send' && /client|socket/i.test(key(node.object)||''))return 'raw_client';
     }
     return null;
@@ -193,7 +265,7 @@ function inspect(source, ast, {root,file}) {
     if(pattern.type==='AssignmentPattern')return bind(pattern.left,value||signature(pattern.right),owner);
     if(pattern.type==='ObjectPattern')for(const entry of pattern.properties){
       const name=entry.key?.name||entry.key?.value;
-      bind(entry.value,['fetch','fetchImpl','WebSocket','XMLHttpRequest'].includes(name) ? 'network' : name==='request' ? (/client|http|axios|socket/i.test(key(owner)||'')?'raw_client':'request_candidate') : value==='network_module' ? 'network' : null);
+      bind(entry.value,['fetch','fetchImpl','WebSocket','XMLHttpRequest'].includes(name) ? 'network' : name==='request' ? (requestIsData(owner)?'request_data':/client|http|axios|socket/i.test(key(owner)||'')?'raw_client':'request_candidate') : value==='network_module' ? 'network' : null);
     }
     else if(value && key(pattern))bindings.set(key(pattern),value);
   }
@@ -214,14 +286,16 @@ function inspect(source, ast, {root,file}) {
     }
     if(before===JSON.stringify([...bindings])+JSON.stringify([...constants]))break;
   }
-  function finding(node,kind,detail){
+  function finding(node,kind,detail,requestDataCandidate=false){
     const ancestors=parents.get(node)||[];
     const context=ancestors.find(item=>['MethodDefinition','FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(item.type)) || ancestors.findLast(item=>['VariableDeclaration','ExpressionStatement','ExportNamedDeclaration','ExportDefaultDeclaration'].includes(item.type)) || node;
     const classes=ancestors.filter(item=>['ClassDeclaration','ClassExpression'].includes(item.type)).map(item=>item.id?.name||'<anonymous>');
     const contextName=[...classes,context.key?.name||context.id?.name||context.type].join('.');
-    findings.push({kind,line:node.loc.start.line,column:node.loc.start.column,nodeSha256:digest(source.slice(node.start,node.end)),contextSha256:digest(contextName+'\n'+source.slice(context.start,context.end)),contextType:context.type,contextName,detail});
+    findings.push({kind,line:node.loc.start.line,column:node.loc.start.column,nodeSha256:digest(source.slice(node.start,node.end)),contextSha256:digest(contextName+'\n'+source.slice(context.start,context.end)),contextType:context.type,contextName,detail,...(requestDataCandidate?{requestDataCandidate:true}:{})});
   }
   const containsCapability=node=>capabilityKinds.has(signature(node)) || Boolean(node?.type==='Identifier' && [...bindings].some(([name,value])=>name.startsWith(node.name+'.')&&capabilityKinds.has(value)));
+
+  const candidateOnly=node=>candidateKinds.has(signature(node)) && !Boolean(node?.type==='Identifier'&&[...bindings].some(([name,value])=>name.startsWith(node.name+'.')&&networkKinds.has(value)));
 
   for(const node of nodes){
     if(node.type==='ExportNamedDeclaration'||node.type==='ExportDefaultDeclaration'){
@@ -231,7 +305,7 @@ function inspect(source, ast, {root,file}) {
     if(['ImportDeclaration','ExportNamedDeclaration','ExportAllDeclaration'].includes(node.type)&&node.source){
       imports.push(node.source.value);if(networkModule.test(node.source.value))finding(node,'network_import',node.source.value);
     }
-    if(node.type==='ReturnStatement'&&containsCapability(node.argument) || node.type==='ArrowFunctionExpression'&&node.body.type!=='BlockStatement'&&containsCapability(node.body))finding(node,'network_capability_return','Known outbound capability returned from a function');
+    if(node.type==='ReturnStatement'&&containsCapability(node.argument) || node.type==='ArrowFunctionExpression'&&node.body.type!=='BlockStatement'&&containsCapability(node.body))finding(node,'network_capability_return','Known or potentially callable outbound capability returned from a function',candidateOnly(node.argument||node.body));
     if(node.type==='ImportExpression'){
       const target=literal(node.source);
       if(typeof target==='string')imports.push(target);
@@ -245,7 +319,14 @@ function inspect(source, ast, {root,file}) {
       let kind=signature(node.callee);
       if(key(node.callee)==='Reflect.apply')kind=signature(node.arguments[0]);
       if(['network','network_module','raw_client','request_candidate'].includes(kind))finding(node,['raw_client','request_candidate'].includes(kind)?'raw_client_delegation':'network_initiation',key(node.callee)||node.callee.type);
-      else if(node.arguments.some(argument=>containsCapability(argument.argument||argument)))finding(node,'network_capability_transfer','Known outbound capability passed to a call or constructor');
+      else {
+        const capabilities=node.arguments.map(argument=>argument.argument||argument).filter(containsCapability);
+        const onlyCandidates=capabilities.length>0&&capabilities.every(candidateOnly);
+        // Unshadowed one-argument JSON serialization cannot invoke a function
+        // merely supplied as its value. A replacer or changed binding is not safe.
+        const serializesCandidate=onlyCandidates&&key(node.callee)==='JSON.stringify'&&node.arguments.length===1&&plainJsonStringify();
+        if(capabilities.length&&!serializesCandidate)finding(node,'network_capability_transfer','Known or potentially callable outbound capability passed to a call or constructor',onlyCandidates);
+      }
     }
   }
   return {imports,findings};
@@ -254,7 +335,7 @@ function inspect(source, ast, {root,file}) {
 /** Recursively scans every source file (including future profitability/routes/
  * bootstraps), then follows relative imports even outside src. This is a static
  * regression check, not sandboxing or proof of live authorization. */
-export function scanExecutionSources({root=process.cwd(),transportAllowlist=REVIEWED_TRANSPORT_BOUNDARIES}={}) {
+export function scanExecutionSources({root=process.cwd(),transportAllowlist=REVIEWED_TRANSPORT_BOUNDARIES,requestDataAllowlist=REVIEWED_REQUEST_DATA_ESCAPES}={}) {
   root=fs.realpathSync(path.resolve(root));
   const allowed=new Map();
   for(const boundary of transportAllowlist){
@@ -262,6 +343,13 @@ export function scanExecutionSources({root=process.cwd(),transportAllowlist=REVI
     const id=`${boundary.file}:${boundary.kind}:${boundary.nodeSha256}:${boundary.contextSha256}`;
     if(allowed.has(id))throw new Error('SEARCHAD_TRANSPORT_BOUNDARY_INVALID');allowed.set(id,boundary);
   }
+  const dataAllowed=new Map();
+  for(const entry of requestDataAllowlist){
+    if(!entry||!/^src\/[A-Za-z0-9_./-]+\.(?:js|mjs|cjs)$/.test(entry.file)||entry.file.split('/').includes('..')||!['network_capability_transfer','network_capability_return'].includes(entry.kind)||!/^[a-f0-9]{64}$/.test(entry.nodeSha256)||!/^[a-f0-9]{64}$/.test(entry.contextSha256)||!entry.contextName||!entry.contextType||!entry.producer||!entry.shape||!entry.testRefs?.length||!Number.isInteger(entry.occurrences)||entry.occurrences<1)throw new Error('SEARCHAD_REQUEST_DATA_RECORD_INVALID');
+    const id=`${entry.file}:${entry.kind}:${entry.nodeSha256}:${entry.contextSha256}`;
+    if(dataAllowed.has(id))throw new Error('SEARCHAD_REQUEST_DATA_RECORD_INVALID');dataAllowed.set(id,entry);
+  }
+  const reviewedRequestDataEscapes=[];
   const queue=sourceFiles(path.join(root,'src')),seen=new Set(),violations=[],reviewedTransportBoundaries=[],counts=new Map();
   if(!queue.length)violations.push({file:'src',kind:'source_missing',detail:'No executable source files found'});
   while(queue.length){
@@ -280,14 +368,17 @@ export function scanExecutionSources({root=process.cwd(),transportAllowlist=REVI
     for(const finding of result.findings){
       const id=`${file}:${finding.kind}:${finding.nodeSha256}:${finding.contextSha256}`,boundary=allowed.get(id);
       counts.set(id,(counts.get(id)||0)+1);
-      if(boundary && counts.get(id)<=boundary.occurrences)reviewedTransportBoundaries.push({file,...finding,reason:boundary.reason,testRefs:boundary.testRefs});
+      const dataRecord=finding.requestDataCandidate&&dataAllowed.get(id);
+      if(dataRecord&&counts.get(id)<=dataRecord.occurrences)reviewedRequestDataEscapes.push({file,...finding,producer:dataRecord.producer,shape:dataRecord.shape,testRefs:dataRecord.testRefs});
+      else if(boundary && counts.get(id)<=boundary.occurrences)reviewedTransportBoundaries.push({file,...finding,reason:boundary.reason,testRefs:boundary.testRefs});
       else violations.push({file,...finding});
     }
   }
   for(const [id,boundary]of allowed){
     if(seen.has(path.join(root,boundary.file)) && counts.get(id)!==boundary.occurrences)violations.push({file:boundary.file,kind:'reviewed_boundary_changed',detail:'Reviewed AST node/context occurrence count changed',nodeSha256:boundary.nodeSha256,contextSha256:boundary.contextSha256,contextName:boundary.contextName});
   }
-  return {scannedFiles:[...seen].map(file=>path.relative(root,file).split(path.sep).join('/')).sort(),violations,reviewedTransportBoundaries};
+  for(const [id,entry]of dataAllowed)if(seen.has(path.join(root,entry.file))&&counts.get(id)!==entry.occurrences)violations.push({file:entry.file,kind:'reviewed_request_data_changed',detail:'Reviewed data-only node/context occurrence count changed',nodeSha256:entry.nodeSha256,contextSha256:entry.contextSha256});
+  return {reviewedRequestDataEscapes,scannedFiles:[...seen].map(file=>path.relative(root,file).split(path.sep).join('/')).sort(),violations,reviewedTransportBoundaries};
 }
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const args=process.argv.slice(2);if(args.length && (args.length!==2||args[0]!=='--root'))throw new Error('Usage: searchad-execution-safety.mjs [--root directory]');

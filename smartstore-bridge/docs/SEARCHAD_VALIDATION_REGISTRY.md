@@ -63,7 +63,16 @@ network capability exports, capability returns (including arrow returns), and
 known capabilities passed as call/constructor arguments are rejected unless the
 exact injection site is reviewed. This conservatively rejects capability
 escape at its source; it does not claim general cross-module data-flow analysis.
-Harmless callbacks, data objects and ordinary request metadata remain valid.
+Potentially callable `.request` values also participate in export, argument and
+return checks, including destructured aliases and containers. Ordinary request
+data is recognized only through a bounded literal/const proof or the exact
+metadata records below; object or variable spelling does not establish data.
+The local proof excludes getters, functions and spreads, rejects ambiguous or
+reassigned bindings, and is disabled by member writes in the module. It is not
+a general interprocedural type proof. Unshadowed, unmodified one-argument
+`JSON.stringify` is a serialization sink for request candidates; replacers and
+known fetch capabilities retain escape checks. Harmless callbacks and data
+objects remain valid.
 
 `REVIEWED_TRANSPORT_BOUNDARIES` contains **55 explicit contextual records for
 56 AST findings**: the original 38 call/import findings plus 18 exact existing
@@ -107,6 +116,39 @@ maintenance argument transfers. All hashes, enclosing context names and current
 line locations are emitted by the scanner. No production transport, fence,
 constructor, authority or compatibility-import behavior was changed.
 
+`REVIEWED_REQUEST_DATA_ESCAPES` is separate from transport approval: **26
+contextual records describe 28 existing candidate-only metadata escapes**.
+The scanner emits these as `reviewedRequestDataEscapes`, separately from the
+56 network/delegation/import/injection findings. Each record pins file, AST
+node/context digest, count, producer, data shape and test references. Records
+may describe only candidate transfer/return sites; they cannot accept a raw
+invocation, capability export or known fetch/raw-client capability. A changed
+context or added call fails. These are reviewed source contracts, not general
+claims that any property named request is data.
+
+The complete current sites are listed below. Line numbers locate the existing
+source; exact contextual hashes and producer/shape/test references are in the
+scanner's records and JSON output.
+
+| Source | Lines | Producer / data use | Tests |
+| --- | --- | --- | --- |
+| `catalog/channel-import/import-service.js` | 20,102,125 | Import options -> canonical fingerprint and repository metadata | channel-import-service, channel-import-repository |
+| `catalog/channel-import/sqlite-repository.js` | 173 | Import options -> canonical fingerprint | channel-import-repository, channel-import-service |
+| `http/errors-v04.js` | 29 | Commerce client's `{method,url}` unknown-outcome detail -> HttpError | naver-client, ledger-operations |
+| `http/routes-commerce.js` | 120,127,213,220,248,254 | Gateway preview or parsed detail/backup record -> idempotency/ledger; task separate | commerce-http-api, commerce-gateway, ledger-operations |
+| `http/routes-drive.js` | 99,106,349,493 | Parsed Drive route/upload/permission record -> idempotency/ledger; task separate | http-drive-api, ledger-operations |
+| `http/runtime.js` | 153 | Request metadata -> JSON equality against persisted request_json | ledger-operations, commerce-http-api |
+| `http/server.js` | 48,55,65 | Route metadata -> idempotency/ledger; task separate | ledger-operations, commerce-http-api, http-drive-api |
+| `http/server-v03.js` | 50,57,67 | Route metadata -> idempotency/ledger; task separate | ledger-operations, commerce-http-api, http-drive-api |
+| `http/server-v04.js` | 53,60,70 | Route metadata -> idempotency/ledger; task separate | ledger-operations, commerce-http-api, http-drive-api |
+| `http/server-v05.js` | 74 | Route metadata -> ledger; task separate | ledger-operations, commerce-http-api, http-drive-api |
+| `infrastructure/ledger.js` | 113 | Request metadata -> JSON persisted through SQL placeholders | ledger-operations |
+| `naver/commerce/gateway.js` | 338 | Locally constructed redacted preview record -> result.request | commerce-gateway, commerce-http-api |
+
+Source paths in this table are relative to `src/`; test labels identify
+`test/<label>.test.js`. Shared exact context/node records retain their explicit
+occurrence count rather than creating a file-level exemption.
+
 The older `searchad-write-safety.mjs` remains a **legacy narrow check** of 16
 immediate write-directory JS files plus its historical required-file/evidence
 checks. Its zero is not the expanded count. Neither scanner is a JavaScript
@@ -124,6 +166,12 @@ fail scanning. A fake-transport control demonstrates the copied predicate bug's
 unscoped POST effect without network/DB I/O. Callback/two-file object-export
 escapes, local/unrelated fence namesakes, shadowing and reassignment negatives
 have harmless callback/object and authentic constructor-alias positive controls.
+The raw-request review regression also imports an exported alias in a second
+module and demonstrates one fake POST before requiring scanner rejection;
+its destructured equivalent, callback/container/return transfers, data mutation
+and serializer-shadowing cases are covered. Plain request-data exports pass.
+Metadata record mutation controls reject changed contexts and added raw calls;
+forged data records cannot approve known fetch or raw invocations.
 CI names both new test files explicitly, requires PostgreSQL with zero skips,
 and runs the two new scripts in its static acceptance step.
 
