@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { startWriteFixture, CUSTOMER_ID } from './helpers/searchad-write-http-fixture.js';
+import { startWriteComponentFixture as startWriteFixture, CUSTOMER_ID } from './helpers/searchad-write-http-fixture.js';
 import { SearchAdGatewayRemoteAdapter } from '../src/naver/searchad/write/remote-adapter.js';
 import { SearchAdWriteError } from '../src/naver/searchad/write/errors.js';
 import { errorPayloadV05 } from '../src/http/errors-v05.js';

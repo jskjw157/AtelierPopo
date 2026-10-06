@@ -97,6 +97,7 @@ export function createStoppedWebSiteCampaignRecipe({
         CANARY_OPERATION_KEYS.deleteCampaign
       ]),
       fieldScope: STOPPED_WEB_SITE_CANARY_PASSIVE_SCOPE.fieldScope,
+      lifecycleKinds: Object.freeze(['create', 'delete']),
       campaignType: 'WEB_SITE'
     }),
 

@@ -17,7 +17,20 @@ function appendQuery(url, query) {
   }
 }
 
-async function parseResponseBody(response, responseType = 'auto') {
+async function parseResponseBody(response, responseType = 'auto', maxBodyBytes = null) {
+  if (maxBodyBytes !== null) {
+    const declared = response.headers.get('content-length');
+    if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > maxBodyBytes)) {
+      await response.body?.cancel(); throw new SearchAdError('Invalid report size.', { code: 'SEARCHAD_BODY_LIMIT', status: 502 });
+    }
+    const chunks = []; let size = 0; const reader = response.body?.getReader();
+    try {
+      if (reader) for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > maxBodyBytes) throw new Error(); chunks.push(Buffer.from(value)); }
+      if (declared !== null && Number(declared) !== size) throw new Error();
+    } catch { await reader?.cancel().catch(() => {}); throw new SearchAdError('Invalid report body.', { code: 'SEARCHAD_BODY_LIMIT', status: 502 }); }
+    finally { reader?.releaseLock(); }
+    return Buffer.concat(chunks, size);
+  }
   if (response.status === 204 || response.status === 205) return null;
   if (responseType === 'arrayBuffer') return Buffer.from(await response.arrayBuffer());
   const contentType = String(response.headers.get('content-type') || '').toLowerCase();
@@ -68,9 +81,12 @@ export class NaverSearchAdClient {
     sleep = sleepDefault,
     requestTimeoutMs = 30_000,
     maxRetries = 3,
+    redirectPolicy = 'follow',
     logger = console,
     random = Math.random
   }) {
+    if (!['follow', 'error'].includes(redirectPolicy)) throw new TypeError('SearchAd redirect policy is invalid.');
+    this.redirectPolicy = redirectPolicy;
     if (!fetchImpl) throw new Error('SearchAd client requires fetch.');
     this.baseUrl = String(baseUrl || 'https://api.searchad.naver.com').replace(/\/$/, '');
     this.credentialsRegistry = credentialsRegistry;
@@ -92,8 +108,11 @@ export class NaverSearchAdClient {
     body,
     headers = {},
     responseType = 'auto',
-    retrySafe
+    retrySafe,
+    redirectPolicy = this.redirectPolicy,
+    maxBodyBytes = null
   }) {
+    if (!['follow','error'].includes(redirectPolicy) || (maxBodyBytes !== null && (!Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 1 || responseType !== 'arrayBuffer'))) throw new TypeError('Invalid transport options.');
     const normalizedMethod = String(method).toUpperCase();
     const uri = normalizeSearchAdUri(path);
     const credentials = this.credentialsRegistry.resolve(customerId);
@@ -133,9 +152,12 @@ export class NaverSearchAdClient {
           headers: requestHeaders,
           body: ['GET', 'HEAD'].includes(normalizedMethod) ? undefined : requestBody,
           signal: controller.signal,
-          redirect: 'follow'
+          redirect: redirectPolicy
         });
-        const data = await parseResponseBody(response, responseType);
+        if (redirectPolicy === 'error' && (response.redirected || (response.status >= 300 && response.status < 400))) {
+          throw new SearchAdError('SearchAd redirects are forbidden.', { code: 'SEARCHAD_REDIRECT_FORBIDDEN', status: 502 });
+        }
+        const data = await parseResponseBody(response, responseType, maxBodyBytes);
         const requestId = response.headers.get('x-request-id') || response.headers.get('x-transaction-id') || null;
         if (!response.ok) {
           const error = searchAdErrorFromResponse({ response, data, requestId });

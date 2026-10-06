@@ -11,14 +11,15 @@ test('PostgreSQL SearchAd write schema applies idempotently and enforces plan an
   try {
     const options = { pool, migrationsDir: path.resolve('migrations/postgres') };
     const first = await runPostgresMigrations(options);
-    assert.equal(first.currentVersion, '0009');
+    assert.equal(first.currentVersion, '0015');
     const second = await runPostgresMigrations(options);
     assert.deepEqual(second.applied, []);
-    assert.equal(second.currentVersion, '0009');
+    assert.equal(second.currentVersion, '0015');
     const tables = await pool.query(`SELECT table_name FROM information_schema.tables
       WHERE table_schema=current_schema() AND table_name LIKE 'searchad_write_%' ORDER BY table_name`);
     assert.deepEqual(tables.rows.map(row => row.table_name), [
-      'searchad_write_approvals', 'searchad_write_attempts', 'searchad_write_change_plans', 'searchad_write_locks'
+      'searchad_write_approvals', 'searchad_write_attempts', 'searchad_write_change_plans', 'searchad_write_execution_claims',
+      'searchad_write_execution_counters', 'searchad_write_execution_outcomes', 'searchad_write_locks'
     ]);
     const client = await pool.connect();
     try {

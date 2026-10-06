@@ -119,7 +119,7 @@ test('application role HTTP composes real PostgreSQL activation and the current 
     };
     await start();
     const mutations = () => calls.filter(row => row.method === 'PUT');
-    const planInput = (customerId = CUSTOMER) => {
+    const planInput = (customerId = CUSTOMER, dailyBudget = 900) => {
       const registry = current.app.searchAdRegistry;
       const update = registry.get(CANARY_OPERATION_KEYS.updateCampaign);
       const read = registry.findByPath('GET', '/ncc/campaigns/{campaignId}') || registry.findByPath('GET', '/ncc/campaigns/{nccCampaignId}');
@@ -127,12 +127,12 @@ test('application role HTTP composes real PostgreSQL activation and the current 
       const pathParams = { campaignId: `cmp-${customerId}`, nccCampaignId: `cmp-${customerId}` };
       const descriptor = body => ({ operationKey: update.operationKey, pathParams, query: { fields: 'budget' }, body, confirmation: update.confirmation });
       return { customerId, createdBy: 'spoofed-planner', reason: 'disposable application composition test',
-        mutation: descriptor({ nccCampaignId: `cmp-${customerId}`, dailyBudget: 1200, userLock: true }),
-        verification: { read: { operationKey: read.operationKey, pathParams }, expectedPatch: { dailyBudget: 1200 } },
+        mutation: descriptor({ nccCampaignId: `cmp-${customerId}`, dailyBudget, userLock: true }),
+        verification: { read: { operationKey: read.operationKey, pathParams }, expectedPatch: { dailyBudget } },
         rollback: { mutation: descriptor({ nccCampaignId: `cmp-${customerId}`, userLock: true }), bodyFromBefore: { dailyBudget: 'dailyBudget' } } };
     };
-    const approve = async (customerId = CUSTOMER, role = 'operator', approvalRole = 'executor') => {
-      const planned = await call(role, 'POST', '/api/v1/searchad/changes/plan', planInput(customerId));
+    const approve = async (customerId = CUSTOMER, role = 'operator', approvalRole = 'executor', dailyBudget = 900) => {
+      const planned = await call(role, 'POST', '/api/v1/searchad/changes/plan', planInput(customerId, dailyBudget));
       assert.equal(planned.status, 201, JSON.stringify(planned));
       assert.equal(planned.body.created_by, `compose-${role}`);
       const id = planned.body.plan_id;
@@ -283,6 +283,31 @@ test('application role HTTP composes real PostgreSQL activation and the current 
       assert.equal(reconciled.status, 200, JSON.stringify(reconciled));
       assert.equal(reconciled.body.status, 'applied_reconciled');
       assert.equal(h.mutations().length, 1);
+    });
+
+    await t.test('actual shared-store increase fails with unavailable net loss and consumed authority', async st => {
+      const h = await fixture(st);
+      await h.seed();
+      const input = await h.approve(CUSTOMER, 'operator', 'executor', 1200);
+      const denied = await h.execute(input);
+      assert.equal(denied.status, 409, JSON.stringify(denied));
+      assert.equal(denied.body.error.code, 'SEARCHAD_CIRCUIT_DENIED');
+      assert.deepEqual(denied.body.error.details.reasons, ['LOSS_EVIDENCE_UNAVAILABLE']);
+      assert.equal(h.mutations().length, 0);
+      const consumedAt = await h.tokenUsed(input);
+      assert.ok(consumedAt);
+      const detail = await h.call('reader', 'GET', `/api/v1/searchad/changes/${input.planId}`);
+      assert.equal(detail.status, 200);
+      assert.equal(detail.body.status, 'failed');
+      assert.equal(detail.body.last_error_json.code, 'SEARCHAD_CIRCUIT_DENIED');
+      await h.restart();
+      const beforeReplay = h.calls.length;
+      const replay = await h.execute(input, true);
+      assert.equal(replay.status, 409);
+      assert.equal(replay.body.error.code, 'SEARCHAD_CHANGE_PLAN_NOT_EXECUTABLE');
+      assert.equal(h.calls.length, beforeReplay);
+      assert.deepEqual(await h.tokenUsed(input), consumedAt);
+      assert.equal(h.mutations().length, 0);
     });
 
     await t.test('drift in the composed HTTP path blocks mutation and preserves the unused token', async st => {

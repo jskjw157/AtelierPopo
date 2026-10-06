@@ -1,0 +1,2170 @@
+{
+  "schemaVersion": 1,
+  "specRef": "8e250490ab748367a627213f7d7a2917e005cb10",
+  "operations": [
+    {
+      "operationKey": "account.get.get_ad_account_members_using_get__p_ad_accounts_ad_account_no_members",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ad-accounts/{adAccountNo}/members (getAdAccountMembersUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "account.get.get_ad_accounts_using_get__p_ad_accounts",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ad-accounts (getAdAccountsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "account.get.get_child_ad_accounts_using_get__p_manager_accounts_manager_account_no_child_ad_accounts",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /manager-accounts/{managerAccountNo}/child-ad-accounts (getChildAdAccountsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "account.get.get_manager_accounts_using_get__p_manager_accounts",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /manager-accounts (getManagerAccountsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "billing.get.get_billing_history_for_period_using_get__p_billing_bizmoney_histories_period__q_search_end_dt_search_start_dt",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /billing/bizmoney/histories/period (getBillingHistoryForPeriodUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "billing.get.get_bizmoney_using_get__p_billing_bizmoney",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /billing/bizmoney (getBizmoneyUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "billing.get.get_charge_history_using_get__p_billing_bizmoney_histories_charge__q_search_end_dt_search_start_dt",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /billing/bizmoney/histories/charge (getChargeHistoryUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "billing.get.get_history_for_exhaust_using_get__p_billing_bizmoney_histories_exhaust__q_search_end_dt_search_start_dt",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /billing/bizmoney/histories/exhaust (getHistoryForExhaustUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "estimate.post.get_average_position_bid__p_estimate_average_position_bid_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /estimate/average-position-bid/{type} (getAveragePositionBid); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "estimate.post.get_exposure_minimum_bid__p_estimate_exposure_minimum_bid_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /estimate/exposure-minimum-bid/{type} (getExposureMinimumBid); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "estimate.post.get_median_bid__p_estimate_median_bid_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /estimate/median-bid/{type} (getMedianBid); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "estimate.post.get_npcaverage_position_bid__p_npc_estimate_average_position_bid_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /npc-estimate/average-position-bid/{type} (getNPCAveragePositionBid); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "estimate.post.get_npcexposure_minimum_bid__p_npc_estimate_exposure_minimum_bid_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /npc-estimate/exposure-minimum-bid/{type} (getNPCExposureMinimumBid); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "estimate.post.get_npcperformance__p_npc_estimate_performance",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /npc-estimate/performance (getNPCPerformance); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "estimate.post.get_nplaaverage_position_bid__p_npla_estimate_average_position_bid_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /npla-estimate/average-position-bid/{type} (getNPLAAveragePositionBid); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "estimate.post.get_nplaexposure_minimum_bid__p_npla_estimate_exposure_minimum_bid_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /npla-estimate/exposure-minimum-bid/{type} (getNPLAExposureMinimumBid); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "estimate.post.get_performance__p_estimate_performance_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /estimate/performance/{type} (getPerformance); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "estimate.post.get_performance_bulk__p_estimate_performance_bulk",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /estimate/performance-bulk (getPerformanceBulk); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "inspect_history.get.find__p_ncc_inspect_history_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/inspect-history/{id} (find); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "inspect_history.post.find_by_ids__p_ncc_inspect_history",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /ncc/inspect-history (findByIds); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "keyword_tool.get.get_keywordstool__p_keywordstool",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /keywordstool (None); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "master_report.delete.delete_all_master_reports__p_master_reports",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /master-reports (deleteAllMasterReports); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "master_report.delete.delete_master_report__p_master_reports_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /master-reports/{id} (deleteMasterReport); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "master_report.get.get_all_master_reports__p_master_reports",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Stat/master report operations only, pinned kinds/types and current Customer/spec/credential/origin identity.",
+        "Read-only diagnostic candidate listing only; never ownership, complete absence, replay permission or positive evidence."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/reporting/job-service.js",
+        "src/naver/searchad/reporting/remote-adapter.js"
+      ],
+      "testRefs": [
+        "test/searchad-reporting-jobs.test.js",
+        "test/postgres-searchad-report-jobs.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "master_report.get.get_master_report__p_master_reports_id",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Stat/master report operations only, pinned kinds/types and current Customer/spec/credential/origin identity.",
+        "GET only poll/reconcile of the persisted response-returned owned job ID; download credential remains transient."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/reporting/job-service.js",
+        "src/naver/searchad/reporting/remote-adapter.js"
+      ],
+      "testRefs": [
+        "test/searchad-reporting-jobs.test.js",
+        "test/postgres-searchad-report-jobs.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "master_report.post.create_master_report__p_master_reports",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Stat/master report operations only, pinned kinds/types and current Customer/spec/credential/origin identity.",
+        "Dedicated registration gate and fresh durable creator permit; at most one locally authorized POST attempt, unknown/manual review never replayed."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/reporting/job-service.js",
+        "src/naver/searchad/reporting/remote-adapter.js"
+      ],
+      "testRefs": [
+        "test/searchad-reporting-jobs.test.js",
+        "test/postgres-searchad-report-jobs.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.delete.remove_campaigns_using_delete__p_ncc_campaigns__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /ncc/campaigns (removeCampaignsUsingDELETE); generic gateway validation is not operation-specific production or live verification.",
+        "Public parent cleanup remains disabled/absent (cleanup:false); remote absence across external writers is unresolved. Internal code or generic descriptor membership never removes that blocker."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js",
+        "src/naver/searchad/lifecycle/runtime-production.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js",
+        "test/postgres-searchad-hierarchy-http.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.delete.remove_keywords_using_delete__p_ncc_keywords__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /ncc/keywords (removeKeywordsUsingDELETE); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.delete.remove_restricted_keywords_using_delete__p_ncc_adgroups_adgroup_id_restricted_keywords__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /ncc/adgroups/{adgroupId}/restricted-keywords (removeRestrictedKeywordsUsingDELETE); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.delete.remove_using_delete__p_ncc_ads_ad_id",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Bounded creative owned exact leaf cleanup within stopped, locally owned hierarchy recipes; no broad field, campaign type, external ownership or account authority.",
+        "Current scoped lifecycle evidence, fresh ancestor checks, one-use handoff, gates and final account/Circuit fence remain required for mutations."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/lifecycle/child-first-cleanup-service.js"
+      ],
+      "testRefs": [
+        "test/postgres-searchad-leaf-cleanup-http.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.delete.remove_using_delete_11__p_ncc_shared_budgets__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /ncc/shared-budgets (removeUsingDELETE_11); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.delete.remove_using_delete_3__p_ncc_ad_extensions_ad_extension_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /ncc/ad-extensions/{adExtensionId} (removeUsingDELETE_3); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.delete.remove_using_delete_5__p_ncc_campaigns_campaign_id",
+      "state": "implemented_canary_proven_family",
+      "scope": [
+        "Bounded canary-owned stopped WEB_SITE campaign cleanup only; public parent campaign cleanup remains disabled/absent (cleanup:false).",
+        "No list, empty inventory, local lock or registry classification proves remote absence across external writers."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/canary/production-recipe.js",
+        "src/naver/searchad/canary/active-canary-service.js",
+        "src/naver/searchad/activation/activation-guard.js"
+      ],
+      "testRefs": [
+        "test/searchad-active-canary-production-recipe.test.js",
+        "test/postgres-searchad-active-canary.integration.test.js",
+        "test/searchad-activation-guard.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Offline fixture-tested bounded canary code family only. No independently verified live evidence is bundled; no Customer authorization, Canary PASS or activation is issued."
+    },
+    {
+      "operationKey": "ncc.delete.remove_using_delete_6__p_ncc_keywords_ncc_keyword_id",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Bounded keyword owned exact leaf cleanup within stopped, locally owned hierarchy recipes; no broad field, campaign type, external ownership or account authority.",
+        "Current scoped lifecycle evidence, fresh ancestor checks, one-use handoff, gates and final account/Circuit fence remain required for mutations."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/lifecycle/child-first-cleanup-service.js"
+      ],
+      "testRefs": [
+        "test/postgres-searchad-leaf-cleanup-http.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.delete.remove_using_delete_7__p_ncc_adgroups_adgroup_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /ncc/adgroups/{adgroupId} (removeUsingDELETE_7); generic gateway validation is not operation-specific production or live verification.",
+        "Public parent cleanup remains disabled/absent (cleanup:false); remote absence across external writers is unresolved. Internal code or generic descriptor membership never removes that blocker."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js",
+        "src/naver/searchad/lifecycle/runtime-production.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js",
+        "test/postgres-searchad-hierarchy-http.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.delete.remove_using_delete_8__p_ncc_channels_business_channel_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /ncc/channels/{businessChannelId} (removeUsingDELETE_8); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.delete.remove_using_delete_9__p_ncc_channels__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /ncc/channels (removeUsingDELETE_9); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_adgroups_using_get__p_ncc_adgroups_shared_budgets_shared_budget_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/adgroups/shared-budgets/{sharedBudgetId} (getAdgroupsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_budget_using_get__p_ncc_shared_budgets_shared_budget_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/shared-budgets/{sharedBudgetId} (getBudgetUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_budgets_using_get__p_ncc_shared_budgets",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/shared-budgets (getBudgetsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_by_adgroup_id__p_ncc_brand_new_contracts__q_adgroup_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/brand-new/contracts (getByAdgroupId); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_by_adgroup_id_1__p_ncc_time_contracts__q_adgroup_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/time-contracts (getByAdgroupId_1); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_by_adgroup_id_using_get__p_ncc_ads__q_ncc_adgroup_id",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Bounded descendant inventory with explicit parent relation, cursor/page rules and provenance; keyword partial-ID reconciliation remains quarantined when ownership is uncertain.",
+        "completeAbsence:false, snapshotConsistency:unproven, cleanupAuthority:false; inventory never enables public parent cleanup."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/lifecycle/descendant-inventory-service.js",
+        "src/naver/searchad/lifecycle/descendant-inventory-contract.js"
+      ],
+      "testRefs": [
+        "test/postgres-searchad-descendant-inventory.integration.test.js",
+        "test/searchad-descendant-inventory-contract.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.get.get_by_adgroup_id_using_get_1__p_ncc_keywords__q_base_search_id_ncc_adgroup_id_record_size_selector",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Bounded descendant inventory with explicit parent relation, cursor/page rules and provenance; keyword partial-ID reconciliation remains quarantined when ownership is uncertain.",
+        "completeAbsence:false, snapshotConsistency:unproven, cleanupAuthority:false; inventory never enables public parent cleanup."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/lifecycle/descendant-inventory-service.js",
+        "src/naver/searchad/lifecycle/descendant-inventory-contract.js"
+      ],
+      "testRefs": [
+        "test/postgres-searchad-descendant-inventory.integration.test.js",
+        "test/searchad-descendant-inventory-contract.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.get.get_by_customer_id__p_ncc_brand_new_contracts",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/brand-new/contracts (getByCustomerId); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_by_customer_id_1__p_ncc_time_contracts",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/time-contracts (getByCustomerId_1); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_by_id_using_get__p_ncc_ad_extensions_ad_extension_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/ad-extensions/{adExtensionId} (getByIdUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_by_ids_using_get__p_ncc_ad_extensions__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/ad-extensions (getByIdsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_by_ids_using_get_1__p_ncc_keywords__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/keywords (getByIdsUsingGET_1); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_by_label_id_using_get__p_ncc_ad_extensions__q_ncc_label_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/ad-extensions (getByLabelIdUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_by_owner_id_using_get__p_ncc_ad_extensions__q_owner_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/ad-extensions (getByOwnerIdUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_by_owner_id_using_get_1__p_ncc_targets__q_owner_id_types",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/targets (getByOwnerIdUsingGET_1); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_by_owner_ids_using_get__p_ncc_targets__q_owner_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/targets (getByOwnerIdsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_campaigns_using_get__p_ncc_campaigns_shared_budgets_shared_budget_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/campaigns/shared-budgets/{sharedBudgetId} (getCampaignsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_campaigns_using_get_1__p_ncc_campaigns__q_base_search_id_campaign_type_record_size_selector",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/campaigns (getCampaignsUsingGET_1); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_campaigns_using_get_2__p_ncc_campaigns__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/campaigns (getCampaignsUsingGET_2); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_criterion_by_owner_id_ntype_using_get__p_ncc_criterion_owner_id__q_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/criterion/{ownerId} (getCriterionByOwnerIdNTypeUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_criterion_by_owner_id_ntype_using_get_1__p_ncc_criterion_dictionary_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/criterion-dictionary/{type} (getCriterionByOwnerIdNTypeUsingGET_1); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_customer_labels_using_get__p_ncc_labels",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/labels (getCustomerLabelsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_groups_by_label_id_using_get__p_ncc_adgroups__q_ncc_label_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/adgroups (getGroupsByLabelIdUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_groups_using_get__p_ncc_adgroups__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/adgroups (getGroupsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_groups_using_get_2__p_ncc_adgroups__q_base_search_id_ncc_campaign_id_record_size_selector",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Bounded descendant inventory with explicit parent relation, cursor/page rules and provenance; keyword partial-ID reconciliation remains quarantined when ownership is uncertain.",
+        "completeAbsence:false, snapshotConsistency:unproven, cleanupAuthority:false; inventory never enables public parent cleanup."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/lifecycle/descendant-inventory-service.js",
+        "src/naver/searchad/lifecycle/descendant-inventory-contract.js"
+      ],
+      "testRefs": [
+        "test/postgres-searchad-descendant-inventory.integration.test.js",
+        "test/searchad-descendant-inventory-contract.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.get.get_keyword_attributes_using_get__p_ncc_managed_keyword__q_keywords",
+      "state": "internal_or_quarantined",
+      "scope": [
+        "Internal/quarantined pinned descriptor GET /ncc/managedKeyword; excluded from all runtime execution."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "One of the nine internal operations; classification never changes the pinned runtime exclusion."
+    },
+    {
+      "operationKey": "ncc.get.get_keywords_by_label_id_using_get__p_ncc_keywords__q_ncc_label_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/keywords (getKeywordsByLabelIdUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_product_groups_using_get__p_ncc_product_groups",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/product-groups (getProductGroupsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_restricted_keywords_using_get__p_ncc_adgroups_adgroup_id_restricted_keywords_type_keyword_plus_restrict",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/adgroups/{adgroupId}/restricted-keywords?type=KEYWORD_PLUS_RESTRICT (getRestrictedKeywordsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_saleable_place_channels_using_get__p_ncc_purchasable_place_channels__q_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/purchasable-place-channels (getSaleablePlaceChannelsUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_using_get_10__p_ncc_ads_ad_id",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Bounded creative single-ID verification within stopped, locally owned hierarchy recipes; no broad field, campaign type, external ownership or account authority.",
+        "Current scoped lifecycle evidence, fresh ancestor checks, one-use handoff, gates and final account/Circuit fence remain required for mutations."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/lifecycle/sibling-create-service.js"
+      ],
+      "testRefs": [
+        "test/postgres-searchad-sibling-create.integration.test.js",
+        "test/searchad-hierarchy-sibling-contract.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.get.get_using_get_11__p_ncc_ads__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/ads (getUsingGET_11); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_using_get_13__p_ncc_campaigns_campaign_id",
+      "state": "implemented_canary_proven_family",
+      "scope": [
+        "Single exact campaign read for bounded stopped WEB_SITE canary verification; ordinary campaign observations remain identity- and Customer-scoped."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/canary/production-recipe.js",
+        "src/naver/searchad/canary/active-canary-service.js",
+        "src/naver/searchad/activation/activation-guard.js"
+      ],
+      "testRefs": [
+        "test/searchad-active-canary-production-recipe.test.js",
+        "test/postgres-searchad-active-canary.integration.test.js",
+        "test/searchad-activation-guard.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Offline fixture-tested bounded canary code family only. No independently verified live evidence is bundled; no Customer authorization, Canary PASS or activation is issued."
+    },
+    {
+      "operationKey": "ncc.get.get_using_get_14__p_ncc_keywords_ncc_keyword_id",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Bounded keyword single-ID verification within stopped, locally owned hierarchy recipes; no broad field, campaign type, external ownership or account authority.",
+        "Current scoped lifecycle evidence, fresh ancestor checks, one-use handoff, gates and final account/Circuit fence remain required for mutations."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/lifecycle/sibling-create-service.js"
+      ],
+      "testRefs": [
+        "test/postgres-searchad-sibling-create.integration.test.js",
+        "test/searchad-hierarchy-sibling-contract.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.get.get_using_get_16__p_ncc_adgroups_adgroup_id",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Bounded adgroup single-ID verification within stopped, locally owned hierarchy recipes; no broad field, campaign type, external ownership or account authority.",
+        "Current scoped lifecycle evidence, fresh ancestor checks, one-use handoff, gates and final account/Circuit fence remain required for mutations."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/lifecycle/adgroup-create-service.js"
+      ],
+      "testRefs": [
+        "test/postgres-searchad-adgroup-create.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.get.get_using_get_17__p_ncc_channels_business_channel_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/channels/{businessChannelId} (getUsingGET_17); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_using_get_18__p_ncc_channels",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/channels (getUsingGET_18); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_using_get_19__p_ncc_channels__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/channels (getUsingGET_19); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.get.get_using_get_20__p_ncc_channels__q_channel_tp",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /ncc/channels (getUsingGET_20); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.post.add_restricted_keywords_using_post__p_ncc_adgroups_adgroup_id_restricted_keywords",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /ncc/adgroups/{adgroupId}/restricted-keywords (addRestrictedKeywordsUsingPOST); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.post.add_using_post_1__p_ncc_ads",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Bounded creative creation within stopped, locally owned hierarchy recipes; no broad field, campaign type, external ownership or account authority.",
+        "Current scoped lifecycle evidence, fresh ancestor checks, one-use handoff, gates and final account/Circuit fence remain required for mutations."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/lifecycle/sibling-create-service.js"
+      ],
+      "testRefs": [
+        "test/postgres-searchad-sibling-create.integration.test.js",
+        "test/searchad-hierarchy-sibling-contract.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.post.add_using_post_2__p_ncc_ad_extensions",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /ncc/ad-extensions (addUsingPOST_2); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.post.add_using_post_3__p_ncc_campaigns",
+      "state": "implemented_canary_proven_family",
+      "scope": [
+        "Stopped WEB_SITE campaign creation only in the bounded canary recipe; no claim for other campaign types or Customer scopes."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/canary/production-recipe.js",
+        "src/naver/searchad/canary/active-canary-service.js",
+        "src/naver/searchad/activation/activation-guard.js"
+      ],
+      "testRefs": [
+        "test/searchad-active-canary-production-recipe.test.js",
+        "test/postgres-searchad-active-canary.integration.test.js",
+        "test/searchad-activation-guard.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Offline fixture-tested bounded canary code family only. No independently verified live evidence is bundled; no Customer authorization, Canary PASS or activation is issued."
+    },
+    {
+      "operationKey": "ncc.post.add_using_post_4__p_ncc_keywords__q_ncc_adgroup_id",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Bounded keyword creation within stopped, locally owned hierarchy recipes; no broad field, campaign type, external ownership or account authority.",
+        "Current scoped lifecycle evidence, fresh ancestor checks, one-use handoff, gates and final account/Circuit fence remain required for mutations."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/lifecycle/sibling-create-service.js"
+      ],
+      "testRefs": [
+        "test/postgres-searchad-sibling-create.integration.test.js",
+        "test/searchad-hierarchy-sibling-contract.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.post.add_using_post_6__p_ncc_adgroups",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Bounded adgroup creation within stopped, locally owned hierarchy recipes; no broad field, campaign type, external ownership or account authority.",
+        "Current scoped lifecycle evidence, fresh ancestor checks, one-use handoff, gates and final account/Circuit fence remain required for mutations."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/lifecycle/adgroup-create-service.js"
+      ],
+      "testRefs": [
+        "test/postgres-searchad-adgroup-create.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "ncc.post.add_using_post_7__p_ncc_channels",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /ncc/channels (addUsingPOST_7); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.post.add_using_post_9__p_ncc_shared_budgets",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /ncc/shared-budgets (addUsingPOST_9); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.add_labels_using_put__p_ncc_label_refs",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/label-refs (addLabelsUsingPUT); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.copy_using_put__p_ncc_ads__q_ids_target_adgroup_id_user_lock",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/ads (copyUsingPUT); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.exclude_connected_adgroups_using_put__p_ncc_shared_budgets_adgroups__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/shared-budgets/adgroups (excludeConnectedAdgroupsUsingPUT); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.exclude_connected_campaigns_using_put__p_ncc_shared_budgets_campaigns__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/shared-budgets/campaigns (excludeConnectedCampaignsUsingPUT); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_bid_weight_using_put__p_ncc_criterion_owner_id_bid_weight__q_bid_weight_codes",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/criterion/{ownerId}/bidWeight (modifyBidWeightUsingPUT); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put__p_ncc_ads_ad_id__q_fields",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/ads/{adId} (modifyUsingPUT); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_10__p_ncc_adgroups_adgroup_id__q_fields",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/adgroups/{adgroupId} (modifyUsingPUT_10); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_11__p_ncc_adgroups_adgroup_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/adgroups/{adgroupId} (modifyUsingPUT_11); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_14__p_ncc_channels_business_channel_id__q_fields",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/channels/{businessChannelId} (modifyUsingPUT_14); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_17__p_ncc_shared_budgets_shared_budget_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/shared-budgets/{sharedBudgetId} (modifyUsingPUT_17); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_18__p_ncc_shared_budgets__q_fields",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/shared-budgets (modifyUsingPUT_18); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_19__p_ncc_targets_target_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/targets/{targetId} (modifyUsingPUT_19); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_2__p_ncc_ad_extensions_ad_extension_id__q_fields",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/ad-extensions/{adExtensionId} (modifyUsingPUT_2); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_3__p_ncc_ad_extensions__q_fields",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/ad-extensions (modifyUsingPUT_3); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_5__p_ncc_campaigns_campaign_id__q_fields",
+      "state": "implemented_canary_proven_family",
+      "scope": [
+        "Bounded stopped WEB_SITE canary budget delta and restore (fields=budget, dailyBudget and retained userLock).",
+        "Ordinary campaign dailyBudget/userLock mappings require their own exact current activation; automation permits lock-on only and explicit existing one-shot approval, never relaunch."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/canary/production-recipe.js",
+        "src/naver/searchad/canary/active-canary-service.js",
+        "src/naver/searchad/activation/activation-guard.js"
+      ],
+      "testRefs": [
+        "test/searchad-active-canary-production-recipe.test.js",
+        "test/postgres-searchad-active-canary.integration.test.js",
+        "test/searchad-activation-guard.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Offline fixture-tested bounded canary code family only. No independently verified live evidence is bundled; no Customer authorization, Canary PASS or activation is issued."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_7__p_ncc_criterion_owner_id_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/criterion/{ownerId}/{type} (modifyUsingPUT_7); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_8__p_ncc_keywords_ncc_keyword_id__q_fields",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/keywords/{nccKeywordId} (modifyUsingPUT_8); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.modify_using_put_9__p_ncc_keywords__q_fields",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/keywords (modifyUsingPUT_9); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.request_inspect_using_put__p_ncc_channels_business_channel_id_inspect",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/channels/{businessChannelId}/inspect (requestInspectUsingPUT); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "ncc.put.upsert_using_put__p_ncc_labels",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /ncc/labels (upsertUsingPUT); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "report.delete.delete_report_job_by_report_job_id_using_delete__p_stat_reports_report_job_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /stat-reports/{reportJobId} (deleteReportJobByReportJobIdUsingDELETE); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "report.delete.delete_report_job_list_using_delete__p_stat_reports",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /stat-reports (deleteReportJobListUsingDELETE); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "report.get.get_bulk_entity_stat_using_get__p_stats__q_breakdown_date_preset_fields_ids_time_increment_time_range",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /stats (getBulkEntityStatUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "report.get.get_customized_stat_using_get__p_stats__q_id_stat_type",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /stats (getCustomizedStatUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "report.get.get_report_job_by_report_job_id_using_get__p_stat_reports_report_job_id",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Stat/master report operations only, pinned kinds/types and current Customer/spec/credential/origin identity.",
+        "GET only poll/reconcile of the persisted response-returned owned job ID; download credential remains transient."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/reporting/job-service.js",
+        "src/naver/searchad/reporting/remote-adapter.js"
+      ],
+      "testRefs": [
+        "test/searchad-reporting-jobs.test.js",
+        "test/postgres-searchad-report-jobs.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "report.get.get_report_job_list_using_get__p_stat_reports",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Stat/master report operations only, pinned kinds/types and current Customer/spec/credential/origin identity.",
+        "Read-only diagnostic candidate listing only; never ownership, complete absence, replay permission or positive evidence."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/reporting/job-service.js",
+        "src/naver/searchad/reporting/remote-adapter.js"
+      ],
+      "testRefs": [
+        "test/searchad-reporting-jobs.test.js",
+        "test/postgres-searchad-report-jobs.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "report.get.get_single_entity_stat_using_get__p_stats__q_breakdown_date_preset_fields_id_time_increment_time_range",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Single entity, explicit KST since/until, allDays and fixed salesAmt/impCnt/clkCnt/ccnt/convAmt request; strict response fields, optional convAmt remains null if missing.",
+        "Near-real-time observation only; requested entity kind and range are server-bound, not independent remote type or stabilized spend proof."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/reporting/stats-service.js",
+        "src/naver/searchad/reporting/contracts.js"
+      ],
+      "testRefs": [
+        "test/searchad-reporting-stats.test.js",
+        "test/postgres-searchad-reporting.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "report.post.register_report_job_using_post__p_stat_reports",
+      "state": "implemented_manual_only",
+      "scope": [
+        "Stat/master report operations only, pinned kinds/types and current Customer/spec/credential/origin identity.",
+        "Dedicated registration gate and fresh durable creator permit; at most one locally authorized POST attempt, unknown/manual review never replayed."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/reporting/job-service.js",
+        "src/naver/searchad/reporting/remote-adapter.js"
+      ],
+      "testRefs": [
+        "test/searchad-reporting-jobs.test.js",
+        "test/postgres-searchad-report-jobs.integration.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Implemented bounded service/adapter with offline and disposable PostgreSQL contract tests. Manual-only describes validation level, not permission or automatic execution; server-configured report/observation workers still obey existing gates and scopes."
+    },
+    {
+      "operationKey": "tool.delete.remove_ip_exclusions_using_delete__p_tool_ip_exclusions__q_ids",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /tool/ip-exclusions (removeIpExclusionsUsingDELETE); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "tool.delete.remove_using_delete_9__p_tool_ip_exclusions_id",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: DELETE /tool/ip-exclusions/{id} (removeUsingDELETE_9); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "tool.get.get_analytics_list_using_get__p_tool_analyticses__q_search_type",
+      "state": "internal_or_quarantined",
+      "scope": [
+        "Internal/quarantined pinned descriptor GET /tool/analyticses; excluded from all runtime execution."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "One of the nine internal operations; classification never changes the pinned runtime exclusion."
+    },
+    {
+      "operationKey": "tool.get.get_by_customer_id_using_get__p_tool_bill_recipient_histories_latest",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /tool/bill-recipient-histories/latest (getByCustomerIdUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "tool.get.get_client_ip_using_get__p_tool_client_ip",
+      "state": "internal_or_quarantined",
+      "scope": [
+        "Internal/quarantined pinned descriptor GET /tool/client-ip; excluded from all runtime execution."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "One of the nine internal operations; classification never changes the pinned runtime exclusion."
+    },
+    {
+      "operationKey": "tool.get.get_document_list_using_get__p_tool_document",
+      "state": "internal_or_quarantined",
+      "scope": [
+        "Internal/quarantined pinned descriptor GET /tool/document; excluded from all runtime execution."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "One of the nine internal operations; classification never changes the pinned runtime exclusion."
+    },
+    {
+      "operationKey": "tool.get.get_exclusions_ip_using_get__p_tool_ip_exclusions",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: GET /tool/ip-exclusions (getExclusionsIpUsingGET); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "tool.get.histories_using_get__p_tool_ip_exclusion_histories__q_page_rpp_search_end_date_search_start_date",
+      "state": "internal_or_quarantined",
+      "scope": [
+        "Internal/quarantined pinned descriptor GET /tool/ip-exclusion-histories; excluded from all runtime execution."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "One of the nine internal operations; classification never changes the pinned runtime exclusion."
+    },
+    {
+      "operationKey": "tool.post.add_using_post_7__p_tool_analyticses__q_field",
+      "state": "internal_or_quarantined",
+      "scope": [
+        "Internal/quarantined pinned descriptor POST /tool/analyticses; excluded from all runtime execution."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "One of the nine internal operations; classification never changes the pinned runtime exclusion."
+    },
+    {
+      "operationKey": "tool.post.add_using_post_8__p_tool_document",
+      "state": "internal_or_quarantined",
+      "scope": [
+        "Internal/quarantined pinned descriptor POST /tool/document; excluded from all runtime execution."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "One of the nine internal operations; classification never changes the pinned runtime exclusion."
+    },
+    {
+      "operationKey": "tool.post.add_using_post_9__p_tool_ip_exclusions",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: POST /tool/ip-exclusions (addUsingPOST_9); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    },
+    {
+      "operationKey": "tool.post.file_upload_using_post_1__p_tool_file_upload__q_data",
+      "state": "internal_or_quarantined",
+      "scope": [
+        "Internal/quarantined pinned descriptor POST /tool/file/upload; excluded from all runtime execution."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "One of the nine internal operations; classification never changes the pinned runtime exclusion."
+    },
+    {
+      "operationKey": "tool.put.modify_using_put_14__p_tool_analyticses__q_modify_type",
+      "state": "internal_or_quarantined",
+      "scope": [
+        "Internal/quarantined pinned descriptor PUT /tool/analyticses; excluded from all runtime execution."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "One of the nine internal operations; classification never changes the pinned runtime exclusion."
+    },
+    {
+      "operationKey": "tool.put.modify_using_put_15__p_tool_ip_exclusions",
+      "state": "public_unverified",
+      "scope": [
+        "Pinned descriptor only: PUT /tool/ip-exclusions (modifyUsingPUT_15); generic gateway validation is not operation-specific production or live verification."
+      ],
+      "implementationRefs": [
+        "src/naver/searchad/spec-registry.js",
+        "src/naver/searchad/gateway.js"
+      ],
+      "testRefs": [
+        "test/searchad-spec.test.js",
+        "test/searchad-gateway-capability.test.js"
+      ],
+      "liveVerified": false,
+      "reason": "Public documented operation; no bounded operation-specific implementation evidence is asserted by this registry. Runtime descriptor membership does not grant execution authority."
+    }
+  ]
+}

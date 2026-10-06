@@ -1,5 +1,7 @@
+import { createCircuitGuard, prepareLifecycleDispatch, preserveCircuitOutcome } from '../circuit/service.js';
 import { isDeepStrictEqual } from 'node:util';
 import { NaverSearchAdClient } from '../client.js';
+import { PostgresAccountSendFence } from './postgres-account-send-fence.js';
 import { SearchAdOperationGateway } from '../gateway.js';
 import { credentialFingerprintForCustomer } from '../canary/credential-fingerprint.js';
 import { createHierarchyCampaignRecipe } from './recipe-campaign.js';
@@ -23,17 +25,18 @@ function scopeCopy(input,context,execute=false) {
 
 /** Internal, default-disabled single-campaign path. Deliberately not wired to HTTP/bootstrap. */
 export class CampaignCreateService {
-  #enabled;#gateway;#registry;#credentials;#config;#clock;#store;#dispatch;
-  constructor({pool,registry,credentialsRegistry,config,enabled=false,dailyBudget,riskUnits,dailyCapacityUnits,planTtlSeconds=300,clock=Date.now,fetchImpl=globalThis.fetch,logger=console}={}) {
+  #enabled;#gateway;#registry;#credentials;#config;#clock;#store;#dispatch;#sendFence;#circuitGuard;
+  constructor({pool,circuitGuard=null,registry,credentialsRegistry,config,enabled=false,dailyBudget,riskUnits,dailyCapacityUnits,planTtlSeconds=300,clock=Date.now,fetchImpl=globalThis.fetch,logger=console}={}) {
     if(typeof pool?.connect!=='function'||typeof pool?.query!=='function'||typeof registry?.get!=='function'||typeof registry?.status!=='function'||typeof credentialsRegistry?.resolve!=='function')throw new TypeError('Actual PostgreSQL, pinned registry and credential registry are required');
     if(typeof enabled!=='boolean'||typeof clock!=='function'||typeof fetchImpl!=='function'||!record(config)||config.baseUrl!==ORIGIN)throw new TypeError('Explicit gate, clock, transport and fixed official origin are required');
     if(!Number.isSafeInteger(planTtlSeconds)||planTtlSeconds<60||planTtlSeconds>3600)throw new TypeError('Plan TTL must be 60..3600 seconds');
     this.#enabled=enabled;this.#registry=registry;this.#credentials=credentialsRegistry;this.#config=config;this.#clock=clock;
+    this.#circuitGuard=circuitGuard||createCircuitGuard({pool,clock});this.#sendFence=new PostgresAccountSendFence({pool,fetchImpl});
     // Do not inherit the generic client's redirect-following behavior. Credentials
     // and POST bodies must never be forwarded to a redirected origin or replayed.
     const noRedirectFetch=async(url,init)=>{
       if(new URL(url).origin!==ORIGIN)throw new Error('Unexpected campaign transport origin');
-      const response=await fetchImpl(url,{...init,redirect:'error'});
+      const response=await this.#sendFence.fetch(url,{...init,redirect:'error'});
       if(response.redirected||(response.status>=300&&response.status<400))throw new Error('Campaign redirects are forbidden');
       return response;
     };
@@ -67,18 +70,19 @@ export class CampaignCreateService {
     this.#assertEnabled();const {scope,principal}=scopeCopy(input,context);
     return this.#store.prepare({...scope,actorPrincipalId:principal.principalId});
   }
-  async execute(input={},context={}){
+  async execute(input = {}, context = {}) { return preserveCircuitOutcome(this.#circuitGuard, input.customerId, () => this.#execute(input, context)); }
+  async #execute(input = {}, context = {}) {
     this.#assertEnabled();const {scope,principal}=scopeCopy(input,context,true);
     this.#sendGate({customerId:scope.customerId});
     const receipt=await this.#dispatch.claim(scope,{principal});
     const handoff=await this.#store.beginSend(receipt);
     let result;let unavailable=false;
     try{
-      this.#sendGate(handoff.descriptor);
-      if(!isDeepStrictEqual(this.#identity(scope.customerId),handoff.identity)||this.#clock()>=handoff.validUntil||new Date(this.#clock()).toISOString().slice(0,10)!==handoff.riskDate)throw new Error('Handoff context changed');
-      // The receipt is never accepted from the caller, exposed publicly or resumed
-      // after restart. Existing atomic claim rejects every replay of this plan.
-      result=await this.#gateway.executeCanary(OPS.campaign.create,{...handoff.descriptor,confirmation:this.#registry.get(OPS.campaign.create).confirmation});
+      const circuitDispatch = await prepareLifecycleDispatch(this.#circuitGuard, scope, handoff.descriptor);
+      result=await this.#sendFence.run(scope.customerId,()=>{
+        this.#sendGate(handoff.descriptor);
+        if(!isDeepStrictEqual(this.#identity(scope.customerId),handoff.identity)||this.#clock()>=handoff.validUntil||new Date(this.#clock()).toISOString().slice(0,10)!==handoff.riskDate)throw new Error('Handoff context changed');
+      },()=>this.#gateway.executeCanary(OPS.campaign.create,{...handoff.descriptor,confirmation:this.#registry.get(OPS.campaign.create).confirmation}), null, { dispatch: circuitDispatch, beforeSend: (client, dispatch) => this.#circuitGuard.assertDispatchAllowed(dispatch, { client, now: this.#clock() }) });
     }catch{unavailable=true;}
     const captured=await this.#store.capture(handoff.ticket,result,{unavailable});
     if(!captured.ticket)return captured.projection;

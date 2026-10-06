@@ -1,0 +1,283 @@
+name: SearchAd Extended Cleanup WIP
+
+on:
+  push:
+    branches:
+      - codex/searchad-extended-cleanup-20260914
+    paths:
+      - 'smartstore-bridge/**'
+      - '.github/workflows/searchad-extended-cleanup-wip.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: atelier_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d atelier_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/atelier_test
+      ATELIER_POSTGRES_SSL_MODE: disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        working-directory: smartstore-bridge
+        run: npm ci
+      - name: Clean PostgreSQL migrations and immediate repeat acceptance
+        working-directory: smartstore-bridge
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import path from 'node:path';
+          import { createPostgresPool, closePostgresPool } from './src/infrastructure/postgres/pool.js';
+          import { listMigrationFiles, runPostgresMigrations } from './src/infrastructure/postgres/migrator.js';
+          const pool = createPostgresPool({ connectionString: process.env.TEST_DATABASE_URL, sslMode: 'disable' });
+          try {
+            const migrationsDir = path.resolve('migrations/postgres');
+            const files = listMigrationFiles(migrationsDir);
+            assert.deepEqual(files.map(file => file.version), ['0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010', '0011', '0012', '0013', '0014', '0015']);
+            assert.equal((await pool.query('SELECT current_schema() AS name')).rows[0].name, 'public');
+            const existing = await pool.query("SELECT tablename FROM pg_tables WHERE schemaname='public'");
+            assert.deepEqual(existing.rows, [], 'Migration acceptance must start before any test populates the fresh CI database');
+            const first = await runPostgresMigrations({ pool, migrationsDir });
+            assert.deepEqual(first.applied, files.map(file => file.fileName));
+            assert.equal(first.currentVersion, '0015');
+            const metadata = () => pool.query('SELECT version, file_name, checksum FROM schema_migrations ORDER BY version');
+            const before = (await metadata()).rows;
+            assert.deepEqual(before, files.map(file => ({ version: file.version, file_name: file.fileName, checksum: file.checksum })));
+            const second = await runPostgresMigrations({ pool, migrationsDir });
+            assert.deepEqual(second, { applied: [], currentVersion: '0015' });
+            assert.deepEqual((await metadata()).rows, before);
+            console.log(JSON.stringify({ cleanDatabase: true, first, second, checksumsVerified: true }, null, 2));
+          } finally {
+            await closePostgresPool(pool);
+          }
+          NODE
+      - name: Durable reporting observations, HTTP roles and actual bootstrap restart
+        working-directory: smartstore-bridge
+        run: |
+          node --test test/searchad-reporting-stats.test.js test/searchad-reporting-runtime.test.js test/searchad-reporting-http.test.js test/searchad-http-readiness.test.js test/searchad-http-access.test.js
+          node --test --test-reporter=tap test/postgres-searchad-reporting.integration.test.js > /tmp/searchad-reporting-pg.tap
+          cat /tmp/searchad-reporting-pg.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-reporting-pg.tap','utf8'), /^# skipped 0$/m, 'Reporting PostgreSQL acceptance requires zero skips');"
+      - name: Single-attempt report registration, conservative recovery and native PostgreSQL restart
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          node --test test/searchad-reporting-jobs.test.js test/searchad-gateway-capability.test.js test/searchad-postgres-mutation-gateway.test.js
+          node --test --test-reporter=tap test/postgres-searchad-report-jobs.integration.test.js > /tmp/searchad-report-jobs-pg.tap
+          cat /tmp/searchad-report-jobs-pg.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-report-jobs-pg.tap','utf8'), /^# skipped 0$/m, 'Report registration PostgreSQL acceptance requires zero skips');"
+      - name: Native report ingestion and immutable evidence acceptance
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          set -o pipefail
+          node --test --test-reporter=tap test/postgres-searchad-report-ingestion.integration.test.js | tee /tmp/searchad-report-ingestion-pg.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-report-ingestion-pg.tap','utf8'), /^# skipped 0$/m, 'Report ingestion PostgreSQL acceptance requires zero skips');"
+      - name: Durable Circuit policies, exact source projection and native writer ordering
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          set -o pipefail
+          node --test test/searchad-circuit.test.js test/searchad-send-fence-*.test.js test/searchad-postgres-mutation-gateway.test.js
+          node --test --test-reporter=tap test/postgres-searchad-circuit.integration.test.js test/postgres-searchad-circuit-writer.integration.test.js test/postgres-searchad-application-send-fence.integration.test.js test/postgres-searchad-hierarchy-http.integration.test.js test/postgres-searchad-partial-keyword-quarantine-cleanup.integration.test.js test/postgres-searchad-active-canary.integration.test.js | tee /tmp/searchad-circuit-pg.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-circuit-pg.tap','utf8'), /^# skipped 0$/m, 'Circuit PostgreSQL acceptance requires zero skips');"
+      - name: Public campaign and adgroup hierarchy lifecycle wiring
+        working-directory: smartstore-bridge
+        run: |
+          node --check src/naver/searchad/lifecycle/runtime-production.js
+          node --check src/naver/searchad/lifecycle/bootstrap.js
+          node --check src/http/routes-searchad-hierarchy.js
+          node --test test/searchad-hierarchy-openapi.test.js
+          node --test test/postgres-searchad-hierarchy-http.integration.test.js
+          node --test test/postgres-searchad-adgroup-http.integration.test.js
+          node --test test/postgres-searchad-sibling-http.integration.test.js
+          node --test test/searchad-activation-service.test.js
+          node --test test/postgres-searchad-leaf-cleanup-http.integration.test.js
+          node --test test/postgres-searchad-inventory-http.integration.test.js
+      - name: Application account-store binding and restart send fence
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-application-send-fence.integration.test.js
+      - name: Remaining PostgreSQL writer and Canary suspension fence
+        working-directory: smartstore-bridge
+        run: |
+          node --test test/searchad-send-fence-*.test.js test/searchad-postgres-mutation-gateway.test.js
+          node --test test/postgres-searchad-remaining-send-fence.integration.test.js
+      - name: Account suspension to lifecycle transport initiation fence
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-suspend-send-fence.integration.test.js
+      - name: Root-only expired unused DELETE plan retirement and replacement
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-root-cleanup-replanning.integration.test.js
+      - name: Replacement generation inventory and recovery consumers
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-generation-consumers.integration.test.js
+      - name: Expired unused cleanup plan retirement and replacement
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-cleanup-plan-replanning.integration.test.js
+      - name: PostgreSQL sibling replacement and cleanup
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-sibling-replan-cleanup.integration.test.js
+      - name: Sibling plan retirement and atomic-batch veto sensitivity
+        working-directory: smartstore-bridge
+        run: node scripts/verify-searchad-sibling-retirement-boundary.mjs
+      - name: Expired unused adgroup plan retirement preserves live parent
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-adgroup-plan-retirement.integration.test.js
+      - name: Expired unused campaign plan retirement
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-campaign-plan-retirement.integration.test.js
+      - name: Remote absence counterexamples and veto sensitivity
+        working-directory: smartstore-bridge
+        run: node scripts/verify-searchad-absence-boundary.mjs
+      - name: Bounded inventory scan contracts
+        working-directory: smartstore-bridge
+        run: |
+          node --test test/postgres-searchad-descendant-scan.integration.test.js
+          node --test test/searchad-descendant-inventory-scan.test.js
+      - name: Inventory cleanup boundary regression
+        working-directory: smartstore-bridge
+        run: node --test test/postgres-searchad-inventory-cleanup-fence.integration.test.js
+      - name: Focused sibling and extended cleanup contracts
+        working-directory: smartstore-bridge
+        run: |
+          node --check src/naver/searchad/lifecycle/sibling-create-contract.js
+          node --check src/naver/searchad/lifecycle/postgres-sibling-create-repository.js
+          node --check src/naver/searchad/lifecycle/child-first-cleanup-contract.js
+          node --check src/naver/searchad/lifecycle/postgres-child-first-cleanup-repository.js
+          node --check src/naver/searchad/lifecycle/partial-keyword-inventory-contract.js
+          node --check src/naver/searchad/lifecycle/partial-keyword-inventory-service.js
+          node --check src/naver/searchad/lifecycle/postgres-partial-keyword-inventory-repository.js
+          node --check src/naver/searchad/lifecycle/descendant-inventory-service.js
+          node --check src/naver/searchad/lifecycle/postgres-descendant-inventory-repository.js
+          node --test test/searchad-hierarchy-sibling-contract.test.js
+          node --test test/postgres-searchad-sibling-create.integration.test.js
+          node --test test/searchad-hierarchy-sibling-partial-contract.test.js
+          node --test test/postgres-searchad-partial-keyword-quarantine.integration.test.js
+          node --test test/postgres-searchad-partial-keyword-quarantine-cleanup.integration.test.js
+          node --test test/searchad-partial-keyword-inventory-contract.test.js
+          node --test test/searchad-descendant-inventory-contract.test.js
+          node --test test/postgres-searchad-partial-keyword-inventory.integration.test.js
+          node --test test/postgres-searchad-descendant-inventory.integration.test.js
+          node --test test/postgres-searchad-creative-child-first-cleanup.integration.test.js
+          node --test test/postgres-searchad-extended-child-first-cleanup.integration.test.js
+          node --test test/postgres-searchad-extended-parent-cleanup.integration.test.js
+          node --test test/postgres-searchad-extended-root-cleanup.integration.test.js
+      - name: Approval-based automation, immutable authority and ordered native outcomes
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          set -o pipefail
+          node --test test/searchad-automation.test.js test/searchad-activation-guard.test.js
+          node --test --test-reporter=tap test/postgres-searchad-automation.integration.test.js | tee /tmp/searchad-automation-pg.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-automation-pg.tap','utf8'), /^# skipped 0$/m, 'Automation PostgreSQL acceptance requires zero skips');"
+      - name: Durable worker leases, scoped schedules and headless restart
+        working-directory: smartstore-bridge
+        run: |
+          test -n "$TEST_DATABASE_URL"
+          set -o pipefail
+          node --test test/searchad-worker.test.js test/postgres-searchad-worker.integration.test.js | tee /tmp/searchad-worker-pg.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-worker-pg.tap','utf8'), /^# skipped 0$/m, 'Worker PostgreSQL acceptance requires zero skips');"
+      - name: Descriptive validation registry, Reader HTTP and expanded AST mutation controls
+        working-directory: smartstore-bridge
+        run: |
+          set -euo pipefail
+          test -n "$TEST_DATABASE_URL"
+          node --test --test-reporter=tap test/searchad-validation.test.js test/searchad-execution-safety.test.js | tee /tmp/searchad-validation.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-validation.tap','utf8'), /^# skipped 0$/m, 'Validation Reader PostgreSQL acceptance requires zero skips');"
+          node scripts/searchad-execution-safety.mjs
+          node scripts/searchad-validation-coverage.mjs
+      - name: Canonical HAAR product evidence and configured read providers
+        working-directory: smartstore-bridge
+        run: |
+          set -euo pipefail
+          test -n "$TEST_DATABASE_URL"
+          node --test --test-reporter=tap test/searchad-product-evidence.test.js test/postgres-searchad-product-evidence.integration.test.js | tee /tmp/searchad-products.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-products.tap','utf8'), /^# skipped 0$/m);"
+      - name: Exact profitability, deterministic recommendations and native scoped persistence
+        working-directory: smartstore-bridge
+        run: |
+          set -euo pipefail
+          test -n "$TEST_DATABASE_URL"
+          node --test --test-reporter=tap test/searchad-profitability.test.js test/searchad-recommendations.test.js test/postgres-searchad-profitability.integration.test.js | tee /tmp/searchad-profitability.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-profitability.tap','utf8'), /^# skipped 0$/m);"
+      - name: Bounded delegated Auto with native writer, approval, activation and lease fencing
+        working-directory: smartstore-bridge
+        run: |
+          set -euo pipefail
+          test -n "$TEST_DATABASE_URL"
+          TZ=UTC node --test --test-concurrency=1 --test-reporter=tap test/searchad-limited-auto.test.js test/postgres-searchad-limited-auto.integration.test.js | tee /tmp/searchad-limited-auto.tap
+          node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; assert.match(fs.readFileSync('/tmp/searchad-limited-auto.tap','utf8'), /^# skipped 0$/m);"
+      - name: Composed completion HTTP, standalone worker, restart and KST calendar acceptance
+        working-directory: smartstore-bridge
+        run: |
+          set -euo pipefail
+          test -n "$TEST_DATABASE_URL"
+          TZ=UTC node --test --test-concurrency=1 --test-reporter=tap test/searchad-completion-http-logging.test.js test/searchad-completion-openapi.test.js test/postgres-searchad-completion-http.integration.test.js | tee /tmp/searchad-completion.tap
+          TZ=Asia/Seoul node --test --test-concurrency=1 --test-reporter=tap test/searchad-completion-http-logging.test.js test/postgres-searchad-completion-http.integration.test.js test/postgres-searchad-adgroup-http.integration.test.js | tee /tmp/searchad-completion-kst.tap
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          for (const file of ['/tmp/searchad-completion.tap','/tmp/searchad-completion-kst.tap']) {
+            const tap=fs.readFileSync(file,'utf8');
+            for(const counter of ['fail','cancelled','skipped','todo']) assert.match(tap,new RegExp(`^# ${counter} 0$`,'m'));
+          }
+          NODE
+      - name: Full regression test suite
+        working-directory: smartstore-bridge
+        run: |
+          set -euo pipefail
+          test -n "$TEST_DATABASE_URL"
+          TZ=UTC npm test | tee /tmp/searchad-full.tap
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const tap=fs.readFileSync('/tmp/searchad-full.tap','utf8');
+          for(const counter of ['fail','cancelled','skipped','todo']) assert.match(tap,new RegExp(`^# ${counter} 0$`,'m'));
+          NODE
+      - name: Whole-repository static, safety and coverage acceptance
+        run: |
+          set -euo pipefail
+          base=18a4201e5a2467e7ffed914f34c956eabdf5ad42
+          git fetch --no-tags --depth=1 origin "$base"
+          git diff --check "$base" HEAD
+          changed="$(git diff --name-only "$base" HEAD -- smartstore-bridge .github/workflows/searchad-extended-cleanup-wip.yml)"
+          if test -n "$changed"; then
+            if printf '%s\n' "$changed" | xargs -r grep -nE -- '-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}' ; then
+              echo "Secret-like token pattern found in changed files"
+              exit 1
+            fi
+          fi
+          cd smartstore-bridge
+          npm run check
+          git ls-files -z -- 'src/*.js' 'src/**/*.js' 'scripts/*.mjs' | xargs -0 -r -n 1 node --check
+          node scripts/searchad-write-safety.mjs
+          node scripts/searchad-execution-safety.mjs
+          node scripts/searchad-validation-coverage.mjs
+          npm run commerce:coverage
+          npm run searchad:coverage
+      - name: PostgreSQL migrations remain idempotent after full regression
+        working-directory: smartstore-bridge
+        run: node scripts/postgres-migrate.mjs
+      - name: Production dependency audit
+        working-directory: smartstore-bridge
+        run: npm audit --omit=dev --audit-level=high

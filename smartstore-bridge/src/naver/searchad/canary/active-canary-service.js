@@ -1,3 +1,4 @@
+import { withCircuitWriteContext } from '../circuit/service.js';
 import { randomUUID } from 'node:crypto';
 import { SearchAdWriteError, isAmbiguousSearchAdWriteError } from '../write/errors.js';
 
@@ -44,6 +45,7 @@ export class ActiveCanaryService {
   constructor({
     repository,
     remote,
+    circuitGuard = null,
     recipe,
     config = {},
     credentialFingerprintResolver = null,
@@ -53,7 +55,7 @@ export class ActiveCanaryService {
     if (!remote) throw new TypeError('remote is required');
     if (!recipe) throw new TypeError('recipe is required');
     this.repository = repository;
-    this.remote = remote;
+    this.remote = remote; this.circuitGuard = circuitGuard;
     this.recipe = recipe;
     this.config = {
       allowActiveCanary: false,
@@ -182,17 +184,16 @@ export class ActiveCanaryService {
     });
   }
 
+  async settleMutation(run, patch, { phase, status, operationKey = null, error = null }) {
+    return this.repository.settleMutation(run.canaryRunId, patch, {
+      eventId: randomUUID(), canaryRunId: run.canaryRunId, customerId: run.customerId,
+      phase, status, operationKey, requestId: null, error: error ? safeError(error) : null,
+      createdAt: nowIso(this.clock)
+    });
+  }
+
   async markUnknown(run, phase, descriptor, error, status = 'unknown_outcome') {
-    await this.repository.updateRun(run.canaryRunId, {
-      status,
-      lastError: safeError(error)
-    });
-    await this.addEvent(run, {
-      phase,
-      status,
-      operationKey: descriptor?.operationKey,
-      error
-    });
+    await this.settleMutation(run, { status, lastError: safeError(error) }, { phase, status, operationKey: descriptor?.operationKey, error });
     fail(
       'SEARCHAD_CANARY_UNKNOWN_OUTCOME',
       'Canary mutation 결과가 불명확합니다. 같은 mutation을 반복하지 말고 read-only reconcile을 수행해야 합니다.',
@@ -208,7 +209,7 @@ export class ActiveCanaryService {
       operationKey: descriptor?.operationKey
     });
     try {
-      const result = await this.remote.mutate(descriptor);
+      const result = await withCircuitWriteContext({ customerId: run.customerId, canaryRunId: run.canaryRunId, phase, purpose: phase.includes('restore') || phase.includes('rollback') ? 'rollback' : 'canary' }, () => this.remote.mutate(descriptor));
       await this.addEvent(run, {
         phase,
         status: 'remote_accepted',
@@ -218,20 +219,12 @@ export class ActiveCanaryService {
       return result;
     } catch (error) {
       if (isAmbiguousSearchAdWriteError(error)) {
-        return this.markUnknown(run, phase, descriptor, error);
+        // Observe the primary rejection before finally awaits projection.
+        return await this.markUnknown(run, phase, descriptor, error);
       }
-      await this.repository.updateRun(run.canaryRunId, {
-        status: 'failed',
-        lastError: safeError(error)
-      });
-      await this.addEvent(run, {
-        phase,
-        status: 'failed',
-        operationKey: descriptor?.operationKey,
-        error
-      });
+      await this.settleMutation(run, { status: 'failed', lastError: safeError(error) }, { phase, status: 'failed', operationKey: descriptor?.operationKey, error });
       throw error;
-    }
+    } finally { try { await this.circuitGuard?.projectOutcome(run.customerId); } catch {} }
   }
 
   async readSpend(descriptor) {
@@ -344,10 +337,10 @@ export class ActiveCanaryService {
 
     const createdSnapshot = await this.remote.read(this.recipe.readCampaign({ customerId, remoteId }));
     if (!this.recipe.assertCreatedStopped(createdSnapshot)) {
-      await this.repository.updateRun(run.canaryRunId, { status: 'cleanup_required' });
+      await this.settleMutation(run, { status: 'cleanup_required' }, { phase: 'campaign_create', status: 'unknown_outcome' });
       fail('SEARCHAD_CANARY_NOT_STOPPED', '새 Canary campaign이 안전한 stopped WEB_SITE 상태로 검증되지 않았습니다.', { remoteId }, 409);
     }
-    await this.repository.updateRun(run.canaryRunId, { status: 'campaign_verified_off' });
+    await this.settleMutation(run, { status: 'campaign_verified_off' }, { phase: 'campaign_create', status: 'verified' });
 
     let beforeSpend;
     try {
@@ -380,9 +373,11 @@ export class ActiveCanaryService {
     );
     const updatedSnapshot = await this.remote.read(this.recipe.readCampaign({ customerId, remoteId }));
     if (!this.recipe.assertBudgetMutation(createdSnapshot, updatedSnapshot)) {
-      await this.repository.updateRun(run.canaryRunId, { status: 'cleanup_required' });
+      await this.settleMutation(run, { status: 'cleanup_required' }, { phase: 'budget_update', status: 'unknown_outcome' });
       fail('SEARCHAD_CANARY_MUTATION_VERIFY_FAILED', 'Canary budget 변경 후 원격 상태 검증에 실패했습니다.', { remoteId }, 409);
     }
+
+    await this.settleMutation(run, { status: 'mutation_verified' }, { phase: 'budget_update', status: 'verified' });
 
     await this.mutateOnce(
       run,
@@ -391,9 +386,11 @@ export class ActiveCanaryService {
     );
     const restoredSnapshot = await this.remote.read(this.recipe.readCampaign({ customerId, remoteId }));
     if (!this.recipe.assertBudgetRestored(createdSnapshot, restoredSnapshot)) {
-      await this.repository.updateRun(run.canaryRunId, { status: 'cleanup_required' });
+      await this.settleMutation(run, { status: 'cleanup_required' }, { phase: 'budget_restore', status: 'unknown_outcome' });
       fail('SEARCHAD_CANARY_RESTORE_VERIFY_FAILED', 'Canary budget 원복 후 원격 상태 검증에 실패했습니다.', { remoteId }, 409);
     }
+
+    await this.settleMutation(run, { status: 'rollback_verified' }, { phase: 'budget_restore', status: 'verified' });
 
     await this.mutateOnce(
       run,
@@ -409,10 +406,11 @@ export class ActiveCanaryService {
       else throw error;
     }
     if (!this.recipe.assertCleanup(cleanupSnapshot)) {
-      await this.repository.updateRun(run.canaryRunId, { status: 'cleanup_required' });
+      await this.settleMutation(run, { status: 'cleanup_required' }, { phase: 'campaign_cleanup', status: 'unknown_outcome' });
       fail('SEARCHAD_CANARY_CLEANUP_REQUIRED', 'Canary campaign 정리가 원격에서 검증되지 않았습니다.', { remoteId }, 409);
     }
 
+    await this.settleMutation(run, { status: 'cleanup_pending' }, { phase: 'campaign_cleanup', status: 'deleted_verified' });
     const cleanupVerifiedAt = nowIso(this.clock);
     if (canUpdateObject) {
       await this.repository.updateObject(run.canaryRunId, remoteId, {
@@ -599,6 +597,7 @@ export class ActiveCanaryService {
       upstreamBaseUrl: run.upstreamBaseUrl,
       operationKeys: structuredClone(run.verifiedOperationScope?.operationKeys || []),
       fieldScope: structuredClone(run.verifiedOperationScope?.fieldScope || []),
+      lifecycleKinds: structuredClone(run.verifiedOperationScope?.lifecycleKinds || []),
       result: 'verified',
       sourceRunId: run.canaryRunId,
       recipeId: run.recipeId,

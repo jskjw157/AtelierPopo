@@ -56,6 +56,9 @@ function makeRepository({ evidenceOverrides = {}, accountOverrides = {} } = {}) 
       runs.set(runId, next);
       return structuredClone(next);
     },
+    async settleMutation(runId, patch, event) {
+      const result = await this.updateRun(runId, patch); await this.addEvent(event); return result;
+    },
     async addEvent(event) {
       events.push(structuredClone(event));
     },
@@ -89,6 +92,7 @@ function recipe() {
     verifiedOperationScope: {
       operationKeys: ['campaign.create', 'campaign.read', 'campaign.update', 'campaign.delete'],
       fieldScope: ['campaign.userLock', 'campaign.budget'],
+      lifecycleKinds: ['create', 'delete'],
       campaignType: 'WEB_SITE'
     },
     beforeSpendRead({ customerId, remoteId }) {
@@ -224,6 +228,7 @@ function makeService(options = {}) {
     remote,
     recipe: recipe(),
     config,
+    circuitGuard: options.circuitGuard,
     credentialFingerprintResolver: options.credentialFingerprintResolver,
     clock: () => now
   });
@@ -369,6 +374,7 @@ test('zero-spend evidence is issued only after the 48h post-cleanup observation 
   assert.equal(evidence.result, 'verified');
   assert.deepEqual(evidence.operationKeys, ['campaign.create', 'campaign.read', 'campaign.update', 'campaign.delete']);
   assert.deepEqual(evidence.fieldScope, ['campaign.userLock', 'campaign.budget']);
+  assert.deepEqual(evidence.lifecycleKinds, ['create', 'delete']);
 });
 
 test('non-zero post-cleanup spend prevents PASS and evidence issuance', async () => {
@@ -403,3 +409,45 @@ test('ambiguous create outcome is recorded once and no later mutation is attempt
   const unknown = [...fx.repository.events].find(event => event.status === 'unknown_outcome');
   assert.ok(unknown);
 });
+
+for (const projectionFails of [false, true]) {
+  test(`ambiguous create settles its primary rejection before delayed ${projectionFails ? 'failing' : 'successful'} Circuit projection`, async () => {
+    let projectionSnapshot;
+    const fx = makeService({
+      remoteOptions: { failCreate: true },
+      circuitGuard: {
+        async projectOutcome(customerId) {
+          projectionSnapshot = { customerId, events: structuredClone(fx.repository.events) };
+          // Cross an event-loop turn: a returned, unawaited markUnknown promise
+          // rejects unhandled here even when the caller observes start at once.
+          await new Promise(resolve => setImmediate(resolve));
+          if (projectionFails) throw new Error('projection unavailable');
+        }
+      }
+    });
+
+    await assert.rejects(
+      fx.service.start({ customerId: '123', passiveEvidenceId: 'passive-1' }, { principal: admin }),
+      error => error.code === 'SEARCHAD_CANARY_UNKNOWN_OUTCOME' && error.status === 409 && error.details.phase === 'campaign_create'
+    );
+
+    const run = await fx.repository.findActiveRun('123');
+    assert.equal(run.status, 'unknown_outcome');
+    assert.deepEqual(run.lastError, {
+      name: 'Error', code: 'SEARCHAD_CANARY_REMOTE_ERROR',
+      message: 'upstream unavailable after send', status: 503
+    });
+    assert.equal(projectionSnapshot.customerId, '123');
+    assert.deepEqual(projectionSnapshot.events.map(event => [event.phase, event.status]), [
+      ['preflight', 'verified'], ['campaign_create', 'send_intent'], ['campaign_create', 'unknown_outcome']
+    ]);
+    assert.equal(projectionSnapshot.events.at(-1).canaryRunId, run.canaryRunId);
+    assert.deepEqual(projectionSnapshot.events.at(-1).error, run.lastError);
+    assert.equal(fx.repository.generatedEvidence.length, 0);
+    await assert.rejects(
+      fx.service.start({ customerId: '123', passiveEvidenceId: 'passive-1' }, { principal: admin }),
+      { code: 'SEARCHAD_CANARY_ALREADY_ACTIVE' }
+    );
+    assert.deepEqual(fx.remote.calls.map(call => [call.type, call.operationKey]), [['mutate', 'campaign.create']]);
+  });
+}

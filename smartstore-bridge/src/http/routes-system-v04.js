@@ -52,6 +52,7 @@ export function createSystemRoutesV04({
         readiness: '/health/ready',
         openapi: '/openapi.json',
         searchAdOpenApi: '/openapi-searchad.json',
+        searchAdCompletionOpenApi: Object.fromEntries(['reader','operator','executor','admin'].map(role => [role, `/openapi-searchad-completion-${role}.json`])),
         catalogOpenApi: '/openapi-catalog.json',
         driveStatus: '/api/v1/drive/status',
         commerceStatus: '/api/v1/commerce/status',

@@ -7,7 +7,7 @@ import { SearchAdApprovalService, SEARCHAD_APPROVAL_CONFIRMATION } from '../src/
 import { ProductionSearchAdExecutionService } from '../src/naver/searchad/write/production-execution-service.js';
 import { SearchAdGatewayRemoteAdapter } from '../src/naver/searchad/write/remote-adapter.js';
 
-function harness({ allowWrites = true, allowRollback = true, mutateHook, readHook } = {}) {
+function harness({ allowWrites = true, allowRollback = true, mutateHook, readHook, circuitGuard } = {}) {
   let currentTime = Date.parse('2026-09-02T01:00:00.000Z');
   let state = { keywordId: 'kw-1', bidAmt: 300, editTm: 'initial' };
   let readCalls = 0;
@@ -48,7 +48,7 @@ function harness({ allowWrites = true, allowRollback = true, mutateHook, readHoo
   const executionService = new ProductionSearchAdExecutionService({
     // Authorization is a fixture here; real activation is covered by PostgreSQL composition.
     activationGuard: { async assertMutationAllowed() { return { allowed: true }; } },
-    repository, remote, approvalService, config, clock, lockTtlMs: 60_000
+    repository, remote, approvalService, config, clock, circuitGuard, lockTtlMs: 60_000
   });
   return {
     repository, remote, config, clock, approvalService, planService, executionService,
@@ -299,4 +299,32 @@ test('same plan and operation are serialized with a database lock', async () => 
   release('done');
   assert.equal(await first, 'done');
   h.repository.close();
+});
+
+test('primary_success_survives_projection_error and persisted applied outcome remains intact', async () => {
+  let projections = 0;
+  const h = harness({ circuitGuard: { async projectOutcome() { projections++; throw new Error('projection-only failure'); } } });
+  const { plan, approval } = await approvedPlan(h);
+  const result = await h.executionService.execute(plan.plan_id, { executionToken: approval.executionToken });
+  assert.equal(result.status, 'applied');
+  assert.equal((await h.repository.getPlan(plan.plan_id)).status, 'applied');
+  assert.equal(projections, 1);
+});
+test('local Circuit store denial never invents an unknown remote outcome', async () => {
+  const { SearchAdWriteError } = await import('../src/naver/searchad/write/errors.js');
+  const h = harness({ mutateHook() { throw new SearchAdWriteError('SEARCHAD_CIRCUIT_UNAVAILABLE', 'Circuit unavailable.', {}, 503); } });
+  const { plan, approval } = await approvedPlan(h);
+  await assert.rejects(h.executionService.execute(plan.plan_id, { executionToken: approval.executionToken }), { code: 'SEARCHAD_CIRCUIT_UNAVAILABLE' });
+  assert.equal((await h.repository.getPlan(plan.plan_id)).status, 'failed');
+});
+
+
+test('production rollback durable claim failure prevents a transport handoff and re-entry', async () => {
+  let claims=0, quarantines=0;
+  const service=Object.create(ProductionSearchAdExecutionService.prototype);
+  service.clock=()=>0; service.circuitGuard={};
+  service.repository={async claimRollbackDispatch(){claims++;throw new Error('commit acknowledgement lost');},async updatePlan(){quarantines++;}};
+  await assert.rejects(service.beforeRollbackDispatch({plan_id:'owned',status:'applied'}),{code:'SEARCHAD_ROLLBACK_INTENT_UNCERTAIN'});
+  await assert.rejects(service.beforeRollbackDispatch({plan_id:'owned',status:'applied'}),{code:'SEARCHAD_ROLLBACK_INTENT_USED'});
+  assert.equal(claims,1);assert.equal(quarantines,1);
 });

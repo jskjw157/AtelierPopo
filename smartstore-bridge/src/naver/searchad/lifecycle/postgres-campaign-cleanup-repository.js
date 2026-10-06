@@ -6,6 +6,8 @@ import { SEARCHAD_APPROVAL_CONFIRMATION } from '../write/approval-service.js';
 import { createHierarchyCampaignRecipe } from './recipe-campaign.js';
 import { fail, record } from './postgres-campaign-create-repository.js';
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
+import { hasUnprovenInventory } from './inventory-cleanup-fence.js';
+import { ROOT_CLEANUP_RETIREMENT_REASON, rootCleanupMetadata, rootCleanupHistory, rootCleanupRetirementProof, rootCleanupRetirementDetails, rootCleanupReplacementMetadata } from './campaign-cleanup-plan-lifecycle.js';
 
 const IDENTITY = { specSha:'spec_sha', credentialFingerprint:'credential_fingerprint', upstreamBaseUrl:'upstream_base_url' };
 const epoch = v => v instanceof Date ? v.getTime() : Date.parse(v);
@@ -37,13 +39,14 @@ export class PostgresCampaignCleanupRepository {
     } finally {if(c)c.release(discard);}
   }
   async #graph(c,s) {
-    // Compatible order: account -> run -> objects -> holds -> create plan -> cleanup plan.
+    // Compatible order: account -> run -> objects -> holds -> create plan -> cleanup plans.
     const account=(await c.query('SELECT * FROM searchad_canary_accounts WHERE customer_id=$1 FOR UPDATE',[s.customerId])).rows[0];
     const run=(await c.query('SELECT *,xmin::text AS version FROM searchad_hierarchy_canary_runs WHERE hierarchy_run_id=$1 AND customer_id=$2 FOR UPDATE',[s.hierarchyRunId,s.customerId])).rows[0];
     if(!run)problem('NOT_FOUND','Campaign scope was not found.',404);
     const objects=(await c.query('SELECT *,xmin::text AS version FROM searchad_hierarchy_objects WHERE hierarchy_run_id=$1 ORDER BY hierarchy_object_id FOR UPDATE',[s.hierarchyRunId])).rows;
     const holds=(await c.query('SELECT *,xmin::text AS version FROM searchad_remote_object_ownership WHERE owner_run_id=$1 OR hierarchy_object_id=$2 OR parent_hierarchy_object_id=$2 ORDER BY ownership_id FOR UPDATE',[s.hierarchyRunId,s.hierarchyObjectId])).rows;
-    const events=(await c.query('SELECT * FROM searchad_hierarchy_events WHERE hierarchy_run_id=$1 ORDER BY event_id',[s.hierarchyRunId])).rows;
+    const events=(await c.query('SELECT * FROM searchad_hierarchy_events WHERE hierarchy_run_id=$1 OR hierarchy_object_id=$2 ORDER BY event_id',[s.hierarchyRunId,s.hierarchyObjectId])).rows;
+    if(events.some(e=>e.customer_id!==s.customerId||e.hierarchy_run_id!==s.hierarchyRunId||(e.hierarchy_object_id!==null&&e.hierarchy_object_id!==s.hierarchyObjectId)||e.phase.startsWith('tree_cleanup_')))problem('GRAPH','Foreign or competing cleanup history is not ignored.');
     // Do not hide malformed cross-run/Customer children behind a scope filter.
     const children=await c.query('SELECT hierarchy_object_id FROM searchad_hierarchy_objects WHERE parent_object_id=$1 LIMIT 1',[s.hierarchyObjectId]);
     const o=objects[0],h=holds[0];
@@ -61,12 +64,20 @@ export class PostgresCampaignCleanupRepository {
     const before={customerId:s.customerId,nccCampaignId:o.remote_id,...descriptor.body};
     if(!cp||cp.status!=='applied'||cp.mutation_operation_key!==OPS.campaign.create||!equal(cp.mutation_json,descriptor)||!equal(cp.expected_after_json,descriptor.body)||
       !equal(cp.applied_after_json,before)||cp.applied_after_hash!==contentHash(before))problem('PROVENANCE','Stored ID must match the verified creation snapshot, not a substituted target.');
-    let plan=null;
-    if(s.planId)plan=(await c.query('SELECT *,xmin::text AS version FROM searchad_write_change_plans WHERE plan_id=$1 AND customer_id=$2 FOR UPDATE',[s.planId,s.customerId])).rows[0];
-    return {account,run,objects,holds,events,object:o,hold:h,createPlan:cp,descriptor,before,plan};
+    const ids=[...new Set([...events.filter(e=>e.phase.startsWith('cleanup_')).map(e=>e.details_json?.planId),s.planId,s.predecessorPlanId].filter(id=>typeof id==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)))];
+    const plans=(await c.query(`SELECT *,xmin::text AS version FROM searchad_write_change_plans WHERE plan_id=ANY($1::uuid[]) OR before_json->>'hierarchyObjectId'=$2 OR (before_json->>'hierarchyRunId'=$3 AND mutation_operation_key=$4) ORDER BY plan_id FOR UPDATE`,[ids,s.hierarchyObjectId,s.hierarchyRunId,OPS.campaign.delete])).rows.filter(p=>p.plan_id!==cp.plan_id);
+    if(plans.some(p=>p.customer_id!==s.customerId||p.mutation_operation_key!==OPS.campaign.delete))problem('GRAPH','Foreign or competing target-linked plans are not ignored.');
+    const planIds=plans.map(p=>p.plan_id);
+    const approvals=(await c.query('SELECT *,xmin::text AS version FROM searchad_write_approvals WHERE plan_id=ANY($1::uuid[]) ORDER BY approval_id FOR UPDATE',[planIds])).rows;
+    const locks=(await c.query('SELECT *,xmin::text AS version FROM searchad_write_locks WHERE plan_id=ANY($1::uuid[]) ORDER BY plan_id FOR UPDATE',[planIds])).rows;
+    const attempts=(await c.query('SELECT *,xmin::text AS version FROM searchad_write_attempts WHERE plan_id=ANY($1::uuid[]) ORDER BY attempt_id FOR UPDATE',[planIds])).rows;
+    const risks=(await c.query('SELECT *,xmin::text AS version FROM searchad_risk_reservations WHERE owner_run_id=$1 OR intent_id LIKE ANY($2::text[]) ORDER BY reservation_id FOR UPDATE',[s.hierarchyRunId,planIds.map(id=>`%:${id}`)])).rows;
+    const plan=plans.find(p=>p.plan_id===s.planId)??null;
+    return {account,run,objects,holds,events,object:o,hold:h,createPlan:cp,descriptor,before,plan,plans,approvals,locks,attempts,risks};
   }
   #owned(g) {
     if(!g.account||g.account.suspended!==false)problem('SUSPENDED','Customer is unavailable or suspended.',403);
+    if(hasUnprovenInventory({target:g.object,objects:g.objects,events:g.events}))problem('INVENTORY_UNPROVEN','Recorded descendant inventory is not complete remote-absence proof; campaign deletion remains blocked.');
     if(g.run.status!=='cleanup_pending'||g.object.state!=='owned'||g.object.deleted_at!==null||g.hold.state!=='owned')problem('STATE','Only an owned campaign with no previous cleanup attempt may be dispatched.');
   }
   async #authority(c,g,activationId,now) {
@@ -79,48 +90,74 @@ export class PostgresCampaignCleanupRepository {
       !active(grant.activated_at,grant.expires_at,now)||!active(evidence.created_at,evidence.expires_at,now))problem('AUTHORITY','A current matching delete-only active evidence/grant pair is required.',403);
     return Math.min(epoch(grant.expires_at),epoch(evidence.expires_at));
   }
-  #meta(g,s,activationId) {
-    return {kind:'haar_campaign_cleanup_v1',customerId:s.customerId,hierarchyRunId:s.hierarchyRunId,hierarchyObjectId:s.hierarchyObjectId,
-      remoteId:g.object.remote_id,createPlanId:g.createPlan.plan_id,createAfterHash:g.createPlan.applied_after_hash,activationId};
-  }
+  #meta(g,s,activationId) {return rootCleanupMetadata(g,activationId);}
   #descriptors(g,s) {
     const input={customerId:s.customerId,hierarchyRunId:s.hierarchyRunId,object:{customerId:s.customerId,hierarchyRunId:s.hierarchyRunId,objectType:'campaign',state:'owned',remoteId:g.object.remote_id}};
     return {mutation:this.#recipe.deleteCampaign(input),read:this.#recipe.readCampaign(input)};
   }
+  #history(g,s) {return rootCleanupHistory(g,this.#descriptors(g,s),this.#now());}
   #boundPlan(g,s) {
-    const p=g.plan; const plans=g.events.filter(e=>e.phase==='cleanup_plan'); const event=plans[0];
-    if(plans.length!==1||!p||!event||event.customer_id!==s.customerId||event.hierarchy_object_id!==s.hierarchyObjectId||event.operation_key!==OPS.campaign.delete||event.lifecycle_kind!=='delete'||event.status!=='planned'||event.details_json.planId!==s.planId)problem('PLAN','An existing server-bound cleanup plan is required.');
-    const meta=this.#meta(g,s,event.details_json.activationId); const d=this.#descriptors(g,s);
-    if(p.mutation_operation_key!==OPS.campaign.delete||!equal(p.mutation_json,d.mutation)||!equal(p.read_json,d.read)||!equal(p.before_json,meta)||p.before_hash!==contentHash(meta)||
-      !equal(p.expected_after_json,{absent:true,remoteId:g.object.remote_id})||p.rollback_json!==null||event.details_json.beforeHash!==p.before_hash||event.details_json.requestFingerprint!==contentHash(d.mutation))problem('PLAN','Cleanup plan, immutable binding and current returned ID must match exactly.');
-    return {meta,...d};
+    const b=this.#history(g,s).current;
+    if(!b||b.plan.plan_id!==s.planId)problem('PLAN','Only the current root cleanup plan is eligible; retired plans and tokens are not reused.');
+    return b;
   }
   async #audit(c,s,phase,status,details) {
     const at=new Date(this.#now()).toISOString(); const safe={planId:s.planId,...details};
     await c.query(`INSERT INTO searchad_hierarchy_events(event_id,hierarchy_run_id,hierarchy_object_id,customer_id,phase,status,operation_key,lifecycle_kind,details_json,created_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,'delete',$8::jsonb,$9)`,[randomUUID(),s.hierarchyRunId,s.hierarchyObjectId,s.customerId,phase,status,OPS.campaign.delete,JSON.stringify(safe),at]);
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)`,[randomUUID(),s.hierarchyRunId,s.hierarchyObjectId,s.customerId,phase,status,OPS.campaign.delete,phase==='cleanup_plan_retired'?null:'delete',JSON.stringify(safe),at]);
     await c.query(`INSERT INTO searchad_write_attempts(attempt_id,plan_id,phase,status,response_json,created_at) VALUES($1,$2,$3,$4,$5::jsonb,$6)`,[randomUUID(),s.planId,phase,status,JSON.stringify(safe),at]);
   }
-  #signature(g) {return JSON.stringify([g.run.version,g.objects.map(o=>[o.hierarchy_object_id,o.version]),g.holds.map(h=>[h.ownership_id,h.version]),g.createPlan.version,g.plan?.version,g.events.map(e=>e.event_id)]);}
+  #signature(g) {return JSON.stringify([g.run.version,g.objects.map(o=>[o.hierarchy_object_id,o.version]),g.holds.map(h=>[h.ownership_id,h.version]),g.createPlan.version,g.events.map(e=>e.event_id),g.plans.map(p=>[p.plan_id,p.version]),g.approvals.map(a=>[a.approval_id,a.version]),g.locks.map(l=>[l.plan_id,l.version]),g.attempts.map(a=>[a.attempt_id,a.version]),g.risks.map(r=>[r.reservation_id,r.version])]);}
   #ticket(g,s,stage,extra={}) {const t=Object.freeze({});this.#tickets.set(t,{signature:this.#signature(g),scope:structuredClone(s),stage,...extra});return t;}
   #take(t,stage) {const v=this.#tickets.get(t);this.#tickets.delete(t);if(!v||v.stage!==stage)problem('TICKET','An unused internally issued stage ticket is required.');return v;}
   #unchanged(g,v) {if(this.#signature(g)!==v.signature)problem('STALE','Campaign state changed during I/O; no blind replay is allowed.');}
   #projection(g,s) {return {customerId:s.customerId,hierarchyRunId:s.hierarchyRunId,hierarchyObjectId:s.hierarchyObjectId,planId:s.planId,remoteId:g.object.remote_id,state:g.object.state};}
 
+  async #insertPlan(c,g,s,validUntil,meta) {
+    const scope={...s,planId:randomUUID()},d=this.#descriptors(g,s),n=this.#now();
+    const expiresAt=new Date(Math.min(validUntil,n+this.#ttl*1000)).toISOString();
+    await c.query(`INSERT INTO searchad_write_change_plans(plan_id,customer_id,mutation_operation_key,mutation_json,read_json,before_json,before_hash,expected_after_json,rollback_json,reason,status,created_by,created_at,expires_at)
+      VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7,$8::jsonb,NULL,'Delete only the verified server-created campaign after separate approval.','planned',$9,$10,$11)`,
+    [scope.planId,s.customerId,OPS.campaign.delete,JSON.stringify(d.mutation),JSON.stringify(d.read),JSON.stringify(meta),contentHash(meta),JSON.stringify({absent:true,remoteId:g.object.remote_id}),s.actorPrincipalId,new Date(n).toISOString(),expiresAt]);
+    await this.#audit(c,scope,'cleanup_plan','planned',{activationId:s.activationId,beforeHash:contentHash(meta),requestFingerprint:contentHash(d.mutation),actorPrincipalId:s.actorPrincipalId});
+    if(s.predecessorPlanId){const final=await this.#graph(c,scope);this.#boundPlan(final,scope);this.#owned(final);this.#identity(final.run);}
+    await this.#authority(c,g,s.activationId,this.#now());
+    this.#identity(g.run);
+    if(this.#now()<n||this.#now()>=Date.parse(expiresAt))problem('EXPIRED','Cleanup plan expired or server time changed before commit.');
+    return {...this.#projection(g,scope),state:'planned',expiresAt,requiredConfirmation:this.#confirmation,requiredSecondConfirmation:targetKey(meta)};
+  }
   async prepare(s) {
     return this.#tx(async c=>{
       const g=await this.#graph(c,s); this.#owned(g);
       const validUntil=await this.#authority(c,g,s.activationId,this.#now());
-      if(g.events.some(e=>e.phase.startsWith('cleanup_')))problem('PRIOR_PLAN','This target already has a cleanup plan; explicit abandonment/replanning is not implemented.');
-      const scope={...s,planId:randomUUID()}; const meta=this.#meta(g,s,s.activationId),d=this.#descriptors(g,s); const n=this.#now();
-      const expiresAt=new Date(Math.min(validUntil,n+this.#ttl*1000)).toISOString();
-      await c.query(`INSERT INTO searchad_write_change_plans(plan_id,customer_id,mutation_operation_key,mutation_json,read_json,before_json,before_hash,expected_after_json,rollback_json,reason,status,created_by,created_at,expires_at)
-        VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7,$8::jsonb,NULL,'Delete only the verified server-created campaign after separate approval.','planned',$9,$10,$11)`,
-      [scope.planId,s.customerId,OPS.campaign.delete,JSON.stringify(d.mutation),JSON.stringify(d.read),JSON.stringify(meta),contentHash(meta),JSON.stringify({absent:true,remoteId:g.object.remote_id}),s.actorPrincipalId,new Date(n).toISOString(),expiresAt]);
-      await this.#audit(c,scope,'cleanup_plan','planned',{activationId:s.activationId,beforeHash:contentHash(meta),requestFingerprint:contentHash(d.mutation),actorPrincipalId:s.actorPrincipalId});
-      await this.#authority(c,g,s.activationId,this.#now());
-      if(this.#now()>=Date.parse(expiresAt))problem('EXPIRED','Cleanup plan expired before commit.');
-      return {...this.#projection(g,scope),state:'planned',expiresAt,requiredConfirmation:this.#confirmation,requiredSecondConfirmation:targetKey(meta)};
+      if(g.plans.length||g.events.some(e=>e.phase.startsWith('cleanup_')))problem('PRIOR_PLAN','This target already has cleanup history; use explicit retirement and replanning.');
+      return this.#insertPlan(c,g,s,validUntil,this.#meta(g,s,s.activationId));
+    });
+  }
+  async retire(s) {
+    return this.#tx(async c=>{
+      const g=await this.#graph(c,s);this.#identity(g.run);const n=this.#now();
+      if(!g.account||g.run.status!=='cleanup_pending'||g.object.state!=='owned'||g.object.deleted_at!==null||g.hold.state!=='owned')problem('NOT_UNUSED','The campaign and hold must retain their untouched pre-delete state.');
+      const h=this.#history(g,s);
+      if(g.plans.length!==1||h.first.plan.plan_id!==s.planId)problem('GENERATION_LIMIT','Only the original plan, without a successor, can be retired.');
+      const proof=rootCleanupRetirementProof(g,h.first,n);
+      if(!proof){
+        const details=rootCleanupRetirementDetails(h.first,s.actorPrincipalId,h.first.plan.status);
+        await c.query("UPDATE searchad_write_change_plans SET status='expired',last_error_json=$2::jsonb WHERE plan_id=$1",[s.planId,JSON.stringify(ROOT_CLEANUP_RETIREMENT_REASON)]);
+        await this.#audit(c,s,'cleanup_plan_retired','expired_unused',details);
+      }
+      const final=await this.#graph(c,s);this.#identity(final.run);
+      if(this.#now()<n||!this.#history(final,s).retirement)problem('RETIREMENT_PROVENANCE','Retirement changed before commit.');
+      return {...this.#projection(final,s),state:'expired_unused',alreadyRetired:Boolean(proof),requiresNewApproval:true,cleanupAuthority:false};
+    });
+  }
+  async replan(s) {
+    return this.#tx(async c=>{
+      const g=await this.#graph(c,s);this.#owned(g);this.#identity(g.run);
+      const h=this.#history(g,s);
+      if(h.current!==null||!h.retirement||h.first.plan.plan_id!==s.predecessorPlanId)problem('PRIOR_PLAN','One exact retired predecessor and no existing successor are required.');
+      const validUntil=await this.#authority(c,g,s.activationId,this.#now());
+      return this.#insertPlan(c,g,s,validUntil,rootCleanupReplacementMetadata(g,s.activationId,h.retirement));
     });
   }
   async #approved(c,g,s,binding) {

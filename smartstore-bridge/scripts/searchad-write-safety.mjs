@@ -89,6 +89,9 @@ if (failures.length) {
 
 console.log(JSON.stringify({
   ok: true,
+  scope: 'legacy_narrow_write_directory_only',
+  expandedScanner: 'scripts/searchad-execution-safety.mjs',
+  staticCheckOnly: true,
   requiredFiles: required.length,
   sourceFiles: sourceFiles.length,
   rawNetworkCallsInWriteSubsystem: 0,

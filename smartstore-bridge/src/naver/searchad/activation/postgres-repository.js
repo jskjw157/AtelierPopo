@@ -20,6 +20,7 @@ function evidenceRow(row) {
     upstreamBaseUrl: row.upstream_base_url,
     operationKeys: cloneJson(row.operation_keys_json || []),
     fieldScope: cloneJson(row.field_scope_json || []),
+    lifecycleKinds: cloneJson(row.lifecycle_kinds_json || []),
     result: row.result,
     sourceRunId: row.source_run_id,
     recipeId: row.recipe_id,
@@ -43,6 +44,7 @@ function activationRow(row) {
     upstreamBaseUrl: row.upstream_base_url,
     operationKeys: cloneJson(row.operation_keys_json || []),
     fieldScope: cloneJson(row.field_scope_json || []),
+    lifecycleKinds: cloneJson(row.lifecycle_kinds_json || []),
     activatedByPrincipalId: row.activated_by_principal_id,
     activatedAt: iso(row.activated_at),
     expiresAt: iso(row.expires_at)
@@ -65,39 +67,58 @@ export class PostgresSearchAdActivationRepository {
   }
 
   async createEvidence(evidence = {}) {
-    const result = await this.pool.query(
-      `INSERT INTO searchad_verification_evidence (
-         evidence_id, evidence_type, customer_id, spec_sha, credential_fingerprint,
-         upstream_base_url, operation_keys_json, field_scope_json, result,
-         source_run_id, recipe_id, details_json, created_by_principal_id,
-         source_request_id, created_at, expires_at
-       ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12::jsonb,$13,$14,$15,$16
-       ) RETURNING *`,
-      [
-        String(evidence.evidenceId),
-        String(evidence.evidenceType),
-        String(evidence.customerId),
-        String(evidence.specSha),
-        String(evidence.credentialFingerprint),
-        String(evidence.upstreamBaseUrl),
-        JSON.stringify(evidence.operationKeys || []),
-        JSON.stringify(evidence.fieldScope || []),
-        String(evidence.result),
-        evidence.sourceRunId == null ? null : String(evidence.sourceRunId),
-        evidence.recipeId == null ? null : String(evidence.recipeId),
-        JSON.stringify(evidence.details || {}),
-        evidence.createdByPrincipalId == null ? null : String(evidence.createdByPrincipalId),
-        evidence.sourceRequestId == null ? null : String(evidence.sourceRequestId),
-        evidence.createdAt,
-        evidence.expiresAt
-      ]
-    );
+    const common = [
+      String(evidence.evidenceId),
+      String(evidence.evidenceType),
+      String(evidence.customerId),
+      String(evidence.specSha),
+      String(evidence.credentialFingerprint),
+      String(evidence.upstreamBaseUrl),
+      JSON.stringify(evidence.operationKeys || []),
+      JSON.stringify(evidence.fieldScope || [])
+    ];
+    const tail = [
+      String(evidence.result),
+      evidence.sourceRunId == null ? null : String(evidence.sourceRunId),
+      evidence.recipeId == null ? null : String(evidence.recipeId),
+      JSON.stringify(evidence.details || {}),
+      evidence.createdByPrincipalId == null ? null : String(evidence.createdByPrincipalId),
+      evidence.sourceRequestId == null ? null : String(evidence.sourceRequestId),
+      evidence.createdAt,
+      evidence.expiresAt
+    ];
+    let result;
+    try {
+      result = await this.pool.query(
+        `INSERT INTO searchad_verification_evidence (
+           evidence_id, evidence_type, customer_id, spec_sha, credential_fingerprint,
+           upstream_base_url, operation_keys_json, field_scope_json, lifecycle_kinds_json, result,
+           source_run_id, recipe_id, details_json, created_by_principal_id,
+           source_request_id, created_at, expires_at
+         ) VALUES (
+           $1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13::jsonb,$14,$15,$16,$17
+         ) RETURNING *`,
+        [...common, JSON.stringify(evidence.lifecycleKinds || []), ...tail]
+      );
+    } catch (error) {
+      if (error?.code !== '42703') throw error;
+      result = await this.pool.query(
+        `INSERT INTO searchad_verification_evidence (
+           evidence_id, evidence_type, customer_id, spec_sha, credential_fingerprint,
+           upstream_base_url, operation_keys_json, field_scope_json, result,
+           source_run_id, recipe_id, details_json, created_by_principal_id,
+           source_request_id, created_at, expires_at
+         ) VALUES (
+           $1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12::jsonb,$13,$14,$15,$16
+         ) RETURNING *`,
+        [...common, ...tail]
+      );
+    }
     return evidenceRow(result.rows[0]);
   }
 
-  async getEvidence(evidenceId) {
-    const result = await this.pool.query(
+  async getEvidence(evidenceId, client=this.pool) {
+    const result = await client.query(
       'SELECT * FROM searchad_verification_evidence WHERE evidence_id=$1',
       [String(evidenceId)]
     );
@@ -125,28 +146,45 @@ export class PostgresSearchAdActivationRepository {
   }
 
   async createActivation(grant = {}) {
-    const result = await this.pool.query(
-      `INSERT INTO searchad_activation_grants (
-         activation_id, evidence_id, evidence_type, customer_id, spec_sha,
-         credential_fingerprint, upstream_base_url, operation_keys_json,
-         field_scope_json, activated_by_principal_id, activated_at, expires_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12)
-       RETURNING *`,
-      [
-        grant.activationId,
-        String(grant.evidenceId),
-        String(grant.evidenceType),
-        String(grant.customerId),
-        String(grant.specSha),
-        String(grant.credentialFingerprint),
-        String(grant.upstreamBaseUrl),
-        JSON.stringify(grant.operationKeys || []),
-        JSON.stringify(grant.fieldScope || []),
-        String(grant.activatedByPrincipalId),
-        grant.activatedAt,
-        grant.expiresAt
-      ]
-    );
+    const common = [
+      grant.activationId,
+      String(grant.evidenceId),
+      String(grant.evidenceType),
+      String(grant.customerId),
+      String(grant.specSha),
+      String(grant.credentialFingerprint),
+      String(grant.upstreamBaseUrl),
+      JSON.stringify(grant.operationKeys || []),
+      JSON.stringify(grant.fieldScope || [])
+    ];
+    const tail = [
+      String(grant.activatedByPrincipalId),
+      grant.activatedAt,
+      grant.expiresAt
+    ];
+    let result;
+    try {
+      result = await this.pool.query(
+        `INSERT INTO searchad_activation_grants (
+           activation_id, evidence_id, evidence_type, customer_id, spec_sha,
+           credential_fingerprint, upstream_base_url, operation_keys_json,
+           field_scope_json, lifecycle_kinds_json, activated_by_principal_id, activated_at, expires_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12,$13)
+         RETURNING *`,
+        [...common, JSON.stringify(grant.lifecycleKinds || []), ...tail]
+      );
+    } catch (error) {
+      if (error?.code !== '42703') throw error;
+      result = await this.pool.query(
+        `INSERT INTO searchad_activation_grants (
+           activation_id, evidence_id, evidence_type, customer_id, spec_sha,
+           credential_fingerprint, upstream_base_url, operation_keys_json,
+           field_scope_json, activated_by_principal_id, activated_at, expires_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12)
+         RETURNING *`,
+        [...common, ...tail]
+      );
+    }
     return activationRow(result.rows[0]);
   }
 
@@ -186,8 +224,8 @@ export class PostgresSearchAdActivationRepository {
     return result.rows.map(activationRow);
   }
 
-  async findUsableActivation({ customerId, operationKey, now = new Date() } = {}) {
-    const result = await this.pool.query(
+  async findUsableActivation({ customerId, operationKey, now = new Date() } = {}, client=this.pool) {
+    const result = await client.query(
       `SELECT * FROM searchad_activation_grants
        WHERE customer_id=$1
          AND expires_at>$2
@@ -199,8 +237,8 @@ export class PostgresSearchAdActivationRepository {
     return activationRow(result.rows[0]);
   }
 
-  async getAccount(customerId) {
-    const result = await this.pool.query(
+  async getAccount(customerId, client=this.pool) {
+    const result = await client.query(
       'SELECT * FROM searchad_canary_accounts WHERE customer_id=$1',
       [String(customerId)]
     );

@@ -28,10 +28,38 @@ async function transaction(pool, work, readOnly = false) {
   } finally { client.release(); }
 }
 
+async function assertGenericRecoveryOwner(client, object) {
+  // A target-local cleanup marker is a veto, never authorization. Do not filter
+  // malformed linked records by Customer/run or select a guessed current plan.
+  // Its owning coordinator must validate and settle the entire DELETE history.
+  const managed = await client.query(
+    `SELECT 1 FROM searchad_hierarchy_events
+     WHERE hierarchy_object_id=$1::uuid AND
+       (left(phase,length('tree_cleanup_'))='tree_cleanup_' OR left(phase,length('cleanup_'))='cleanup_')
+     UNION ALL
+     SELECT 1 FROM searchad_write_change_plans
+     WHERE before_json->>'hierarchyObjectId'=$1::uuid::text AND mutation_operation_key=$2
+     LIMIT 1`,
+    [object.hierarchy_object_id, object.delete_operation_key]
+  );
+  if (managed.rows.length) {
+    fail('SEARCHAD_HIERARCHY_RECONCILE_SPECIALIZED_REQUIRED',
+      'A dedicated cleanup plan manages this target. Use its plan-bound read-only reconciliation.');
+  }
+}
+
 async function rawGraph(client, scope, lock = false) {
   const suffix = lock ? ' FOR UPDATE' : '';
-  // Lock order for this reconciliation coordinator: run -> objects -> holds.
-  // Future dispatch must adopt compatible locking; this is NOT a dispatch gate.
+  // Recovery bookkeeping shares account -> run -> objects -> holds ordering.
+  // Suspension does not prohibit GET recovery or its durable observations.
+  if (lock) {
+    const account = await client.query('SELECT customer_id FROM searchad_canary_accounts WHERE customer_id=$1 FOR UPDATE', [scope.customerId]);
+    if (account.rows.length !== 1 || account.rows[0].customer_id !== scope.customerId) {
+      const existing = await client.query('SELECT hierarchy_run_id FROM searchad_hierarchy_canary_runs WHERE hierarchy_run_id=$1 AND customer_id=$2', [scope.hierarchyRunId, scope.customerId]);
+      if (!existing.rows.length) return null;
+      fail('SEARCHAD_SOURCE_ACCOUNT_REQUIRED', 'An existing locked Customer account is required for source persistence.', 503);
+    }
+  }
   const result = await client.query(
     `SELECT *, xmin::text AS row_version FROM searchad_hierarchy_canary_runs
      WHERE hierarchy_run_id=$1 AND customer_id=$2${suffix}`,
@@ -48,14 +76,22 @@ async function rawGraph(client, scope, lock = false) {
     `SELECT *, xmin::text AS row_version FROM searchad_remote_object_ownership
      WHERE owner_kind='hierarchy_canary' AND owner_run_id=$1 ORDER BY ownership_id${suffix}`, [scope.hierarchyRunId]
   );
-  if (!objects.rows.some(row => row.hierarchy_object_id === scope.hierarchyObjectId)) return null;
-  return { run: result.rows[0], objects: objects.rows, ownerships: ownerships.rows };
+  const object = objects.rows.find(row => row.hierarchy_object_id === scope.hierarchyObjectId);
+  if (!object) return null;
+  // Both snapshot issuance and locked settlement recheck the owning coordinator.
+  await assertGenericRecoveryOwner(client, object);
+  const audit = await client.query(
+    'SELECT count(*)::text AS event_count FROM searchad_hierarchy_events WHERE hierarchy_run_id=$1',
+    [scope.hierarchyRunId]
+  );
+  return { run: result.rows[0], objects: objects.rows, ownerships: ownerships.rows, eventCount: audit.rows[0].event_count };
 }
 function signature(graph) {
   return JSON.stringify([
     [graph.run.hierarchy_run_id, graph.run.row_version],
     graph.objects.map(row => [row.hierarchy_object_id, row.row_version]),
-    graph.ownerships.map(row => [row.ownership_id, row.row_version])
+    graph.ownerships.map(row => [row.ownership_id, row.row_version]),
+    graph.eventCount
   ]);
 }
 function view(graph, targetId) {

@@ -73,6 +73,41 @@ test('keyword batch and TEXT_45 creative are bounded siblings below the verified
 
   await t.test('exact keyword batch stores two owned sibling IDs only after per-ID GET verification',async st=>{const f=await fixture(st);const plan=await f.service.prepareKeywords({customerId:'1001',hierarchyRunId:f.root.hierarchyRunId,parentObjectId:f.group.hierarchyObjectId,activationId:await f.authority(OPS.keyword.create,keywordFields,'batch_create')},context);const result=await approveExecute(f,plan,'keywords');assert.equal(result.state,'owned');assert.equal(f.calls.filter(v=>v==='POST /ncc/keywords').length,1);assert.equal(f.calls.filter(v=>v.startsWith('GET /ncc/keywords/')).length,2);const rows=(await f.pool.query("SELECT object_type,state,remote_id,parent_object_id FROM searchad_hierarchy_objects WHERE object_type='keyword' ORDER BY hierarchy_object_id")).rows;assert.equal(rows.length,2);assert.ok(rows.every(v=>v.state==='owned'&&v.remote_id&&v.parent_object_id===f.group.hierarchyObjectId));});
 
+  await t.test('complete own batch does not exclude an unrelated claimed sibling and consumed authority cannot replay',async st=>{
+    const {createCircuitGuard}=await import('../src/naver/searchad/circuit/service.js');
+    const f=await fixture(st),circuit=createCircuitGuard({pool:f.pool,clock:()=>f.time});
+    f.service=new SiblingCreateService(f.args({keywordTexts:['haar-one','haar-two'],circuitGuard:circuit}));
+    const plan=await f.service.prepareKeywords({customerId:'1001',hierarchyRunId:f.root.hierarchyRunId,parentObjectId:f.group.hierarchyObjectId,activationId:await f.authority(OPS.keyword.create,keywordFields,'batch_create')},context);
+    const token=await f.approve(plan.planId);
+    const input={customerId:'1001',hierarchyRunId:f.root.hierarchyRunId,parentObjectId:f.group.hierarchyObjectId,planId:plan.planId,executionToken:token.executionToken,kind:'keywords'};
+    await assert.rejects(f.service.execute({...input,ownedObjectIds:plan.objectIds},context),{code:'SEARCHAD_SIBLING_INPUT_INVALID'});
+    const riskBefore=(await f.pool.query('SELECT sum(consumed_units)::int AS n FROM searchad_daily_risk_capacity')).rows[0].n;
+    const prepare=circuit.prepareDispatch.bind(circuit),authorize=circuit.assertDispatchAllowed.bind(circuit);
+    let denied=false;
+    circuit.prepareDispatch=async dispatch=>{
+      await prepare(dispatch);
+      const client=await f.pool.connect();
+      try{
+        await client.query('BEGIN');await client.query("SELECT customer_id FROM searchad_canary_accounts WHERE customer_id='1001' FOR UPDATE");
+        await client.query("INSERT INTO searchad_hierarchy_objects(hierarchy_object_id,hierarchy_run_id,customer_id,object_type,parent_object_id,create_operation_key,read_operation_key,delete_operation_key,state,created_at,updated_at) SELECT $1,hierarchy_run_id,customer_id,object_type,parent_object_id,create_operation_key,read_operation_key,delete_operation_key,'dispatching',created_at,updated_at FROM searchad_hierarchy_objects WHERE hierarchy_object_id=$2",[randomUUID(),plan.objectIds[0]]);
+        await client.query('COMMIT');
+      }finally{await client.query('ROLLBACK');client.release();}
+    };
+    circuit.assertDispatchAllowed=async(...args)=>{try{return await authorize(...args);}catch(error){denied=error.details?.reasons?.includes('UNRESOLVED_MUTATION');throw error;}};
+    // The competitor also invalidates the immutable capture graph; it must not
+    // convert the denied send into a retry permit or refund the consumed claim.
+    await assert.rejects(f.service.execute(input,context));
+    assert.equal(denied,true,'actual final Circuit check must see the unrelated sibling');
+    assert.equal(f.calls.filter(v=>v==='POST /ncc/keywords').length,0);
+    assert.ok((await f.pool.query('SELECT used_at FROM searchad_write_approvals WHERE plan_id=$1',[plan.planId])).rows[0].used_at);
+    const consumed=(await f.pool.query('SELECT sum(consumed_units)::int AS n FROM searchad_daily_risk_capacity')).rows[0].n;
+    assert.equal(consumed,riskBefore+1);
+    const restarted=new SiblingCreateService(f.args({keywordTexts:['haar-one','haar-two']}));
+    await assert.rejects(restarted.execute(input,context));
+    assert.equal((await f.pool.query('SELECT sum(consumed_units)::int AS n FROM searchad_daily_risk_capacity')).rows[0].n,consumed);
+    assert.equal(f.calls.filter(v=>v==='POST /ncc/keywords').length,0);
+  });
+
   for(const mode of ['partial','duplicate'])await t.test(`${mode} keyword batch never promotes ownership and is not resent`,async st=>{const f=await fixture(st,{keywordMode:mode});const plan=await f.service.prepareKeywords({customerId:'1001',hierarchyRunId:f.root.hierarchyRunId,parentObjectId:f.group.hierarchyObjectId,activationId:await f.authority(OPS.keyword.create,keywordFields,'batch_create')},context);const first=await approveExecute(f,plan,'keywords');assert.notEqual(first.state,'owned');assert.equal(f.calls.filter(v=>v==='POST /ncc/keywords').length,1);await assert.rejects(approveExecute(f,plan,'keywords'));assert.equal(f.calls.filter(v=>v==='POST /ncc/keywords').length,1);const owned=(await f.pool.query("SELECT count(*)::int AS n FROM searchad_hierarchy_objects WHERE object_type='keyword' AND state='owned'")).rows[0].n;assert.equal(owned,0);});
 
   await t.test('TEXT_45 creative is a sibling under the same verified adgroup and uses one POST plus GET',async st=>{const f=await fixture(st);const plan=await f.service.prepareCreative({customerId:'1001',hierarchyRunId:f.root.hierarchyRunId,parentObjectId:f.group.hierarchyObjectId,activationId:await f.authority(OPS.creative.create,creativeFields,'create')},context);const result=await approveExecute(f,plan,'creative');assert.equal(result.state,'owned');assert.equal(f.calls.filter(v=>v==='POST /ncc/ads').length,1);assert.equal(f.calls.filter(v=>v.startsWith('GET /ncc/ads/')).length,1);const row=(await f.pool.query("SELECT object_type,state,parent_object_id FROM searchad_hierarchy_objects WHERE object_type='creative'")).rows[0];assert.deepEqual([row.object_type,row.state,row.parent_object_id],['creative','owned',f.group.hierarchyObjectId]);});

@@ -26,6 +26,7 @@ boundaries:
     valueMappings:
       SearchKeywordType:
         '0': exact
+        '5': exact
         '1': extended
         '2': exact_similar
     officialEvidence:
@@ -62,6 +63,10 @@ boundaries:
       costVatBasis: excluded
     fromEffectiveDate:
       costVatBasis: included
+    officialEvidence:
+      - https://naver.github.io/searchad-apidoc/notice/2026/02/11/notice1/
+    sourceBlob: 696fea89d3fd0c4c9664f3076c117182366b4861
+    representation: rounded-long-from-boundary-historical-double-preserved
     fallback:
       costVatBasis: unknown
 

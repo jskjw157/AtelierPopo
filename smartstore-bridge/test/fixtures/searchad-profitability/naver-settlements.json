@@ -1,0 +1,28 @@
+{
+  "elements": [
+    {
+      "productId": "123",
+      "productOrderId": "order-1",
+      "productOrderType": "PROD_ORDER",
+      "settleType": "NORMAL_SETTLE_ORIGINAL",
+      "settleBasisDate": "2026-10-01",
+      "settleCompleteDate": "2026-10-02",
+      "payDate": "2026-10-01",
+      "paySettleAmount": 7000,
+      "totalPayCommissionAmount": 140,
+      "freeInstallmentCommissionAmount": 0,
+      "sellingInterlockCommissionAmount": 70,
+      "benefitSettleAmount": 0,
+      "settleExpectAmount": 6790,
+      "purchaserName": "PRIVATE_BUYER",
+      "merchantId": "private-merchant",
+      "url": "https://signed.invalid/PRIVATE_BUYER"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "size": 1000,
+    "totalPages": 1,
+    "totalElements": 1
+  }
+}

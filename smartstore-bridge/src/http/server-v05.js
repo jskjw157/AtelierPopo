@@ -1,3 +1,7 @@
+import { createSearchAdProfitabilityRoutes } from './routes-searchad-profitability.js';
+import { disposeApplicationV05 } from '../bootstrap-v05.js';
+import { createSearchAdWorkerRoutes } from './routes-searchad-worker.js';
+import { createSearchAdAutomationRoutes } from './routes-searchad-automation.js';
 import http from 'node:http';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -25,15 +29,27 @@ import { createProductRoutesV03 } from './routes-products-v03.js';
 import { createLedgerRoutesV03 } from './routes-ledger-v03.js';
 import { createDriveRoutes } from './routes-drive.js';
 import { createCommerceRoutes } from './routes-commerce.js';
+import { createSearchAdCircuitRoutes } from './routes-searchad-circuit.js';
+import { createSearchAdReportingRoutes } from './routes-searchad-reporting.js';
 import { createSearchAdRoutes } from './routes-searchad.js';
 import { createSearchAdWriteRoutesV3 } from './routes-searchad-write-v3.js';
 import { createSearchAdCanaryRoutes } from './routes-searchad-canary.js';
 import { createSearchAdActivationRoutes } from './routes-searchad-activation.js';
+import { createSearchAdHierarchyRoutes } from './routes-searchad-hierarchy.js';
 import { createMultiSourceCatalogRoutes } from './routes-multi-source-catalog.js';
 import { HttpError } from './errors.js';
 
 const SERVICE_VERSION = '0.5.1';
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const LOG_METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
+// Exception codes can originate upstream. Log only fixed boundary diagnostics;
+// other failures still retain their static route, HTTP status and generic code.
+const LOG_ERROR_CODES = new Set([
+  'CORS_ORIGIN_NOT_ALLOWED', 'METHOD_NOT_ALLOWED', 'ROUTE_NOT_FOUND', 'UNAUTHORIZED',
+  'RATE_LIMITED', 'API_AUTH_NOT_CONFIGURED', 'SEARCHAD_HTTP_AUTH_NOT_CONFIGURED',
+  'SEARCHAD_ROLE_FORBIDDEN', 'SEARCHAD_CUSTOMER_FORBIDDEN', 'PAYLOAD_TOO_LARGE',
+  'UNSUPPORTED_MEDIA_TYPE', 'INVALID_JSON', 'SEARCHAD_REPORTING_QUERY_INVALID', 'INTERNAL_ERROR'
+]);
 
 export function createHttpApiV05({ app, env = process.env, logger = defaultLogger, version = SERVICE_VERSION } = {}) {
   if (!app) throw new Error('createHttpApiV05에는 bootstrap 결과 app이 필요합니다.');
@@ -80,7 +96,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
   const routes = [
     // Override only v0.5 readiness; legacy servers keep their existing contract.
     route('GET', /^\/health\/ready$/, async ({ req, res }) => {
-      const { ready, searchAdActivation } = api.readiness();
+      const { ready, searchAdActivation, searchAdHierarchy, searchAdCompletion, searchAdWorker } = api.readiness();
       sendJson(req, res, ready ? 200 : 503, {
         ok: ready,
         status: ready ? 'ready' : 'not_ready',
@@ -90,6 +106,15 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
           required: searchAdActivation.required,
           initialized: searchAdActivation.initialized,
           ready: searchAdActivation.ready
+        },
+        searchAdWorker,
+        searchAdCompletion: {
+          required: searchAdCompletion.required, initialized: searchAdCompletion.initialized, ready: searchAdCompletion.ready
+        },
+        searchAdHierarchy: {
+          required: searchAdHierarchy.required,
+          initialized: searchAdHierarchy.initialized,
+          ready: searchAdHierarchy.ready
         }
       });
     }, { auth: false }),
@@ -99,15 +124,25 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     ...createDriveRoutes(routeContext),
     ...createCommerceRoutes(routeContext),
     ...createSearchAdRoutes(routeContext),
+    ...createSearchAdReportingRoutes(routeContext),
+    ...createSearchAdCircuitRoutes(routeContext),
+    ...createSearchAdAutomationRoutes(routeContext),
+    ...createSearchAdProfitabilityRoutes(routeContext),
+    ...createSearchAdWorkerRoutes(routeContext),
     ...createSearchAdWriteRoutesV3(routeContext),
     ...createSearchAdCanaryRoutes(routeContext),
     ...createSearchAdActivationRoutes(routeContext),
+    ...createSearchAdHierarchyRoutes(routeContext),
     ...createMultiSourceCatalogRoutes(routeContext)
   ];
 
   const server = http.createServer(async (req, res) => {
     const requestId = String(req.headers['x-request-id'] || randomUUID()).slice(0, 128);
+    const logRequestId = randomUUID();
+    const logMethod = LOG_METHODS.has(req.method) ? req.method : 'OTHER';
+    let logRoute = null;
     res.setHeader('X-Request-Id', requestId);
+    res.setHeader('X-Log-Request-Id', logRequestId);
     applyCors(req, res, httpConfig);
     if (res.hasHeader('Access-Control-Allow-Methods')) {
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -134,6 +169,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
         }
         throw new HttpError(404, 'ROUTE_NOT_FOUND', '요청한 API 경로를 찾을 수 없습니다.');
       }
+      logRoute = selected.pattern.source;
       selected.pattern.lastIndex = 0;
       const match = selected.pattern.exec(pathname);
       let authenticatedToken = '';
@@ -164,9 +200,9 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       const bodyLimit = Math.max(httpConfig.maxBodyBytes, Number(selected.maxBodyBytes || 0));
       const body = BODY_METHODS.has(req.method || '') ? await readJsonBody(req, bodyLimit) : {};
       logger.info('HTTP request', {
-        requestId,
-        method: req.method,
-        pathname,
+        requestId: logRequestId,
+        method: logMethod,
+        route: logRoute,
         authenticated: selected.auth,
         write: selected.write,
         searchAdRole: selected.searchAdRole || null,
@@ -176,8 +212,8 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     } catch (error) {
       const { status, body } = errorPayloadV05(error, requestId, { exposeInternal: httpConfig.exposeInternalErrors });
       logger.error('HTTP request failed', {
-        requestId, method: req.method, url: req.url, status,
-        name: error.name, code: error.code, message: error.message
+        requestId: logRequestId, method: logMethod, route: logRoute, status,
+        code: LOG_ERROR_CODES.has(body.error.code) ? body.error.code : 'HTTP_REQUEST_FAILED'
       });
       if (!res.headersSent) {
         if (status === 401) res.setHeader('WWW-Authenticate', 'Bearer realm="atelier-popo"');
@@ -224,19 +260,11 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
           code: 'HTTP_SHUTDOWN_PENDING'
         });
       }
-      const errors = [];
-      const resources = new Set([
-        app.searchAdWriteRuntime, app.searchAdActiveCanaryRuntime,
-        app.searchAdActivationRuntime, app.ledger
-      ]);
-      for (const resource of resources) {
-        try { await resource?.close?.(); } catch (error) { errors.push(error); }
-      }
-      if (errors.length) throw new AggregateError(errors, 'HTTP runtime shutdown failed.');
+      await disposeApplicationV05(app,{drainTimeoutMs:httpConfig.shutdownTimeoutMs});
       return true;
     })().catch(error => {
       // A drain timeout is retryable; no pool or ledger has been closed yet.
-      if (error?.code === 'HTTP_SHUTDOWN_PENDING') closePromise = null;
+      if (['HTTP_SHUTDOWN_PENDING','SEARCHAD_WORKER_SHUTDOWN_PENDING'].includes(error?.code)) closePromise = null;
       throw error;
     });
     return closePromise;
@@ -254,11 +282,24 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
       const activationStatus = app.searchAdActivationRuntime?.status?.() || null;
       const activationRequired = Boolean(app.searchAdConfig?.configured);
       const activationReady = activationStatus?.ready === true;
+      const hierarchyStatus = app.searchAdHierarchyRuntime?.status?.() || null;
+      const hierarchyRequired = app.searchAdConfig?.allowActiveCanary === true;
+      const hierarchyReady = hierarchyStatus?.ready === true;
+      const workerRequired=env.ATELIER_SEARCHAD_WORKER_ENABLED==='true';
+      const workerStatus=app.searchAdCompletionRuntime?.status?.().worker;
+      const searchAdWorker={required:workerRequired,initialized:workerStatus?.initialized===true,ready:workerStatus?.ready===true};
+      const completionRequired = app.searchAdCompletionRequired === true;
+      const completionReady = app.searchAdCompletionRuntime?.status?.().ready === true;
       // Infrastructure readiness is not permission to mutate any Customer.
       // This projection performs no upstream probe or lazy write initialization.
       return {
       ...base,
-      ready: base.readyForRead === true && (!activationRequired || activationReady),
+      ready: base.readyForRead === true &&
+        (!activationRequired || activationReady) &&
+        (!hierarchyRequired || hierarchyReady) &&
+        (!completionRequired || completionReady) && (!workerRequired || searchAdWorker.ready),
+      searchAdWorker,
+      searchAdCompletion: { required: completionRequired, initialized: Boolean(app.searchAdCompletionRuntime), ready: completionReady },
       searchAd: {
         configured: Boolean(app.searchAdConfig?.configured),
         ready: Boolean(app.searchAdGateway),
@@ -295,6 +336,18 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
         status: activationStatus || {
           ready: false, storage: { runtime: 'postgres', schemaReady: false },
           targetOperationCount: 0, targetFieldCount: 0
+        }
+      },
+      searchAdHierarchy: {
+        required: hierarchyRequired,
+        initialized: Boolean(app.searchAdHierarchyRuntime),
+        ready: hierarchyReady,
+        startupError: app.searchAdHierarchyStartupError || null,
+        status: hierarchyStatus || {
+          enabled: false,
+          ready: false,
+          storage: { runtime: 'postgres', schemaReady: false },
+          scope: { campaignCreate: false }
         }
       },
       multiSourceCatalog: {

@@ -87,6 +87,7 @@ export class SearchAdExecutionService {
       throw new SearchAdWriteError('SEARCHAD_CHANGE_PLAN_EXPIRED', '변경 계획이 만료되었습니다.', { planId }, 409);
     }
 
+    await this.repository.assertAutomationAuthority?.(planId);
     const beforeCheck = await this.readCurrent(plan, context);
     const actualBeforeHash = contentHash(beforeCheck.value);
     if (actualBeforeHash !== plan.before_hash) {
@@ -226,6 +227,7 @@ export class SearchAdExecutionService {
     }
     await this.assertActivation(plan, plan.rollback_json.mutation);
     const mutation = { ...plan.rollback_json.mutation, customerId: plan.customer_id };
+    await this.beforeRollbackDispatch?.(plan);
     try {
       const response = await this.remote.mutate(mutation, {
         customerId: plan.customer_id,

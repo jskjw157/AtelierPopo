@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-10-06T16:39:16.664Z",
+  "sessionAgent": "/root/final_implementer",
+  "sourceRecordLine": 574,
+  "runnerToolResult": {
+    "chunk_id": "e3d9cb",
+    "wall_time_seconds": 7.167e-06,
+    "exit_code": 0,
+    "original_token_count": 360,
+    "output": "{\"command\": [\"npm\", \"test\"], \"cwd\": \"/Volumes/X9 Pro/source/AtelierPopo/smartstore-bridge\", \"packageScript\": \"node --test --test-concurrency=1 test/*.test.js\", \"testFileCount\": 155, \"TZ\": \"UTC\", \"DATABASE_URL\": \"postgresql://postgres@127.0.0.1:55438/atelier_test?sslmode=disable\", \"TEST_DATABASE_URL\": \"postgresql://postgres@127.0.0.1:55438/atelier_test?sslmode=disable\", \"ATELIER_POSTGRES_SSL_MODE\": \"disable\", \"sourceCommit\": \"6013903de2b8c2a7457698381dfb8c7e27723690\", \"sourceTree\": \"b1a485674361937e3c75c88c8e3cc239162f69f0\", \"sourceFileCount\": 691, \"sourceAggregateSha256\": \"9791662aa9db99926cd41dc8ce2deb82fe48370e8e2d1ac0604d7e71a7412c19\", \"nativeWindow\": \"Controller explicitly granted exclusive full; no competing native owner/probe\", \"startedAt\": \"2026-10-06T16:33:59.341172+00:00\", \"status\": \"COMPLETED\", \"endedAt\": \"2026-10-06T16:39:13.988203+00:00\", \"exit\": 0, \"artifact\": \"final-fix-full-native.tap\", \"artifactSha256\": \"e4ef605cd0f8f136cdc964c7fb3e45cb7a1cf45230ee22d62658d5cbc563aa40\", \"counts\": {\"tests\": 1601, \"pass\": 1601, \"fail\": 0, \"cancelled\": 0, \"skipped\": 0, \"todo\": 0}, \"topLevelTests\": 882, \"durationMs\": 314342.083417, \"sqliteExperimentalWarningOccurrences\": 48}\nok 882 - 기존 채널 상품 응답에서 동적/조회 전용 값을 제거한다\n  ---\n  duration_ms: 0.960208\n  type: 'test'\n  ...\n1..882\n# tests 1601\n# suites 0\n# pass 1601\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 314342.083417\n"
+  }
+}

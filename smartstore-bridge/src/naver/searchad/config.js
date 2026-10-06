@@ -192,6 +192,7 @@ export function loadSearchAdConfig(env = process.env, { cwd = process.cwd() } = 
       max: 64 * 1024 * 1024
     }),
     allowReads: asBoolean(env.ATELIER_SEARCHAD_ALLOW_READS, true),
+    allowReportingJobs: asBoolean(env.ATELIER_SEARCHAD_ALLOW_REPORTING_JOBS, false),
     allowWrites: asBoolean(env.ATELIER_SEARCHAD_ALLOW_WRITES, false),
     allowCreates: asBoolean(env.ATELIER_SEARCHAD_ALLOW_CREATES, false),
     allowBatchWrites: asBoolean(env.ATELIER_SEARCHAD_ALLOW_BATCH_WRITES, false),
@@ -238,6 +239,7 @@ export function publicSearchAdConfig(config) {
       billingReads: config.allowBillingReads,
       accountAdmin: config.allowAccountAdmin,
       activeCanary: config.allowActiveCanary,
+      reportingJobs: config.allowReportingJobs,
       unverifiedOperations: config.allowUnverifiedOperations
     },
     automationMode: config.automationMode,

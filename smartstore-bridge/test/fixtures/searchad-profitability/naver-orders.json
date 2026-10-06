@@ -1,0 +1,98 @@
+{
+  "data": {
+    "contents": [
+      {
+        "content": {
+          "order": {
+            "ordererName": "PRIVATE_BUYER",
+            "ordererTel": "01012345678"
+          },
+          "productOrder": {
+            "productId": "123",
+            "productOrderId": "order-1",
+            "initialQuantity": 2,
+            "remainQuantity": 1,
+            "initialPaymentAmount": 14000,
+            "remainPaymentAmount": 7000,
+            "productOrderStatus": "PAYED",
+            "claimStatus": "CANCEL_DONE",
+            "shippingAddress": {
+              "name": "PRIVATE_BUYER"
+            }
+          },
+          "completedClaims": [
+            {
+              "claimId": "claim-1",
+              "claimType": "CANCEL",
+              "claimStatus": "CANCEL_DONE",
+              "requestQuantity": 1,
+              "claimCompleteOperationDate": "2026-10-01T10:00:00+09:00",
+              "claimRequestDetailContent": "PRIVATE_BUYER"
+            },
+            {
+              "claimId": "claim-1",
+              "claimType": "CANCEL",
+              "claimStatus": "CANCEL_DONE",
+              "requestQuantity": 1,
+              "claimCompleteOperationDate": "2026-10-01T10:00:00+09:00",
+              "claimRequestDetailContent": "PRIVATE_BUYER"
+            }
+          ]
+        }
+      },
+      {
+        "content": {
+          "order": {
+            "ordererName": "PRIVATE_BUYER",
+            "ordererTel": "01012345678"
+          },
+          "productOrder": {
+            "productId": "123",
+            "productOrderId": "order-1",
+            "initialQuantity": 2,
+            "remainQuantity": 1,
+            "initialPaymentAmount": 14000,
+            "remainPaymentAmount": 7000,
+            "productOrderStatus": "PAYED",
+            "claimStatus": "CANCEL_DONE",
+            "shippingAddress": {
+              "name": "PRIVATE_BUYER"
+            }
+          },
+          "completedClaims": [
+            {
+              "claimId": "claim-1",
+              "claimType": "CANCEL",
+              "claimStatus": "CANCEL_DONE",
+              "requestQuantity": 1,
+              "claimCompleteOperationDate": "2026-10-01T10:00:00+09:00",
+              "claimRequestDetailContent": "PRIVATE_BUYER"
+            },
+            {
+              "claimId": "claim-1",
+              "claimType": "CANCEL",
+              "claimStatus": "CANCEL_DONE",
+              "requestQuantity": 1,
+              "claimCompleteOperationDate": "2026-10-01T10:00:00+09:00",
+              "claimRequestDetailContent": "PRIVATE_BUYER"
+            }
+          ]
+        }
+      },
+      {
+        "content": {
+          "productOrder": {
+            "productId": "999",
+            "productOrderId": "not-this-product"
+          },
+          "completedClaims": []
+        }
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "size": 300,
+      "hasNext": false
+    }
+  }
+}

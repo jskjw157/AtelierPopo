@@ -8,6 +8,7 @@ import { createHierarchyChildRecipe } from './recipe-hierarchy.js';
 import { campaignResponse } from './postgres-campaign-create-repository.js';
 import { SEARCHAD_HIERARCHY_OPERATIONS as OPS } from './operations.js';
 import { ADGROUP_CREATE_FIELDS, IDENTITY_COLUMNS, REMOTE_ID, problem, epoch, active, sameSet, assertCampaignProvenance, adgroupResponse } from './adgroup-create-contract.js';
+import { ADGROUP_GENERATION_UUID, adgroupPlanMetadata, resolveAdgroupGenerationHistory } from './adgroup-generation-contract.js';
 
 /** Default-OFF internal service owns this coordinator. No token issuance or I/O. */
 export class PostgresAdgroupCreateRepository {
@@ -39,29 +40,41 @@ export class PostgresAdgroupCreateRepository {
     } finally { if (client) client.release(discard); }
   }
   async #graph(c, s) {
-    // Same prefix order as existing campaign creation/cleanup. Broad parent links
-    // expose malformed foreign children instead of hiding them behind a tenant filter.
+    // Lock the complete local root/adgroup generation history. A retired
+    // generation is history, not a remotely deleted child.
     const account = (await c.query('SELECT * FROM searchad_canary_accounts WHERE customer_id=$1 FOR UPDATE', [s.customerId])).rows[0];
     const run = (await c.query('SELECT *,xmin::text AS version FROM searchad_hierarchy_canary_runs WHERE hierarchy_run_id=$1 AND customer_id=$2 FOR UPDATE', [s.hierarchyRunId, s.customerId])).rows[0];
     if (!run) problem('NOT_FOUND', 'Local parent scope was not found.', 404);
     const ids = [s.parentObjectId, s.hierarchyObjectId].filter(Boolean);
     const objects = (await c.query('SELECT *,xmin::text AS version FROM searchad_hierarchy_objects WHERE hierarchy_run_id=$1 OR parent_object_id=ANY($2::uuid[]) ORDER BY hierarchy_object_id FOR UPDATE', [s.hierarchyRunId, ids])).rows;
     const holds = (await c.query('SELECT *,xmin::text AS version FROM searchad_remote_object_ownership WHERE owner_run_id=$1 OR hierarchy_object_id=ANY($2::uuid[]) OR parent_hierarchy_object_id=ANY($2::uuid[]) ORDER BY ownership_id FOR UPDATE', [s.hierarchyRunId, ids])).rows;
-    const events = (await c.query('SELECT * FROM searchad_hierarchy_events WHERE hierarchy_run_id=$1 ORDER BY event_id', [s.hierarchyRunId])).rows;
+    const events = (await c.query('SELECT * FROM searchad_hierarchy_events WHERE hierarchy_run_id=$1 OR hierarchy_object_id=ANY($2::uuid[]) ORDER BY event_id', [s.hierarchyRunId, ids])).rows;
     const parent = objects.find(o => o.hierarchy_object_id === s.parentObjectId);
     const parentHold = holds.find(h => h.hierarchy_object_id === s.parentObjectId);
-    const parentResult = events.find(e => e.hierarchy_object_id === s.parentObjectId && e.phase === 'create_result');
-    const parentPlan = parentResult ? (await c.query('SELECT *,xmin::text AS version FROM searchad_write_change_plans WHERE plan_id=$1 AND customer_id=$2 FOR UPDATE', [parentResult.details_json?.planId, s.customerId])).rows[0] : null;
-    const plan = s.planId ? (await c.query('SELECT *,xmin::text AS version FROM searchad_write_change_plans WHERE plan_id=$1 AND customer_id=$2 FOR UPDATE', [s.planId, s.customerId])).rows[0] : null;
-    const child = s.hierarchyObjectId ? objects.find(o => o.hierarchy_object_id === s.hierarchyObjectId) : null;
-    const childHold = child ? holds.find(h => h.hierarchy_object_id === child.hierarchy_object_id) : null;
-    const g = { account, run, objects, holds, events, parent, parentHold, parentPlan, child, childHold, plan };
+    const parentResults = events.filter(e => e.hierarchy_object_id === s.parentObjectId && e.phase === 'create_result');
+    const parentResult = parentResults[0];
+    const parentPlan = parentResult && parentResults.length === 1 ? (await c.query('SELECT *,xmin::text AS version FROM searchad_write_change_plans WHERE plan_id=$1 AND customer_id=$2 FOR UPDATE', [parentResult.details_json?.planId, s.customerId])).rows[0] : null;
+    const adgroupPlanIds = [...new Set(events.map(e => e.details_json?.planId).filter(id => typeof id === 'string' && ADGROUP_GENERATION_UUID.test(id)))];
+    if (s.planId && ADGROUP_GENERATION_UUID.test(s.planId) && !adgroupPlanIds.includes(s.planId)) adgroupPlanIds.push(s.planId);
+    const plans = adgroupPlanIds.length ? (await c.query('SELECT *,xmin::text AS version FROM searchad_write_change_plans WHERE plan_id=ANY($1::uuid[]) AND customer_id=$2 ORDER BY plan_id FOR UPDATE', [adgroupPlanIds,s.customerId])).rows : [];
+    const approvals = adgroupPlanIds.length ? (await c.query('SELECT *,xmin::text AS version FROM searchad_write_approvals WHERE plan_id=ANY($1::uuid[]) ORDER BY approval_id FOR UPDATE', [adgroupPlanIds])).rows : [];
+    const locks = adgroupPlanIds.length ? (await c.query('SELECT *,xmin::text AS version FROM searchad_write_locks WHERE plan_id=ANY($1::uuid[]) ORDER BY plan_id FOR UPDATE', [adgroupPlanIds])).rows : [];
+    const attempts = adgroupPlanIds.length ? (await c.query('SELECT *,xmin::text AS version FROM searchad_write_attempts WHERE plan_id=ANY($1::uuid[]) ORDER BY attempt_id FOR UPDATE', [adgroupPlanIds])).rows : [];
+    const risks = (await c.query('SELECT *,xmin::text AS version FROM searchad_risk_reservations WHERE owner_run_id=$1 ORDER BY reservation_id FOR UPDATE', [s.hierarchyRunId])).rows;
+    const g = { account, run, objects, holds, events, parent, parentHold, parentPlan, root: parent, rootPlan: parentPlan, plans, approvals, locks, attempts, risks };
     g.parentDescriptor = assertCampaignProvenance(g, s, this.#rootRecipe);
-    if (objects.length !== (s.hierarchyObjectId ? 2 : 1) || holds.length !== (childHold ? 2 : 1)) problem('GRAPH', 'Only the verified root and one selected adgroup may be present.');
-    if (s.hierarchyObjectId && (!child || child.customer_id !== s.customerId || child.hierarchy_run_id !== s.hierarchyRunId || child.parent_object_id !== s.parentObjectId || child.object_type !== 'adgroup' || child.deleted_at !== null || child.create_operation_key !== OPS.adgroup.create || child.read_operation_key !== OPS.adgroup.read || child.delete_operation_key !== OPS.adgroup.delete)) problem('GRAPH', 'Child must have the exact Customer, run, parent and operations.');
-    if (child && ((child.remote_id !== null) !== Boolean(childHold) || (child.remote_id !== null && (typeof child.remote_id !== 'string' || !REMOTE_ID.test(child.remote_id))))) problem('GRAPH', 'Returned child ID and ownership hold must agree.');
-    if (childHold && (childHold.customer_id !== s.customerId || childHold.object_type !== 'adgroup' || childHold.remote_id !== child.remote_id || childHold.owner_kind !== 'hierarchy_canary' || childHold.owner_run_id !== s.hierarchyRunId || childHold.parent_hierarchy_object_id !== s.parentObjectId || childHold.created_operation_key !== OPS.adgroup.create)) problem('GRAPH', 'Child ownership belongs to another scope.');
-    g.descriptor = this.#recipe.createAdgroup({ customerId: s.customerId, hierarchyRunId: s.hierarchyRunId, parent: { customerId: s.customerId, hierarchyRunId: s.hierarchyRunId, objectType: 'campaign', state: 'owned', remoteId: parent.remote_id } });
+    if (objects.some(o => o.hierarchy_object_id !== s.parentObjectId && (o.customer_id !== s.customerId || o.hierarchy_run_id !== s.hierarchyRunId || o.object_type !== 'adgroup' || o.parent_object_id !== s.parentObjectId))) problem('GRAPH', 'Only the verified campaign and its locally proven adgroup generations are supported.');
+    const adgroupIds = new Set(objects.filter(o => o.object_type === 'adgroup').map(o => o.hierarchy_object_id));
+    if (holds.some(h => h.hierarchy_object_id !== s.parentObjectId && !adgroupIds.has(h.hierarchy_object_id))) problem('GRAPH', 'Unexpected ownership rows are outside the bounded adgroup generation graph.');
+    g.generation = resolveAdgroupGenerationHistory(g, s.hierarchyObjectId ?? null, (code,message) => problem(code,message));
+    g.child = g.generation.active;
+    g.childHold = g.child ? holds.find(h => h.hierarchy_object_id === g.child.hierarchy_object_id) : null;
+    g.plan = s.planId ? plans.find(p => p.plan_id === s.planId) : g.generation.activeBinding?.plan ?? null;
+    if (g.child) {
+      if ((g.child.remote_id !== null) !== Boolean(g.childHold) || (g.child.remote_id !== null && (typeof g.child.remote_id !== 'string' || !REMOTE_ID.test(g.child.remote_id)))) problem('GRAPH', 'Current returned child ID and ownership hold must agree.');
+      if (g.childHold && (g.childHold.customer_id !== s.customerId || g.childHold.object_type !== 'adgroup' || g.childHold.remote_id !== g.child.remote_id || g.childHold.owner_kind !== 'hierarchy_canary' || g.childHold.owner_run_id !== s.hierarchyRunId || g.childHold.parent_hierarchy_object_id !== s.parentObjectId || g.childHold.created_operation_key !== OPS.adgroup.create)) problem('GRAPH', 'Current child ownership belongs to another scope.');
+    }
+    g.descriptor = g.generation.descriptor;
     return g;
   }
   #available(g) {
@@ -77,7 +90,19 @@ export class PostgresAdgroupCreateRepository {
     return Math.min(epoch(grant.expires_at), epoch(evidence.expires_at));
   }
   #meta(g, s, activationId) {
-    return { kind: 'haar_adgroup_create_v1', customerId: s.customerId, hierarchyRunId: s.hierarchyRunId, hierarchyObjectId: s.hierarchyObjectId, parentObjectId: s.parentObjectId, parentRemoteId: g.parent.remote_id, parentCreatePlanId: g.parentPlan.plan_id, parentAfterHash: g.parentPlan.applied_after_hash, activationId };
+    const generation = s.hierarchyObjectId && g.generation.active?.hierarchy_object_id === s.hierarchyObjectId ? g.generation.activeGeneration : g.generation.nextGeneration;
+    return adgroupPlanMetadata({
+      customerId:s.customerId,
+      hierarchyRunId:s.hierarchyRunId,
+      hierarchyObjectId:s.hierarchyObjectId,
+      parentObjectId:s.parentObjectId,
+      parentRemoteId:g.parent.remote_id,
+      parentCreatePlanId:g.parentPlan.plan_id,
+      parentAfterHash:g.parentPlan.applied_after_hash,
+      activationId,
+      generation,
+      predecessor:g.generation.predecessor
+    });
   }
   #binding(g, s) {
     const matches = g.events.filter(e => e.hierarchy_object_id === s.hierarchyObjectId && e.phase === 'adgroup_plan');
@@ -94,7 +119,7 @@ export class PostgresAdgroupCreateRepository {
     await c.query(`INSERT INTO searchad_write_attempts(attempt_id,plan_id,phase,status,request_fingerprint,response_json,created_at)
       VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)`, [randomUUID(),s.planId,phase,status,details.requestFingerprint ?? null,JSON.stringify(safe),at]);
   }
-  #signature(g) { return JSON.stringify([g.run.version, g.objects.map(o => [o.hierarchy_object_id,o.version]), g.holds.map(h => [h.ownership_id,h.version]), g.parentPlan.version, g.plan?.version, g.events.map(e => e.event_id)]); }
+  #signature(g) { return JSON.stringify([g.run.version, g.objects.map(o => [o.hierarchy_object_id,o.version]), g.holds.map(h => [h.ownership_id,h.version]), g.parentPlan.version, g.plans.map(p => [p.plan_id,p.version]), g.approvals.map(a => [a.approval_id,a.version]), g.locks.map(l => [l.plan_id,l.version]), g.attempts.map(a => [a.attempt_id,a.version]), g.risks.map(r => [r.reservation_id,r.version]), g.events.map(e => e.event_id)]); }
   #ticket(g, scope, stage, extra = {}) { const ticket = Object.freeze({}); this.#tickets.set(ticket, { signature: this.#signature(g), scope: structuredClone(scope), stage, ...extra }); return ticket; }
   #take(ticket, stage) { const v = this.#tickets.get(ticket); this.#tickets.delete(ticket); if (!v || v.stage !== stage) problem('TICKET', 'An unused internal stage ticket is required.'); return v; }
   #unchanged(g, v) { if (this.#signature(g) !== v.signature) problem('STALE', 'Parent or child state changed during I/O; no blind replay.'); }
@@ -103,16 +128,18 @@ export class PostgresAdgroupCreateRepository {
     return this.#tx(async c => {
       const g = await this.#graph(c, s); this.#available(g);
       const until = await this.#authority(c, g, s.activationId, this.#now());
-      if (g.events.some(e => e.phase.startsWith('adgroup_'))) problem('PRIOR_PLAN', 'A prior adgroup plan cannot be replaced or repeated.');
+      if (g.generation.active || ![1,2].includes(g.generation.nextGeneration)) problem('PRIOR_PLAN', 'Only an empty initial slot or one exactly retired predecessor may be planned.');
       const scope = { ...s, hierarchyObjectId: randomUUID(), planId: randomUUID() };
-      const meta = this.#meta(g, scope, s.activationId), now = this.#now(), at = new Date(now).toISOString();
+      const meta = this.#meta(g, scope, s.activationId), generation = g.generation.nextGeneration, now = this.#now(), at = new Date(now).toISOString();
       const expiresAt = new Date(Math.min(until, now + this.#ttl * 1000)).toISOString();
       await c.query(`INSERT INTO searchad_hierarchy_objects(hierarchy_object_id,hierarchy_run_id,customer_id,object_type,parent_object_id,create_operation_key,read_operation_key,delete_operation_key,state,created_at,updated_at)
         VALUES($1,$2,$3,'adgroup',$4,$5,$6,$7,'planned',$8,$8)`, [scope.hierarchyObjectId,s.hierarchyRunId,s.customerId,s.parentObjectId,OPS.adgroup.create,OPS.adgroup.read,OPS.adgroup.delete,at]);
       await c.query(`INSERT INTO searchad_write_change_plans(plan_id,customer_id,mutation_operation_key,mutation_json,read_json,before_json,before_hash,expected_after_json,rollback_json,reason,status,created_by,created_at,expires_at)
         VALUES($1,$2,$3,$4::jsonb,'{}',$5::jsonb,$6,$7::jsonb,NULL,'Create one stopped adgroup under the verified server-created campaign.','planned',$8,$9,$10)`, [scope.planId,s.customerId,OPS.adgroup.create,JSON.stringify(g.descriptor),JSON.stringify(meta),contentHash(meta),JSON.stringify(g.descriptor.body),s.actorPrincipalId,at,expiresAt]);
-      await this.#audit(c, scope, 'adgroup_plan', 'planned', { activationId: s.activationId, beforeHash: contentHash(meta), requestFingerprint: contentHash(g.descriptor), actorPrincipalId: s.actorPrincipalId }, at);
-      await this.#authority(c, g, s.activationId, this.#now());
+      const generationDetails = generation === 2 ? { generation:2, predecessorObjectId:g.generation.predecessor.object.hierarchy_object_id, predecessorPlanId:g.generation.predecessor.plan.plan_id, predecessorRetirementEventId:g.generation.predecessor.retirementEvent.event_id } : {};
+      await this.#audit(c, scope, 'adgroup_plan', 'planned', { activationId: s.activationId, beforeHash: contentHash(meta), requestFingerprint: contentHash(g.descriptor), actorPrincipalId: s.actorPrincipalId, ...generationDetails }, at);
+      const after = await this.#graph(c, scope);
+      await this.#authority(c, after, s.activationId, this.#now());
       if (this.#now() >= Date.parse(expiresAt)) problem('EXPIRED', 'Plan expired before commit.');
       return { customerId: s.customerId, hierarchyRunId: s.hierarchyRunId, parentObjectId: s.parentObjectId, hierarchyObjectId: scope.hierarchyObjectId, planId: scope.planId, state: 'planned', expiresAt };
     });
