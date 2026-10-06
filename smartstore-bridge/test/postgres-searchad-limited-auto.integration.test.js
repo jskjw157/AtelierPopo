@@ -16,7 +16,7 @@ import { PostgresAutomationRepository } from '../src/naver/searchad/automation/p
 const key='limited-auto-native-admin-'.repeat(4),iso=n=>new Date(n).toISOString();
 const context={principal:{principalId:'fixture-admin',role:'admin',customerIds:['1001']},requestId:'synthetic-auto-test'};
 function native(t){if(process.env.TEST_DATABASE_URL)return true;assert.notEqual(process.env.CI,'true');t.skip('TEST_DATABASE_URL required');return false;}
-async function fixture(t,{gate=true,activation=true,activationTtl=3600000,worker=false,nativeSources=false,syntheticIncrease=false,mappingDeadline=null,capabilityDeadline=null,limits={},recipe={kind:'campaign_budget',dailyBudgetKrw:800}}={}){
+async function fixture(t,{gate=true,activation=true,activationTtl=3600000,worker=false,nativeSources=false,syntheticIncrease=false,mappingDeadline=null,capabilityDeadline=null,getMs=0,sourceMs=0,limits={},recipe={kind:'campaign_budget',dailyBudgetKrw:800}}={}){
   const f=await postgresCompletionFixture(t);let time=autoNow,failVerify=false,mutations=0;
   const state={nccCampaignId:'cmp-1',dailyBudget:1000,userLock:false};
   const jobs=new Map(),root=nativeSources?fs.mkdtempSync(path.join(os.tmpdir(),'auto-report-sources-')):null;
@@ -34,13 +34,14 @@ async function fixture(t,{gate=true,activation=true,activationTtl=3600000,worker
       }
       if(init.method==='PUT'){mutations++;Object.assign(state,JSON.parse(init.body));}
       if(init.method==='GET'&&failVerify&&mutations)throw new TypeError('synthetic verification response loss');
+      if(init.method==='GET')time+=getMs;
       return new Response(JSON.stringify(state),{headers:{'content-type':'application/json'}});
     }});
     const completion=server.app.searchAdCompletionRuntime;
     if(!nativeSources)completion.circuitService.spendEvidence={async select(){return {spendGrossKrw:100,baselineGrossKrw:100,validUntil:autoNow+86400000};}};
     // Explicit synthetic source selector: no eligible/allowed/approval result.
     if(syntheticIncrease)completion.circuitService.lossEvidence={async select(){return {customerId:'1001',quality:'actual',completeCustomerDay:true,identityVerified:true,observedAt:autoNow,statDateKst:'2026-10-05',amountNetKrw:0};}};
-    if(!nativeSources)completion.automationRepository.autoEvidenceSelector={async select(input){const value=autoFacts(autoNow);value.mapping.validUntil=mappingDeadline;value.policy=input;value.evidence.identity=completion.identityResolver('1001');value.capability.automationEnabled=gate;if(syntheticIncrease){value.capability.estimate={verified:true,observedAt:iso(autoNow),identity:value.evidence.identity,...(capabilityDeadline?{expiresAt:capabilityDeadline}:{})};value.capability.balance={verified:true,observedAt:iso(autoNow),identity:value.evidence.identity,availableKrw:'30000'};}return value;}};
+    if(!nativeSources)completion.automationRepository.autoEvidenceSelector={async select(input){time+=sourceMs;const value=autoFacts(autoNow);value.mapping.validUntil=mappingDeadline;value.policy=input;value.evidence.identity=completion.identityResolver('1001');value.capability.automationEnabled=gate;if(syntheticIncrease){value.capability.estimate={verified:true,observedAt:iso(autoNow),identity:value.evidence.identity,...(capabilityDeadline?{expiresAt:capabilityDeadline}:{})};value.capability.balance={verified:true,observedAt:iso(autoNow),identity:value.evidence.identity,availableKrw:'30000'};}return value;}};
     return server;
   }
   await start();
@@ -60,8 +61,60 @@ async function fixture(t,{gate=true,activation=true,activationTtl=3600000,worker
   const evaluate=()=>server.call(key,'POST','/api/v1/searchad/automation/evaluate',{customerId:'1001',policyId:policy.policyId});
   const execute=runId=>server.call(key,'POST',`/api/v1/searchad/automation/runs/${runId}/execute-auto`,{customerId:'1001'});
   async function ingest(statDate,at){time=at;const runtime=server.app.searchAdCompletionRuntime,created=await runtime.jobService.register({customerId:'1001',kind:'stat',reportType:'AD',statDate,intentKey:`auto-source:${statDate}:${at}`},context),input={customerId:'1001',reportJobId:created.reportJobId};await runtime.ingestionService.ingest(input,context);await runtime.spendEvidenceService.evaluateGeneration(input,context);return created.reportJobId;}
-  return {...f,policy,policyInput,evaluate,execute,ingest,get server(){return server;},get mutations(){return mutations;},setTime:n=>time=n,failVerify:()=>failVerify=true,async restart(){await server.api.close();await start();},state};
+  return {...f,policy,policyInput,evaluate,execute,ingest,get server(){return server;},get mutations(){return mutations;},get time(){return time;},clearDelays(){getMs=0;sourceMs=0;},setTime:n=>time=n,failVerify:()=>failVerify=true,async restart(){await server.api.close();await start();},state};
 }
+
+test('final fix actual native Auto advances through signed GET and source wait then ordinary engine sends once',async t=>{
+  if(!native(t))return;const f=await fixture(t,{getMs:100,sourceMs:50}),run=await f.evaluate();
+  assert.equal(run.body.state,'ready',JSON.stringify(run.body.decision.reasons));
+  assert.equal(run.body.decision.selected.current.observedAt,autoNow+100);
+  assert.equal(run.body.decision.slotAt,iso(autoNow));assert.equal(f.time,autoNow+150);
+  const stored=(await f.pool.query('SELECT observed_at,snapshot_hash FROM searchad_automation_current_observations')).rows;
+  assert.equal(stored.length,1);assert.equal(stored[0].observed_at.toISOString(),iso(autoNow+100));
+  assert.equal(stored[0].snapshot_hash,run.body.decision.selected.current.snapshotHash);
+  f.clearDelays();const executed=await f.execute(run.body.runId);assert.equal(executed.status,200,JSON.stringify(executed));assert.equal(executed.body.state,'applied');assert.equal(f.mutations,1);
+  assert.deepEqual((await f.pool.query('SELECT (SELECT count(*)::int FROM searchad_write_change_plans) plans,(SELECT count(*)::int FROM searchad_write_approvals) approvals,(SELECT count(*)::int FROM searchad_write_execution_claims) claims')).rows[0],{plans:1,approvals:1,claims:1});
+  assert.equal((await f.execute(run.body.runId)).status,409);assert.equal(f.mutations,1);
+});
+test('final fix actual native Auto elapsed and future sources grant no plan or token',async t=>{
+  if(!native(t))return;
+  for(const [name,options,reason] of [
+    ['mapping equality',{sourceMs:100,mappingDeadline:iso(autoNow+100)},'MAPPING_UNAVAILABLE'],
+    ['stale current',{sourceMs:1800001},'CURRENT_VALUE_UNAVAILABLE'],
+    ['stale commerce',{sourceMs:900001},'STOCK_SALES_UNAVAILABLE'],
+    ['genuine future current',{getMs:100},'CURRENT_VALUE_UNAVAILABLE'],
+    ['Circuit elapsed deadline',{},'EVIDENCE_EXPIRED']
+  ])await t.test(name,async t=>{
+    const f=await fixture(t,options),runtime=f.server.app.searchAdCompletionRuntime;
+    if(name==='genuine future current'){
+      const append=runtime.automationRepository.appendCurrent.bind(runtime.automationRepository);
+      runtime.automationRepository.appendCurrent=async value=>{await append(value);f.setTime(value.observedAt-1);};
+    }
+    if(name==='Circuit elapsed deadline')runtime.circuitService.spendEvidence={async select(){f.setTime(autoNow+1001);return {spendGrossKrw:100,baselineGrossKrw:100,validUntil:autoNow+1000};}};
+    const run=await f.evaluate();assert.equal(run.body.state,'blocked');assert.ok(run.body.decision.reasons.includes(reason),JSON.stringify(run.body.decision.reasons));
+    assert.equal((await f.execute(run.body.runId)).status,409);assert.equal(f.mutations,0);
+    assert.deepEqual((await f.pool.query('SELECT (SELECT count(*)::int FROM searchad_write_change_plans) plans,(SELECT count(*)::int FROM searchad_write_approvals) approvals,(SELECT count(*)::int FROM searchad_write_execution_claims) claims')).rows[0],{plans:0,approvals:0,claims:0});
+  });
+});
+test('final fix native millisecond binding stays exact and approval deadline remains exclusive',async t=>{
+  if(!native(t))return;
+  await t.test('one millisecond source mismatch denies instead of rounding',async t=>{
+    const f=await fixture(t,{getMs:100,sourceMs:50}),run=(await f.evaluate()).body;
+    await f.pool.query("UPDATE searchad_automation_runs SET decision_json=jsonb_set(decision_json,'{selected,current,observedAt}',$2::jsonb) WHERE run_id=$1",[run.runId,JSON.stringify(run.decision.selected.current.observedAt+1)]);
+    const denied=await f.execute(run.runId);assert.equal(denied.status,409);assert.equal(denied.body.error.code,'SEARCHAD_AUTOMATION_CURRENT_BINDING');assert.equal(f.mutations,0);
+    assert.deepEqual((await f.pool.query('SELECT (SELECT count(*)::int FROM searchad_write_change_plans) plans,(SELECT count(*)::int FROM searchad_write_approvals) approvals')).rows[0],{plans:0,approvals:0});
+  });
+  await t.test('native .150 approval admits before expiry but denies equality and after',async t=>{
+    const f=await fixture(t,{getMs:100,sourceMs:50}),run=(await f.evaluate()).body,runtime=f.server.app.searchAdCompletionRuntime;
+    f.clearDelays();const prepared=await runtime.automationService.prepare({customerId:'1001',runId:run.runId},context),writer=f.server.app.searchAdWriteRuntime;
+    const approval=await writer.approvalService.approve(prepared.planId,{actor:'fixture-executor',confirmation:'APPROVE_SEARCHAD_CHANGE'});
+    const expiry=Date.parse(approval.expiresAt);assert.equal(expiry%1000,150);
+    const authority=()=>runtime.automationRepository.authority({customerId:'1001',runId:run.runId,states:['approved']});
+    f.setTime(expiry-1);assert.equal((await authority()).run.state,'approved');
+    for(const at of [expiry,expiry+1]){f.setTime(at);await assert.rejects(authority(),{code:'SEARCHAD_AUTOMATION_APPROVAL_BINDING'});}
+    assert.equal(f.mutations,0);assert.equal((await f.pool.query('SELECT count(*)::int n FROM searchad_write_execution_claims')).rows[0].n,0);
+  });
+});
 
 test('auto_calls_real_plan_approval_execute_once with exact synthetic budget outcome verification',async t=>{
   if(!native(t))return;const f=await fixture(t),run=await f.evaluate();assert.equal(run.body.state,'ready',JSON.stringify(run.body));

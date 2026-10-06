@@ -142,6 +142,7 @@ export function createHttpApiV05({ app, env = process.env, logger = defaultLogge
     const logMethod = LOG_METHODS.has(req.method) ? req.method : 'OTHER';
     let logRoute = null;
     res.setHeader('X-Request-Id', requestId);
+    res.setHeader('X-Log-Request-Id', logRequestId);
     applyCors(req, res, httpConfig);
     if (res.hasHeader('Access-Control-Allow-Methods')) {
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');

@@ -132,7 +132,7 @@ test('one composed Customer workflow crosses HTTP, native sources, standalone wo
   const recordingLogger = origin => Object.fromEntries(['info', 'warn', 'error'].map(level => [level, (message, context) => {
     loggerEvents.push({ origin, level, message, context: structuredClone(context) }); applicationLogger[level](message, context);
   }]));
-  const originalWrite = process.stderr.write; let forbidden = 0, time = now, server, workerProcess, loseVerification = false;
+  const originalWrite = process.stderr.write; let forbidden = 0, time = now, server, workerProcess, loseVerification = false, getAdvanceMs = 0, sourceAdvanceMs = 0;
   const jobs = new Map(), commerceCalls = [], cafeCalls = [], state = { nccCampaignId: 'cmp-1', dailyBudget: 1000, userLock: false };
   globalThis.fetch = async (url, init) => {
     if (new URL(url).origin.startsWith('http://127.0.0.1:')) return nativeFetch(url, init);
@@ -180,6 +180,7 @@ test('one composed Customer workflow crosses HTTP, native sources, standalone wo
       }
       if (init.method === 'PUT') { Object.assign(state, JSON.parse(init.body)); loseVerification = true; }
       else if (loseVerification) { loseVerification = false; throw new TypeError('Synthetic verification response loss after accepted mutation'); }
+      if(init.method === 'GET') time += getAdvanceMs;
       return Response.json(state);
     }
   };
@@ -271,17 +272,39 @@ test('one composed Customer workflow crosses HTTP, native sources, standalone wo
     assert.equal(nativeAuto.decision.selected.auto.capability.estimateReason, 'ESTIMATE_READ_CAPABILITY_UNAVAILABLE');
     assert.equal(f.calls.filter(call => call.method === 'PUT').length, 0);
   });
+  await t.test('elapsed KST window rejects the actually ingested seven-day history without plan or token', async () => {
+    const boundary = Date.parse('2026-10-05T14:59:59.999Z'); time = boundary;
+    ok(await call(completionOperatorKey, 'POST', '/api/v1/searchad/reporting/stats', { ...scoped, entityType: 'campaign', entityId: 'cmp-1', since: '2026-10-05', until: '2026-10-05' }), 201);
+    runtime().automationRepository.autoEvidenceSelector = { async select(policy) {
+      const value = autoFacts(boundary); value.policy = policy; value.evidence.identity = runtime().identityResolver('1001');
+      value.history = nativeAuto.decision.selected.auto.history; time += 1; return value;
+    } };
+    runtime().circuitService.spendEvidence = { async select() { return { spendGrossKrw: 100, baselineGrossKrw: 100, validUntil: boundary + 86400000 }; } };
+    const policy = await createPolicy('limited_auto', { delegation: { ...delegation(), expiresAt: iso(boundary + 3600000) } }), run = await evaluate(policy);
+    assert.equal(run.state, 'blocked'); assert.ok(run.decision.reasons.includes('EVIDENCE_WINDOW_CHANGED'));
+    assert.ok(run.decision.reasons.includes('SEVEN_COMPLETE_KST_DAYS_REQUIRED'));
+    assert.equal(run.decision.selected.auto.history.generations.length, 7);
+    assert.notEqual((await call(executorKey, 'POST', `/api/v1/searchad/automation/runs/${run.runId}/execute-auto`, scoped)).status, 200);
+    assert.equal(f.calls.filter(call => call.method === 'PUT').length, 0);
+    assert.deepEqual((await f.pool.query('SELECT (SELECT count(*)::int FROM searchad_write_change_plans) plans,(SELECT count(*)::int FROM searchad_write_approvals) approvals')).rows[0], { plans: 0, approvals: 0 });
+    time = now;
+  });
   await t.test('positive bounded-auto private source facts run real eligibility approval activation and writer', async () => {
     // Only this positive software fixture supplies synthetic financial facts.
     // The seven-day generation history came through actual native ingestion.
     runtime().automationRepository.autoEvidenceSelector = { async select(policy) {
+      time += sourceAdvanceMs;
       const value = autoFacts(now); value.policy = policy; value.evidence.identity = runtime().identityResolver('1001');
       value.history = nativeAuto.decision.selected.auto.history; return value;
     } };
     runtime().circuitService.spendEvidence = { async select() { return { spendGrossKrw: 100, baselineGrossKrw: 100, validUntil: now + 86400000 }; } };
     await activation(f, server, { operationKey: CAMPAIGN_WRITE, fieldScope: ['campaign.dailyBudget', 'campaign.userLock'] });
+    getAdvanceMs = 100; sourceAdvanceMs = 50;
     const policy = await createPolicy('limited_auto', { delegation: delegation() }); syntheticAuto = await evaluate(policy);
     assert.equal(syntheticAuto.state, 'ready', JSON.stringify(syntheticAuto));
+    assert.equal(syntheticAuto.decision.selected.current.observedAt, now + 100);
+    assert.equal(syntheticAuto.decision.slotAt, iso(now)); assert.equal(time, now + 150);
+    getAdvanceMs = 0; sourceAdvanceMs = 0;
     const approvalService = server.app.searchAdWriteRuntime.approvalService, approve = approvalService.approve.bind(approvalService);
     approvalService.approve = async (...args) => { const result = await approve(...args); tokens.push(result.executionToken); return result; };
     const route = `/api/v1/searchad/automation/runs/${syntheticAuto.runId}/execute-auto`;
@@ -289,7 +312,7 @@ test('one composed Customer workflow crosses HTTP, native sources, standalone wo
     const results = await Promise.all([call(executorKey, 'POST', route, scoped), call(executorKey, 'POST', route, scoped)]);
     assert.ok(results.every(result => result.status === 409), JSON.stringify(results));
     const held = ok(await call(completionReaderKey, 'GET', `/api/v1/searchad/automation/runs/${syntheticAuto.runId}?customerId=1001`));
-    assert.ok(['unknown_outcome', 'manual_review'].includes(held.state)); assert.equal(state.dailyBudget, 800);
+    assert.ok(['unknown_outcome', 'manual_review'].includes(held.state), JSON.stringify({state:held.state,results})); assert.equal(state.dailyBudget, 800);
     assert.equal(f.calls.filter(call => call.method === 'PUT').length, 1);
     const counts = (await f.pool.query('SELECT (SELECT count(*)::int FROM searchad_write_approvals) approvals,(SELECT count(*)::int FROM searchad_write_execution_claims) claims')).rows[0];
     assert.deepEqual(counts, { approvals: 1, claims: 1 });

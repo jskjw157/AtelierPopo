@@ -13,6 +13,7 @@ test('actual HTTP handler preserves denial diagnostics without raw request or ex
   const temporaryUrl = `https://api.searchad.naver.com/report-download?authtoken=${marker}`;
   const id = '00000000-0000-0000-0000-000000000001', events = [], output = [];
   let lookups = 0, network = 0;
+  const responses = [];
   const originalWrite = process.stderr.write, originalFetch = globalThis.fetch;
   const recordingLogger = Object.fromEntries(['info', 'warn', 'error'].map(level => [level, (message, context) => {
     events.push({ level, message, context: structuredClone(context) }); applicationLogger[level](message, context);
@@ -39,7 +40,10 @@ test('actual HTTP handler preserves denial diagnostics without raw request or ex
       writeHead(status, values = {}) { this.statusCode = status; this.headersSent = true; for (const [name, value] of Object.entries(values)) this.setHeader(name, value); },
       end(body) { result = { status: this.statusCode, body: JSON.parse(body) }; }, destroy() { throw new Error('Unexpected response destruction'); }
     };
-    await api.server.listeners('request')[0](req, res); return result;
+    const firstEvent = events.length;
+    await api.server.listeners('request')[0](req, res);
+    result.headers = Object.fromEntries(headers);
+    responses.push({ result, requestId, events: events.slice(firstEvent) }); return result;
   }
   for (const query of [`authtoken=${marker}`, `executionToken=${marker}`, `downloadUrl=${encodeURIComponent(temporaryUrl)}`]) {
     const result = await invoke(`/api/v1/searchad/reporting/jobs/${id}?customerId=1001&${query}`);
@@ -53,6 +57,7 @@ test('actual HTTP handler preserves denial diagnostics without raw request or ex
   const thrown = await invoke(`/api/v1/searchad/reporting/jobs/${marker}?customerId=1001`, { requestId: marker });
   assert.equal(thrown.status, 500); assert.equal(thrown.body.error.code, 'INTERNAL_ERROR');
   assert.equal((await invoke(`/api/v1/searchad/reporting/jobs/${id}?customerId=1001`)).status, 502);
+  for (const requestId of [undefined, marker]) assert.equal((await invoke('/openapi-searchad-completion-reader.json', { requestId })).status, 200);
   assert.equal(lookups, 2); assert.equal(network, 0); assert.equal(api.server.listening, false);
   assert.ok(events.some(event => event.level === 'info' && event.message === 'HTTP request'));
   assert.equal(events.filter(event => event.level === 'error').length, 7);
@@ -70,4 +75,14 @@ test('actual HTTP handler preserves denial diagnostics without raw request or ex
     assert.ok(event.context.route === null || event.context.route.startsWith('^'));
     assert.ok(!Object.hasOwn(event.context, 'url') && !Object.hasOwn(event.context, 'pathname') && !Object.hasOwn(event.context, 'message') && !Object.hasOwn(event.context, 'name'));
   }
+  const safeIds = new Set();
+  for (const { result, requestId, events: requestEvents } of responses) {
+    const safeId = result.headers['x-log-request-id'];
+    assert.match(safeId || '', /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.ok(requestEvents.length > 0); assert.ok(requestEvents.every(event => event.context.requestId === safeId));
+    assert.notEqual(safeId, result.headers['x-request-id']); safeIds.add(safeId);
+    if (requestId) assert.equal(result.headers['x-request-id'], requestId);
+    if (result.body.error) assert.equal(result.body.error.requestId, result.headers['x-request-id']);
+  }
+  assert.equal(safeIds.size, responses.length, 'each response has its own server-owned safe log UUID');
 });

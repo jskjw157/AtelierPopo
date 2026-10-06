@@ -34,7 +34,14 @@ export class CircuitService {
     if (Object.keys(input).some(k => !['customerId','entityType','entityId','ruleId','actionClass','incrementalSpendKrw'].includes(k))) throw circuitError('INPUT', 400);
     const result = await this.projection.catchUp({ customerId: input.customerId });
     if (!result.ready) return { allowed: false, reasons: ['PROJECTION_NOT_READY'] };
-    return this.repository.transaction(input.customerId, async client => { const { allowed, reasons } = await this.decision({ ...input, purpose: 'ordinary' }, { client, now: this.clock() }); return { allowed, reasons }; });
+    const decision=await this.repository.transaction(input.customerId, client => this.decision({ ...input, purpose: 'ordinary' }, { client, now: this.clock() }));
+    // Keep the existing snapshot check private, including time spent reading
+    // evidence and committing the transaction. The send fence checks it again.
+    if(decision.allowed){
+      try{decision.validateSnapshot();}
+      catch(error){if(error?.code!=='SEARCHAD_CIRCUIT_EVIDENCE_EXPIRED')throw error;return {allowed:false,reasons:[...decision.reasons,'EVIDENCE_EXPIRED']};}
+    }
+    return {allowed:decision.allowed,reasons:decision.reasons};
   }
   async decision(dispatch, { client, now }) {
     if (['rollback','report_registration'].includes(dispatch.purpose)) return { allowed: true, reasons: [] };

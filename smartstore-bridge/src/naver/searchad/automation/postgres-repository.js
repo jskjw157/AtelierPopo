@@ -8,6 +8,8 @@ import { evaluateAutoEligibility,delegationValid,autoValidityDeadline } from './
 const preparations=new AsyncLocalStorage();
 export function currentAutomationPreparation() { return preparations.getStore(); }
 const iso=value=>new Date(value).toISOString();
+// pg returns timestamptz as Date. Date.parse(Date) loses its millisecond part.
+const sourceTime=value=>value instanceof Date?value.getTime():Date.parse(value);
 function policy(row) { return row ? { ...row.policy_json, policyId:row.policy_id, customerId:row.customer_id, revision:row.revision, ruleId:row.rule_id, mode:row.mode, enabled:row.enabled, entityType:row.entity_type, entityId:row.entity_id } : null; }
 export function publicRun(row) { return row ? { runId:row.run_id,customerId:row.customer_id,policyId:row.policy_id,policyRevision:row.policy_revision,ruleId:row.rule_id,decisionKey:row.decision_key,inputHash:row.input_hash,state:row.state,planId:row.plan_id,approvalId:row.approval_id,revokedAt:row.revoked_at,decision:row.decision_json,createdAt:iso(row.created_at) } : null; }
 export class PostgresAutomationRepository {
@@ -37,11 +39,11 @@ export class PostgresAutomationRepository {
     const currentSource=(await client.query(`SELECT * FROM searchad_automation_current_observations
       WHERE customer_id=$1 AND observation_id=$2 AND entity_type=$3 AND entity_id=$4 AND operation_key=$5
       AND spec_sha=$6 AND credential_fingerprint=$7 AND upstream_base_url=$8`,[customerId,observation.observationId,p.entityType,p.entityId,CAMPAIGN_READ,identity.specSha,identity.credentialFingerprint,identity.upstreamBaseUrl])).rows[0];
-    if(!currentSource || currentSource.snapshot_hash!==observation.snapshotHash || contentHash(currentSource.snapshot_json)!==observation.snapshotHash || Date.parse(currentSource.observed_at)!==observation.observedAt)throw automationError('CURRENT_BINDING');
+    if(!currentSource || currentSource.snapshot_hash!==observation.snapshotHash || contentHash(currentSource.snapshot_json)!==observation.snapshotHash || sourceTime(currentSource.observed_at)!==observation.observedAt)throw automationError('CURRENT_BINDING');
     const statsSource=stats?.observationId && (await client.query(`SELECT * FROM searchad_stats_observations
       WHERE customer_id=$1 AND observation_id=$2 AND entity_type=$3 AND entity_id=$4
       AND spec_sha=$5 AND credential_fingerprint=$6 AND upstream_base_url=$7 AND response_sha=$8`,[customerId,stats.observationId,p.entityType,p.entityId,identity.specSha,identity.credentialFingerprint,identity.upstreamBaseUrl,stats.responseSha])).rows[0];
-    const observedAt=Date.parse(statsSource?.observed_at), cycleAt=Date.parse(statsSource?.cycle_at);
+    const observedAt=sourceTime(statsSource?.observed_at), cycleAt=sourceTime(statsSource?.cycle_at);
     let validUntil=Math.min(observation.observedAt+p.maxCurrentAgeMs,observedAt+p.maxCurrentAgeMs,cycleAt+p.maxCurrentAgeMs);
     if(!Number.isFinite(validUntil) || now>=validUntil || observedAt>now || cycleAt>now)throw automationError('EVIDENCE_EXPIRED');
     const worker=currentWorkerDispatch();
@@ -69,7 +71,7 @@ export class PostgresAutomationRepository {
           WHERE customer_id=$1 AND plan_id=$2 AND approval_id=$3 AND rule_id=$4
           AND NOT EXISTS(SELECT 1 FROM searchad_write_execution_outcomes o WHERE o.customer_id=c.customer_id AND o.ordinal=c.ordinal)`,[customerId,run.planId,run.approvalId,run.ruleId])).rows[0];
         if(!approval?.used_at || !claim || reservation?.state!=='consumed')throw automationError('CLAIM_BINDING');
-      } else if(!approval || approval.used_at || Date.parse(approval.expires_at)<=now || reservation?.state!=='reserved')throw automationError('APPROVAL_BINDING');
+      } else if(!approval || approval.used_at || sourceTime(approval.expires_at)<=now || reservation?.state!=='reserved')throw automationError('APPROVAL_BINDING');
     }
     if(planId) {
       const plan=(await client.query('SELECT * FROM searchad_write_change_plans WHERE customer_id=$1 AND plan_id=$2',[customerId,planId])).rows[0];
