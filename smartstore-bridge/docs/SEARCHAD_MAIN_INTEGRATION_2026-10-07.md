@@ -2,6 +2,8 @@
 
 Integration branch: `codex/searchad-main-integration-20261007`, based on documentation checkpoint `aacd735108b2a3b6a43a0ad2e3c821c4decbdb9c`. PR28 and its validated SearchAd code6013903 are preserved. This is a main-target review candidate, not a merge or deployment. The earlier [initial inventory](SEARCHAD_LIVE_VALIDATION_PREPARATION_2026-10-07.md) remains historical.
 
+**Subsequent authorized infrastructure preparation:** after the62cdc1f native CI passed, a dedicated PostgreSQL16.15 was created and verified on the VPS, independently of the current Commerce application. [Configuration, actual verification and missing account/storage inputs](../ops/searchad/README.md) / [sanitized receipt](searchad-evidence/2026-10-07/dedicated-infrastructure.json). The initial no-dedicated-DB inventory and next-work statements below describe the earlier preflight. No candidate application deployment, main merge, provider request or SearchAd activation has occurred.
+
 ## Integration findings and changes
 
 Main `b7ca236bdcfc0d1e9f730880c0d68fe0b4e0efb6` and PR11 `56abf47` are ancestors of the accepted continuation; no conflicting histories or cherry-picks are needed. The old active-canary branch diverges and is not used. The integrated candidate carries the accepted continuation ancestry and the same application source/scripts/migrations as6013903; only an image dependency restoration and one regression test are added to runtime/test scope.
