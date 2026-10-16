@@ -16,6 +16,15 @@ it('leaves a Threads processing container pending and never publishes it early',
  const req=vi.fn(async()=>({status:'IN_PROGRESS'}));
  expect((await createProviders(req).threads.resume({post:{provider_ref:'container',checkpoint:{}},credentials:{accessToken:token}})).state).toBe('processing');expect(req).toHaveBeenCalledTimes(1);
 });
+it('waits for every carousel child, then checkpoints a single parent container creation',async()=>{
+ const req=vi.fn().mockResolvedValueOnce({status:'IN_PROGRESS'}).mockResolvedValueOnce({status:'FINISHED'}).mockResolvedValueOnce({status:'FINISHED'}).mockResolvedValueOnce({id:'parent'});
+ const ctx={post:{provider_ref:'child1',account_id:'account',caption:'carousel',checkpoint:{phase:'children',childIds:['child1','child2'],parentRequested:false}},credentials:{accessToken:token}};
+ ctx.checkpoint=vi.fn(async(value,ref)=>{ctx.post.checkpoint=value;if(ref)ctx.post.provider_ref=ref;});
+ const provider=createProviders(req).threads;
+ expect((await provider.resume(ctx)).state).toBe('processing');expect(ctx.checkpoint).not.toHaveBeenCalled();
+ expect((await provider.resume(ctx)).providerRef).toBe('parent');
+ expect(req.mock.calls[3][1].form.children).toBe('child1,child2');expect(ctx.checkpoint.mock.calls[0][0].parentRequested).toBe(true);expect(ctx.post.checkpoint.publishRequested).toBe(false);
+});
 it('uploads X image bytes through v2 before creating the post',async()=>{
  const req=vi.fn().mockResolvedValueOnce({data:{id:'image'}}).mockResolvedValueOnce({data:{id:'post'}});
  const r=await createProviders(req).x.start({post:{caption:'hello'},credentials:{accessToken:token},assets:[{id:'asset'}],readMedia:async()=>Buffer.from('image')});
@@ -45,6 +54,7 @@ it.each([401,403,402,429,500])('sanitizes provider failure %s without leaking up
  const http=createProviderHttp(async()=>({ok:false,status,json:async()=>({error:{code:status,message:token},request_url:'https://api.invalid/?token='+token})}));
  let caught;try{await http('https://api.invalid/',{token});}catch(e){caught=e;}
  expect(caught.code).toMatch(/^CHANNEL_/);expect(JSON.stringify(caught)+caught.message).not.toContain(token);
+ if(status===500)expect(caught.code).toBe('CHANNEL_PROVIDER_UNAVAILABLE');
 });
 it('marks a transport timeout uncertain and performs no automatic retry',async()=>{
  const fetcher=vi.fn(async()=>{throw new Error(token);});

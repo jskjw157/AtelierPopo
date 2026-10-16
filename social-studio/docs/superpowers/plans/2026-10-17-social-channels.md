@@ -20,11 +20,11 @@ MCP is a future boundary: no new MCP endpoint or claim of assistant connectivity
 
 ## Tasks
 
-- [ ] Add policy/validation and provider HTTP clients/adapters; test supported payloads, rejected formats, secret-safe failures, network uncertainty and pending results.
-- [ ] Add additive schema and owner-only OAuth/runtime APIs; test state replay/cross-user/provider mismatches, PKCE, encrypted rotation, revoked/expired scopes, generation changes and disconnected queues.
-- [ ] Add immutable posts, serialized dispatch/polling, cron integration and safe media reads; test double clicks, UUID conflicts, concurrent workers, timeout/checkpoint persistence, disabled writes/billing, stale account and cancellation.
-- [ ] Add connection cards and `/channels` composition/history UI with no automatic OAuth; test default locks, explicit consent, TikTok completion label and request UUID retention on retry.
-- [ ] Run syntax, mock tests, isolated PostgreSQL tests, build, existing Python tests; independent review and fixes; Draft PR and CI. Never trigger any deployment workflow.
+- [x] Add policy/validation and provider HTTP clients/adapters; test supported payloads, rejected formats, secret-safe failures, network uncertainty and pending results.
+- [x] Add additive schema and owner-only OAuth/runtime APIs; test state replay/cross-user/provider mismatches, PKCE, encrypted rotation, revoked/expired scopes, generation changes and disconnected queues.
+- [x] Add immutable posts, serialized dispatch/polling, cron integration and safe media reads; test double clicks, UUID conflicts, concurrent workers, timeout/checkpoint persistence, disabled writes/billing, stale account and cancellation.
+- [x] Add connection cards and `/channels` composition/history UI with no automatic OAuth; test default locks, explicit consent, TikTok completion label and request UUID retention on retry.
+- [x] Run syntax, mock tests, isolated PostgreSQL tests, build, existing Python tests; independent review and fixes. Draft PR and CI outcomes are recorded in GitHub PR metadata/checks. Never trigger any deployment workflow.
 
 ## Approval boundary and verification
 

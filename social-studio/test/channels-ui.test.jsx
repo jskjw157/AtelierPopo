@@ -46,3 +46,9 @@ it('retains the request UUID when a response is lost, resets it after editing co
  fireEvent.change(screen.getByLabelText('최종 본문'),{target:{value:'edited'}});expect(screen.getByRole('checkbox').checked).toBe(false);
  fireEvent.click(screen.getByRole('checkbox'));fireEvent.click(screen.getByRole('button',{name:'최종 확인'}));await waitFor(()=>expect(posted()).toHaveLength(3));expect(posted()[2].clientRequestId).not.toBe(posted()[0].clientRequestId);
 });
+it('allows an expired access token with saved refresh rights to reach the locked refresh path',async()=>{
+ api.mockImplementation(async path=>path==='/api/channels/status'?{channels:channels.map(c=>c.platform==='x'?{...c,writesEnabled:true,connection:{...c.connection,status:'refresh_available'}}:c)}:path==='/api/media'?{media:[]}:{posts:[]});
+ render(<ChannelsPage/>);await screen.findAllByText('Test threads');
+ fireEvent.change(screen.getByLabelText('채널'),{target:{value:'x'}});fireEvent.change(screen.getByLabelText('동작'),{target:{value:'publish'}});fireEvent.change(screen.getByLabelText('최종 본문'),{target:{value:'hello'}});fireEvent.click(screen.getByRole('checkbox'));
+ expect(screen.getByRole('button',{name:'최종 확인'}).disabled).toBe(false);
+});

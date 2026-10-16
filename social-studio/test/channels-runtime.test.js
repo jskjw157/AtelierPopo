@@ -2,6 +2,7 @@ import { describe,expect,it,vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { channelsFixture } from './helpers/channels-fixture.js';
 import { testDbUrl } from './helpers/ads-db.js';
+import { createChannelRuntime } from '../server/channels/runtime.js';
 describe.skipIf(!testDbUrl)('channel runtime with isolated PostgreSQL',()=>{
  it('binds single-use OAuth state to owner/provider, rejects replay and encrypts tokens',async()=>{
   const f=await channelsFixture();try{
@@ -90,6 +91,7 @@ describe.skipIf(!testDbUrl)('channel runtime with isolated PostgreSQL',()=>{
   const f=await channelsFixture();try{
    const g=await f.connect('x'),post=(await f.service.createPost('owner',f.input(g,'x'))).post;
    await f.pool.query("UPDATE channel_connections SET expires_at=NOW()-INTERVAL '1 second'");
+   expect((await f.service.status('owner')).channels.find(c=>c.platform==='x').connection.status).toBe('refresh_available');
    const start=vi.spyOn(f.providers.x,'start');await f.service.processPost('owner',post.id);
    expect(start.mock.calls[0][0].credentials.refreshToken).toBe('rotated-refresh');
    const c=(await f.pool.query('SELECT credentials_encrypted FROM channel_connections')).rows[0];expect(c.credentials_encrypted).not.toContain('rotated-refresh');expect(f.decrypt(c.credentials_encrypted)).toContain('rotated-refresh');
@@ -103,6 +105,35 @@ describe.skipIf(!testDbUrl)('channel runtime with isolated PostgreSQL',()=>{
    const post=(await f.service.createPost('owner',{...f.input(g,'tiktok'),format:'video',mediaAssetIds:[asset]})).post;
    await f.service.processPost('owner',post.id);await f.service.processPost('owner',post.id,true);
    expect((await f.service.posts('owner')).posts[0].state).toBe('awaiting_user');expect((await f.service.posts('owner')).posts[0].external_post_id).toBe(null);
+  }finally{await f.close();}
+ });
+ it('keeps a known persisted publish result when a later audit insert fails',async()=>{
+  const f=await channelsFixture();try{
+   const g=await f.connect(),post=(await f.service.createPost('owner',f.input(g))).post;
+   const service=createChannelRuntime({pool:{query:(...args)=>f.pool.query(...args),connect:async()=>{
+    const client=await f.pool.connect();return {query:(sql,params)=>String(sql).includes('INSERT INTO audit_logs')?Promise.reject(new Error('audit unavailable')):client.query(sql,params),release:()=>client.release()};
+   }},settings:f.settings,providers:f.providers,encrypt:f.encrypt,decrypt:f.decrypt,mediaUrl:()=>'',readMedia:async()=>Buffer.from('test')});
+   const r=await service.processPost('owner',post.id);expect(r).toMatchObject({state:'published',historyWarning:true});
+   const row=(await f.service.posts('owner')).posts[0];expect(row.state).toBe('published');expect(row.external_post_id).toBe('external');
+  }finally{vi.restoreAllMocks();await f.close();}
+ });
+ it('returns the original scheduled request after its due time passes',async()=>{
+  const f=await channelsFixture();try{
+   const g=await f.connect(),now=Date.now(),input={...f.input(g),mode:'schedule',scheduledAt:new Date(now+120000).toISOString()};
+   const first=await f.service.createPost('owner',input);
+   vi.spyOn(Date,'now').mockReturnValue(now+180000);
+   const again=await f.service.createPost('owner',input);expect(again.duplicate).toBe(true);expect(again.post.id).toBe(first.post.id);
+   await expect(f.service.createPost('owner',{...input,clientRequestId:randomUUID()})).rejects.toMatchObject({code:'CHANNEL_SCHEDULE_INVALID'});
+  }finally{vi.restoreAllMocks();await f.close();}
+ });
+ it('retries only safe status reads after transient errors without repeating an upload',async()=>{
+  const f=await channelsFixture();try{
+   const g=await f.connect(),post=(await f.service.createPost('owner',f.input(g))).post;
+   f.providers.threads.start=vi.fn(async({checkpoint})=>{await checkpoint({publishRequested:false},'container');return {state:'processing',providerRef:'container'};});
+   f.providers.threads.resume=vi.fn().mockRejectedValueOnce(Object.assign(new Error('rate limit'),{code:'CHANNEL_RATE_LIMITED'})).mockResolvedValueOnce({state:'published',externalId:'final'});
+   await f.service.processPost('owner',post.id);
+   expect((await f.service.processPost('owner',post.id,true)).state).toBe('processing');
+   await f.service.runDue();expect(f.providers.threads.start).toHaveBeenCalledTimes(1);expect(f.providers.threads.resume).toHaveBeenCalledTimes(2);expect((await f.service.posts('owner')).posts[0].state).toBe('published');
   }finally{await f.close();}
  });
 });

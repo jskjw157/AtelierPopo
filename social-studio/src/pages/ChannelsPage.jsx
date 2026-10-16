@@ -4,7 +4,7 @@ import ChannelConnections from '../components/ChannelConnections.jsx';
 
 const names = { threads:'Threads',tiktok:'TikTok',x:'X' };
 const formats = { threads:[['text','텍스트'],['image','이미지 1장'],['carousel','이미지 2~10장'],['video','영상 1개']],tiktok:[['video','영상 초안 1개']],x:[['text','텍스트'],['image','이미지 1~4장']] };
-const states = { draft:'초안',queued:'전송 대기',scheduled:'예약',publishing:'전송 시작',processing:'플랫폼 처리 중',published:'게시 완료',awaiting_user:'TikTok에서 최종 게시 필요',failed:'전송 전 오류',uncertain:'결과 불확실 · 재전송 잠김',cancelled:'취소됨' };
+const states = { draft:'초안',queued:'전송 대기',scheduled:'예약',publishing:'전송 시작',processing:'플랫폼 처리 중',published:'게시 완료',awaiting_user:'TikTok에서 최종 게시 필요',failed:'처리 실패',uncertain:'결과 불확실 · 재전송 잠김',cancelled:'취소됨' };
 
 export default function ChannelsPage() {
   const [channels,setChannels] = useState([]), [media,setMedia] = useState([]), [posts,setPosts] = useState([]);
@@ -12,7 +12,7 @@ export default function ChannelsPage() {
   const [selected,setSelected] = useState([]), [mode,setMode] = useState('draft'), [scheduledAt,setScheduledAt] = useState(''), [consent,setConsent] = useState(false);
   const [requestId,setRequestId] = useState(()=>crypto.randomUUID()), [busy,setBusy] = useState(false), [error,setError] = useState(''), [message,setMessage] = useState('');
   const channel = channels.find(c=>c.platform===platform);
-  const maySend = channel?.connection.status === 'connected' && channel?.writesEnabled && channel?.billingApproved && channel?.connectEnabled;
+  const maySend = ['connected','refresh_available'].includes(channel?.connection.status) && channel?.writesEnabled && channel?.billingApproved && channel?.connectEnabled;
   async function load() { const [m,p] = await Promise.all([api('/api/media'),api('/api/channels/posts')]);setMedia(m.media);setPosts(p.posts); }
   useEffect(()=>{load().catch(e=>setError(e.message)); const params=new URLSearchParams(window.location.search);if(params.has('connection_error'))setError('계정 연결에 실패했습니다. 승인·만료·서버 설정을 확인하고 다시 연결해 주세요.');if(params.has('connected'))setMessage('계정 연결을 저장했습니다. 실제 업로드·게시는 별도로 승인해야 합니다.');},[]);
   function changed() { setRequestId(crypto.randomUUID());setConsent(false);setMessage(''); }

@@ -30,6 +30,7 @@ export default function ChannelConnections({ onStatus }) {
       <p>콜백: <code>{channel.callbackUrl}</code></p>
       <p>실제 업로드·게시: <strong>{channel.writesEnabled && channel.billingApproved ? '활성' : '비활성'}</strong></p>
       {channel.connection.expires_at && <p>토큰 만료: {formatDate(channel.connection.expires_at)}</p>}
+      {channel.connection.status === 'refresh_available' && <p className="helper">저장된 갱신 권한을 사용해 전송 전에 토큰을 갱신합니다. 권한이 철회되었다면 다시 연결해야 합니다.</p>}
       {(!channel.configured || !channel.connectEnabled) && <p className="helper">관리자가 앱 등록·콜백·서버 설정을 완료한 뒤 연결할 수 있습니다.</p>}
       {!channel.billingApproved && <p className="helper">X 비용·크레딧 사용 승인 필요</p>}
       <button type="button" className="button button-secondary" disabled={busy || !channel.configured || !channel.connectEnabled || !channel.billingApproved} onClick={()=>connect(channel)}>{channel.connection.status === 'disconnected' ? `${channel.name} 연결` : `${channel.name} 다시 연결`}</button>

@@ -52,7 +52,7 @@ const inputSchema = z.object({
   accountGeneration: z.string().uuid().nullable().optional()
 }).strict();
 
-export function validatePost(input, now = Date.now()) {
+export function validatePost(input, now = Date.now(), checkSchedule = true) {
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) throw fail('CHANNEL_INPUT_INVALID', '채널·본문·미디어·대상 확인 동의를 다시 확인해 주세요.', 400);
   const value = parsed.data, { platform, format, mediaAssetIds, caption } = value;
@@ -69,7 +69,7 @@ export function validatePost(input, now = Date.now()) {
     const weight = [...withoutUrls].reduce((n,c) => n + (c.codePointAt(0) > 0x10ff ? 2 : 1), 0);
     if (weight > 280) throw fail('CHANNEL_TEXT_TOO_LONG', 'X 표준 게시물의 가중 280자 제한을 초과했습니다.', 400);
   }
-  if (value.mode === 'schedule' && (!value.scheduledAt || Date.parse(value.scheduledAt) <= now + 60_000)) {
+  if (checkSchedule && value.mode === 'schedule' && (!value.scheduledAt || Date.parse(value.scheduledAt) <= now + 60_000)) {
     throw fail('CHANNEL_SCHEDULE_INVALID', '예약 시간은 현재보다 최소 1분 이후여야 합니다.', 400);
   }
   return { ...value, scheduledAt: value.mode === 'schedule' ? value.scheduledAt : null };

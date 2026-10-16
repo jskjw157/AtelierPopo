@@ -31,12 +31,24 @@ export function createChannelRuntime({ pool, settings, providers, encrypt, decry
   }
   async function status(userId) {
     await owner(userId);
-    const rows = (await pool.query('SELECT platform,generation,account_name,status,scopes,expires_at,last_error FROM channel_connections WHERE owner_user_id=$1', [userId])).rows;
+    const rows = (await pool.query('SELECT platform,generation,account_name,status,scopes,expires_at,last_error,credentials_encrypted FROM channel_connections WHERE owner_user_id=$1', [userId])).rows;
     return { channels: platforms.map(platform => {
       const cfg = settings[platform], row = rows.find(r => r.platform === platform);
+      let connection = { status: 'disconnected' };
+      if (row) {
+        const { credentials_encrypted, ...publicFields } = row;
+        connection = publicFields;
+        if (row.status === 'connected' && Date.parse(row.expires_at) <= Date.now()) {
+          connection.status = 'expired';
+          try {
+            const credential = JSON.parse(decrypt(credentials_encrypted));
+            if (platform !== 'threads' && credential.refreshToken && (!credential.refreshExpiresAt || Date.parse(credential.refreshExpiresAt) > Date.now())) connection.status = 'refresh_available';
+          } catch { connection.status = 'reauthorization_required'; }
+        }
+      }
       return { platform, ...definitions[platform], configured: Boolean(cfg.clientId && cfg.clientSecret), connectEnabled: cfg.connectEnabled, writesEnabled: cfg.writesEnabled, billingApproved: cfg.billingApproved,
         callbackUrl: cfg.redirectUri, verifiedMediaOrigin: platform === 'tiktok' ? cfg.verifiedOrigin : undefined,
-        connection: row ? { ...row, status: Date.parse(row.expires_at) <= Date.now() ? 'expired' : row.status } : { status: 'disconnected' } };
+        connection };
     }) };
   }
   async function startOAuth(userId, platform) {
@@ -58,6 +70,7 @@ export function createChannelRuntime({ pool, settings, providers, encrypt, decry
       if (input.error || typeof input.code !== 'string' || input.code.length > 4000) throw fail('CHANNEL_OAUTH_DENIED', '플랫폼 연결을 승인하지 않았습니다.', 400);
       const credential = await providers[platform].exchange(settings[platform], input.code, decrypt(consumed.rows[0].verifier_encrypted));
       assertCredentials(credential, platform);
+      if (credential.refreshExpiresIn) credential.refreshExpiresAt = new Date(Date.now() + Number(credential.refreshExpiresIn) * 1000).toISOString();
       const generation = randomUUID(), expiresAt = new Date(Date.now() + Number(credential.expiresIn) * 1000);
       await client.query(`INSERT INTO channel_connections(owner_user_id,platform,generation,account_id,account_name,credentials_encrypted,scopes,expires_at)
         VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8) ON CONFLICT(owner_user_id,platform) DO UPDATE SET generation=$3,account_id=$4,account_name=$5,credentials_encrypted=$6,scopes=$7::jsonb,expires_at=$8,status='connected',last_error=NULL,updated_at=NOW()`,
@@ -82,13 +95,15 @@ export function createChannelRuntime({ pool, settings, providers, encrypt, decry
   }
   async function createPost(userId, input) {
     await owner(userId);
-    const v = validatePost(input), payloadHash = hash(JSON.stringify(v));
+    // An existing immutable request remains readable even after its schedule passes.
+    const v = validatePost(input, Date.now(), false), payloadHash = hash(JSON.stringify(v));
     return lock(`${userId}:${v.platform}`, async client => {
       const existing = (await client.query(`SELECT ${publicPostFields},payload_hash FROM channel_posts WHERE owner_user_id=$1 AND client_request_id=$2`, [userId, v.clientRequestId])).rows[0];
       if (existing) {
         if (existing.payload_hash !== payloadHash) throw fail('CHANNEL_REQUEST_CONFLICT', '이미 사용된 요청 ID에 다른 내용이 있습니다.', 409);
         delete existing.payload_hash; return { post: existing, duplicate: true };
       }
+      validatePost(input);
       const connection = (await client.query('SELECT * FROM channel_connections WHERE owner_user_id=$1 AND platform=$2', [userId, v.platform])).rows[0];
       if (v.mode !== 'draft') {
         requireWrites(settings[v.platform]);
@@ -129,14 +144,16 @@ export function createChannelRuntime({ pool, settings, providers, encrypt, decry
         throw fail('CHANNEL_NOT_DISPATCHABLE', '전송 대상이 아니거나 이전 전송 결과가 불확실합니다.');
       }
       if (post.scheduled_at && Date.parse(post.scheduled_at) > Date.now()) throw fail('CHANNEL_NOT_DUE', '아직 예약 시간이 되지 않았습니다.');
-      let attemptId;
+      let attemptId, persistedResult;
       try {
         let connection = (await client.query('SELECT * FROM channel_connections WHERE owner_user_id=$1 AND platform=$2', [userId, post.platform])).rows[0];
         if (!connection || connection.status !== 'connected' || connection.generation !== post.account_generation || connection.account_id !== post.account_id) throw fail('CHANNEL_ACCOUNT_CHANGED', '원래 승인한 계정 연결이 변경되었습니다. 새 계정에 자동 전송하지 않습니다.');
         let credentials = JSON.parse(decrypt(connection.credentials_encrypted));
         if (Date.parse(connection.expires_at) < Date.now() + 120_000) {
+          if (credentials.refreshExpiresAt && Date.parse(credentials.refreshExpiresAt) <= Date.now()) throw fail('CHANNEL_AUTH_EXPIRED', '갱신 권한이 만료되어 계정을 다시 연결해야 합니다.');
           credentials = await providers[post.platform].refresh(settings[post.platform], credentials);
           assertCredentials(credentials, post.platform);
+          if (credentials.refreshExpiresIn) credentials.refreshExpiresAt = new Date(Date.now() + Number(credentials.refreshExpiresIn) * 1000).toISOString();
           await client.query('UPDATE channel_connections SET credentials_encrypted=$3,scopes=$4::jsonb,expires_at=$5,updated_at=NOW() WHERE owner_user_id=$1 AND platform=$2', [userId, post.platform, encrypt(JSON.stringify(credentials)), JSON.stringify(credentials.scopes), new Date(Date.now()+Number(credentials.expiresIn)*1000)]);
         }
         assertCredentials(credentials, post.platform);
@@ -160,13 +177,18 @@ export function createChannelRuntime({ pool, settings, providers, encrypt, decry
         const result = await providers[post.platform][poll ? 'resume' : 'start'](ctx);
         if (!['processing','published','awaiting_user'].includes(result.state)) throw fail('CHANNEL_OUTCOME_UNKNOWN', '외부 처리 상태를 확인하지 못했습니다.');
         await client.query(`UPDATE channel_posts SET state=$2,provider_ref=COALESCE($3,provider_ref),external_post_id=$4,permalink=$5,last_error=NULL,updated_at=NOW() WHERE id=$1`, [post.id, result.state, result.providerRef || null, result.externalId || null, result.permalink || null]);
+        persistedResult = result;
         await client.query('UPDATE channel_attempts SET state=$2,finished_at=NOW() WHERE id=$1', [attemptId, result.state]);
         await audit(client, userId, 'channel.post.'+result.state, post.id, { platform: post.platform });
         return result;
       } catch (error) {
+        // A history/audit failure cannot erase an already persisted provider result.
+        if (persistedResult) return { ...persistedResult, historyWarning: true };
         const code = safeCode(error);
         // Any started remote dispatch may have succeeded. Never reset it to a retryable state.
-        const state = post.dispatch_started_at ? 'uncertain' : 'failed';
+        const safeStatusRead = poll && (post.platform === 'tiktok' || post.platform === 'threads' && !post.checkpoint.publishRequested && !post.checkpoint.parentRequested);
+        const transientRead = safeStatusRead && ['CHANNEL_OUTCOME_UNKNOWN','CHANNEL_RATE_LIMITED','CHANNEL_PROVIDER_UNAVAILABLE'].includes(code);
+        const state = transientRead ? 'processing' : safeStatusRead && code === 'CHANNEL_PROCESSING_FAILED' ? 'failed' : post.dispatch_started_at ? 'uncertain' : 'failed';
         await client.query('UPDATE channel_posts SET state=$2,last_error=$3,updated_at=NOW() WHERE id=$1', [post.id, state, code]);
         if (attemptId) await client.query('UPDATE channel_attempts SET state=$2,error_code=$3,finished_at=NOW() WHERE id=$1', [attemptId, state, code]);
         if (['CHANNEL_AUTH_EXPIRED','CHANNEL_PERMISSION_DENIED'].includes(code)) await client.query('UPDATE channel_connections SET status=$3,last_error=$4,updated_at=NOW() WHERE owner_user_id=$1 AND platform=$2', [userId, post.platform, 'reauthorization_required', code]);
