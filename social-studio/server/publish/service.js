@@ -4,6 +4,7 @@ import { AppError } from '../http.js';
 import { decryptSecret, safeErrorMessage } from '../security.js';
 import { publishInstagram } from '../meta/instagram.js';
 import { publishFacebook } from '../meta/facebook.js';
+import { channelServices } from '../channels/instance.js';
 
 function normalizeMediaIds(value) {
   if (Array.isArray(value)) return value;
@@ -251,7 +252,8 @@ export async function runDuePosts({ actorUserId = null } = {}) {
        WHERE id = $1`,
       [runId, due.rowCount, successCount, failureCount, failureCount ? 'completed_with_errors' : 'completed']
     );
-    return { runId, dueCount: due.rowCount, successCount, failureCount };
+    const channels = await channelServices.runDue().catch(() => ({ errorCode: 'CHANNEL_QUEUE_FAILED' }));
+    return { runId, dueCount: due.rowCount, successCount, failureCount, channels };
   } catch (error) {
     await query(
       `UPDATE scheduler_runs

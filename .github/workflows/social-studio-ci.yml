@@ -47,6 +47,8 @@ jobs:
         run: npm run check:syntax
 
       - name: Run JavaScript unit tests
+        env:
+          TEST_DATABASE_URL: postgres://haar:test-password@127.0.0.1:5432/haar_social_test
         run: npm test
 
       - name: Run Caddy route recovery tests

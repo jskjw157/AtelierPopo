@@ -9,6 +9,7 @@ import { api, classNames } from '../lib/api.js';
 const links = [
   ['/dashboard', '대시보드', LayoutDashboard],
   ['/compose', '콘텐츠 작성', PenSquare],
+  ['/channels', '새 채널 게시', Plug],
   ['/calendar', '예약 캘린더', CalendarDays],
   ['/library', '미디어', FileImage],
   ['/products', '상품', Package],

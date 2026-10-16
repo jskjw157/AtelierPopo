@@ -13,6 +13,7 @@ import AdsPage from './pages/AdsPage.jsx';
 import AnalyticsPage from './pages/AnalyticsPage.jsx';
 import ActivityPage from './pages/ActivityPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
+import ChannelsPage from './pages/ChannelsPage.jsx';
 import { PrivacyPage, TermsPage, DataDeletionPage } from './pages/PublicPages.jsx';
 
 const AuthContext = createContext(null);
@@ -48,6 +49,7 @@ export default function App() {
         <Route element={<ProtectedLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/compose" element={<ComposePage />} />
+          <Route path="/channels" element={<ChannelsPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/products" element={<ProductsPage />} />
