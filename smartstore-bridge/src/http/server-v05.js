@@ -26,8 +26,8 @@ import { createCommerceRoutes } from './routes-commerce.js';
 import { createSearchAdRoutes } from './routes-searchad.js';
 import { createMultiSourceCatalogRoutes } from './routes-multi-source-catalog.js';
 import { HttpError } from './errors.js';
+import { SERVICE_VERSION } from '../version.js';
 
-const SERVICE_VERSION = '0.5.1';
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export function createHttpApiV05({ app, env = process.env, logger = defaultLogger, version = SERVICE_VERSION } = {}) {

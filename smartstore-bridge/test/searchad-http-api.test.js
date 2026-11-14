@@ -96,7 +96,12 @@ test('SearchAd HTTP API exposes status, manifest and read execution', async () =
   try {
     const status = await call(fixture, 'GET', '/api/v1/searchad/status');
     assert.equal(status.status, 200);
-    assert.equal((await status.json()).searchAd.automationMode, 'observe');
+    const statusBody = await status.json();
+    assert.equal(statusBody.searchAd.automationMode, 'observe');
+    const customer = statusBody.searchAd.credentials.customers[0];
+    assert.equal(customer.customerId, '1001');
+    // Four-digit customer IDs are fully masked by maskSearchAdCustomerId().
+    assert.equal(customer.customerIdMasked, '****');
 
     const operations = await call(fixture, 'GET', '/api/v1/searchad/operations?runtimeOnly=true');
     assert.equal(operations.status, 200);

@@ -2,9 +2,10 @@
 import { bootstrapV05 } from './bootstrap-v05.js';
 import { createHttpApiV05 } from './http/server-v05.js';
 import { logger } from './infrastructure/logger.js';
+import { SERVICE_VERSION } from './version.js';
 
 const app = await bootstrapV05();
-const api = createHttpApiV05({ app, logger, version: '0.5.1' });
+const api = createHttpApiV05({ app, logger, version: SERVICE_VERSION });
 let closing = false;
 
 async function shutdown(signal) {
@@ -23,7 +24,7 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 try {
   const address = await api.listen();
   logger.info('HTTP server started', {
-    version: '0.5.1',
+    version: SERVICE_VERSION,
     host: typeof address === 'object' ? address.address : api.httpConfig.host,
     port: typeof address === 'object' ? address.port : api.httpConfig.port,
     commerceOperations: app.commerceManifest?.operations?.length || 0,

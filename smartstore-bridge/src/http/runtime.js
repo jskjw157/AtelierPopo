@@ -142,6 +142,9 @@ export function operationResponse(row, { reused = false, redactionRoots = [] } =
   };
 }
 
+// request is optional. Reuse comparisons always check operation_type and source_product_id;
+// request-body comparison happens only when the caller passes request. Some reuse paths
+// (SearchAd execute reuse and createAsyncOperation reuse/race) currently omit it.
 export function ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request }) {
   if (!existing) return;
   let storedRequest;
