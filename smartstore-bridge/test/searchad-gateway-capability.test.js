@@ -5,18 +5,19 @@ import { SearchAdSpecRegistry } from '../src/naver/searchad/spec-registry.js';
 import { SearchAdOperationGateway } from '../src/naver/searchad/gateway.js';
 import { SearchAdCapabilityService } from '../src/naver/searchad/capability.js';
 
-function setup({ allowWrites = false } = {}) {
+function setup({ allowWrites = false, allowUnverified = false } = {}) {
   const operations = [
     { operationKey:'ncc.get.list', sourceId:'ncc', sourceOperationId:'list', method:'GET', path:'/ncc/campaigns', rawPath:'/api/ncc/campaigns', domain:'campaign', tags:['Campaign'], summary:'list', action:'read', sideEffect:false, destructive:false, batch:false, risk:'low', state:'public_documented', tier:'B', runtimeAllowlisted:true, requiredGate:'reads', confirmation:null, capabilityKey:'campaign.read', parameters:[], specRef:'x' },
     { operationKey:'ncc.post.create', sourceId:'ncc', sourceOperationId:'create', method:'POST', path:'/ncc/campaigns', rawPath:'/api/ncc/campaigns', domain:'campaign', tags:['Campaign'], summary:'create', action:'create', sideEffect:true, destructive:false, batch:false, risk:'high', state:'public_documented', tier:'B', runtimeAllowlisted:true, requiredGate:'creates', confirmation:'CREATE_AD_ENTITY', capabilityKey:'campaign.create', parameters:[], specRef:'x' },
-    { operationKey:'ncc.delete.remove', sourceId:'ncc', sourceOperationId:'remove', method:'DELETE', path:'/ncc/campaigns/{campaignId}', rawPath:'/api/ncc/campaigns/{campaignId}', domain:'campaign', tags:['Campaign'], summary:'delete', action:'delete', sideEffect:true, destructive:true, batch:false, risk:'critical', state:'public_documented', tier:'B', runtimeAllowlisted:true, requiredGate:'deletes', confirmation:'DELETE_AD_ENTITY', capabilityKey:'campaign.delete', parameters:[{name:'campaignId',in:'path',required:true}], specRef:'x' }
+    { operationKey:'ncc.delete.remove', sourceId:'ncc', sourceOperationId:'remove', method:'DELETE', path:'/ncc/campaigns/{campaignId}', rawPath:'/api/ncc/campaigns/{campaignId}', domain:'campaign', tags:['Campaign'], summary:'delete', action:'delete', sideEffect:true, destructive:true, batch:false, risk:'critical', state:'public_documented', tier:'B', runtimeAllowlisted:true, requiredGate:'deletes', confirmation:'DELETE_AD_ENTITY', capabilityKey:'campaign.delete', parameters:[{name:'campaignId',in:'path',required:true}], specRef:'x' },
+    { operationKey:'ncc.post.tier_d', sourceId:'ncc', sourceOperationId:'tierD', method:'POST', path:'/ncc/tier-d', rawPath:'/api/ncc/tier-d', domain:'campaign', tags:['Campaign'], summary:'tier d write', action:'create', sideEffect:true, destructive:false, batch:false, risk:'high', state:'internal_undocumented', tier:'D', runtimeAllowlisted:false, requiredGate:'writes', confirmation:'TIER_D_WRITE', capabilityKey:'campaign.tierD', parameters:[], specRef:'x' }
   ];
   const manifest = { specRef:'x', generatedAt:'now', baseUrl:'https://api.searchad.naver.com', sources:[{}], counts:{}, operations };
   const registry = new SearchAdSpecRegistry(manifest);
   const credentials = new SearchAdCredentialsRegistry({ principals:[{principalId:'p',accessLicense:'a',secretKey:'s',status:'active'}], customers:[{customerId:'1001',status:'active'}], grants:[{principalId:'p',customerId:'1001',role:'operator'}] });
   const calls=[];
   const client={ request: async input => { calls.push(input); return {status:200,data:[],requestId:'r',attempts:1,durationMs:1,headers:{}}; } };
-  const config={ enabled:true, configured:true, allowReads:true, allowWrites, allowCreates:allowWrites, allowBatchWrites:false, allowDeletes:allowWrites, allowRollbacks:false, allowUnverifiedOperations:false, allowActiveCanary:false, automationMode:'observe', passiveProbeLimit:10 };
+  const config={ enabled:true, configured:true, allowReads:true, allowWrites, allowCreates:allowWrites, allowBatchWrites:false, allowDeletes:allowWrites, allowRollbacks:false, allowUnverifiedOperations:allowUnverified, allowActiveCanary:false, automationMode:'observe', passiveProbeLimit:10 };
   const gateway=new SearchAdOperationGateway({client,config,registry,credentialsRegistry:credentials,logger:{}});
   return {gateway,calls,config};
 }
@@ -30,6 +31,17 @@ test('SearchAd gateway blocks writes until gates and exact confirmations are ena
   const preview=enabled.gateway.preview('ncc.delete.remove',{customerId:'1001',pathParams:{campaignId:'cmp1'}});
   assert.equal(preview.requiredSecondConfirmation,'searchad:1001:campaign:cmp1');
   await assert.rejects(() => enabled.gateway.execute('ncc.delete.remove',{customerId:'1001',pathParams:{campaignId:'cmp1'},confirmation:'DELETE_AD_ENTITY',secondConfirmation:'wrong'}), /secondConfirmation/);
+});
+
+test('Tier D operations stay blocked even when unverified operations are allowed', () => {
+  const { gateway } = setup({ allowWrites: true, allowUnverified: true });
+  assert.throws(
+    () => gateway.executionCheck(gateway.get('ncc.post.tier_d'), {
+      customerId: '1001',
+      confirmation: 'TIER_D_WRITE'
+    }),
+    error => error.code === 'SEARCHAD_OPERATION_NOT_ALLOWLISTED'
+  );
 });
 
 test('Passive capability probe executes read-only operations and records no-data evidence', async () => {

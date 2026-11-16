@@ -1,3 +1,5 @@
+import { SERVICE_VERSION } from '../version.js';
+
 const errorResponses = {
   '400': { description: '잘못된 요청' },
   '401': { description: 'API Key 인증 실패' },
@@ -10,7 +12,7 @@ const errorResponses = {
   '503': { description: 'SearchAd 미설정 또는 준비되지 않음' }
 };
 
-export function buildSearchAdOpenApi({ serverUrl, version = '0.5.0' }) {
+export function buildSearchAdOpenApi({ serverUrl, version = SERVICE_VERSION }) {
   return {
     openapi: '3.1.0',
     info: {

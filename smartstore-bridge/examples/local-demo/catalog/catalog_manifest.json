@@ -1,0 +1,16 @@
+{
+  "source": "local-demo",
+  "total_products": 1,
+  "total_completed": 1,
+  "products": {
+    "1905": {
+      "product_id": "1905",
+      "name": "로컬 데모 상품",
+      "categories": ["귀걸이"],
+      "local_folder": "귀걸이/1905_demo",
+      "completed": true,
+      "image_count": 0,
+      "option_count": 0
+    }
+  }
+}
