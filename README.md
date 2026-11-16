@@ -147,7 +147,8 @@ MCP에서 별도 config를 쓰려면 먼저 config/atelier-popo.example.json을 
 - HTTP v05 멱등성 재사용 경로 일부는 `request`를 넘기지 않아 같은 key + 같은 operation/resource + 다른 body가 기존 operation을 반환할 수 있습니다. route 수준 body 동등성 강제는 아직 없습니다.
 - 상품 등록·광고 변경의 실계정 운영 검증은 이번 브랜치에서 실행하지 않았습니다. 자동화 테스트는 mocked/local입니다.
 - Postgres 통합 테스트는 `TEST_DATABASE_URL`이 없으면 skip됩니다. CI에서는 Postgres service와 함께 실행되지만, workflow는 path/branch 범위로 동작합니다.
-- `npm audit` 기준 이번 스냅샷의 high advisory는 0개입니다. 검증된 버전은 `@modelcontextprotocol/server 2.4.0`, `sharp 0.35.5`, `zod 4.6.7`이며, 이는 모든 의존성이 안전하다는 의미가 아닙니다.
+- `smartstore-bridge`의 `npm audit`은 이번 스냅샷에서 high advisory 0개입니다. 검증된 버전은 `@modelcontextprotocol/server 2.4.0`, `sharp 0.35.5`, `zod 4.6.7`입니다.
+- `frontend`는 정적 프로토타입이며 clean `npm ci` 기준 `npm audit`도 0입니다. 검증된 버전은 Next `15.5.29`, Tailwind `3.4.19`, Autoprefixer `10.6.2` 및 build-time transitive overrides입니다. 이는 모든 의존성이 안전하다는 의미가 아닙니다.
 - 프론트엔드는 정적 프로토타입이며 smartstore-bridge에 연결되어 있지 않고 자동화 테스트도 없습니다.
 - 멱등성 재사용 처리 블록이 여러 route 모듈에 반복되어 있어 향후 공통 헬퍼로 추출할 후보입니다.
 - v03/v04 legacy entrypoint와 과거 planning 문서는 이력 보존을 위해 남겨두었습니다. 현재 작업 기준은 v05입니다.
