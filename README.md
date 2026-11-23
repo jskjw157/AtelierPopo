@@ -73,13 +73,13 @@ flowchart LR
 
 | 영역 | 파일 |
 |---|---|
-| MCP 엔트리 · 6개 도구 계약 | `smartstore-bridge/src/mcp.js`, `smartstore-bridge/src/mcp/tools.js` |
+| MCP 엔트리 · 6개 도구 명세 | `smartstore-bridge/src/mcp.js`, `smartstore-bridge/src/mcp/tools.js` |
 | 커머스 Operation Gateway | `smartstore-bridge/src/naver/commerce/gateway.js` |
 | SearchAd 서명 · Gateway | `smartstore-bridge/src/naver/searchad/auth.js`, `smartstore-bridge/src/naver/searchad/gateway.js` |
 | HTTP v05 라우트 · 공통 멱등성 헬퍼 | `smartstore-bridge/src/http/server-v05.js`, `smartstore-bridge/src/http/runtime.js` |
 | 비동기 큐 · SQLite 원장 | `smartstore-bridge/src/application/operation-queue.js`, `smartstore-bridge/src/infrastructure/ledger.js` |
 | Drive 루트 경계 · 채널 Importer | `smartstore-bridge/src/drive/boundary.js`, `smartstore-bridge/src/catalog/channel-import/import-service.js` |
-| MCP 계약 · 핸들러 테스트 | `smartstore-bridge/test/mcp-contract.test.js`, `smartstore-bridge/test/mcp-tools.test.js` |
+| MCP 명세 · 핸들러 테스트 | `smartstore-bridge/test/mcp-contract.test.js`, `smartstore-bridge/test/mcp-tools.test.js` |
 | HTTP 보안 · SearchAd 재시도/게이트 테스트 | `smartstore-bridge/test/http-security-config.test.js`, `smartstore-bridge/test/searchad-client.test.js`, `smartstore-bridge/test/searchad-gateway-capability.test.js` |
 | 로컬 데모 Fixture | `smartstore-bridge/examples/local-demo/catalog/catalog_manifest.json` |
 
