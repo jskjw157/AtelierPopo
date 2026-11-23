@@ -5,11 +5,10 @@ import { parseBooleanQuery, parseIntegerQuery, validateConfirmation, validateIde
 import { publicCreateResult, publicJob, publicPreview } from './presenters.js';
 import {
   assertHttpWriteAllowed,
-  ensureSameIdempotentOperation,
-  operationResponse,
-  operationStatusCode,
+  replyIfIdempotentOperationExists,
   route,
   sendJson,
+  sendOperationResponse,
   validateProductId
 } from './runtime.js';
 
@@ -81,14 +80,15 @@ export function createProductRoutes({ app, httpConfig, createAsyncOperation, red
       const confirmation = validateConfirmation(body.confirmation, app.config.writeConfirmation);
       const idempotencyKey = validateIdempotencyKey(body.idempotencyKey);
       const operationType = 'register_product';
-      const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
-      if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId: productId });
-        sendJson(req, res, operationStatusCode(existing), operationResponse(existing, { reused: true, redactionRoots }), {
-          Location: `/api/v1/operations/${existing.operation_id}`
-        });
-        return;
-      }
+      if (replyIfIdempotentOperationExists({
+        req,
+        res,
+        ledger: app.ledger,
+        idempotencyKey,
+        operationType,
+        sourceProductId: productId,
+        redactionRoots
+      })) return;
 
       assertHttpWriteAllowed(app, httpConfig, confirmation);
       const productPath = app.catalogRepository.resolveProductPath(productId);
@@ -107,12 +107,7 @@ export function createProductRoutes({ app, httpConfig, createAsyncOperation, red
         request: { productId },
         task: async () => publicCreateResult(await app.productService.create(productPath, { confirm: confirmation }))
       });
-      sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
-        reused: created.reused,
-        redactionRoots
-      }), {
-        Location: `/api/v1/operations/${created.row.operation_id}`
-      });
+      sendOperationResponse(req, res, created.row, { reused: created.reused, redactionRoots });
     }, { write: true })
   ];
 }

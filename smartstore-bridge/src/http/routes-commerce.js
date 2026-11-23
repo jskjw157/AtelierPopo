@@ -3,11 +3,10 @@ import { CommerceGatewayError, redactCommerceData } from '../naver/commerce/gate
 import { HttpError } from './errors.js';
 import { parseIntegerQuery, validateIdempotencyKey } from './security.js';
 import {
-  ensureSameIdempotentOperation,
-  operationResponse,
-  operationStatusCode,
+  replyIfIdempotentOperationExists,
   route,
-  sendJson
+  sendJson,
+  sendOperationResponse
 } from './runtime.js';
 
 function validateProductNo(value, label) {
@@ -115,15 +114,16 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
         resourceKey: preview.resourceKey,
         request: preview.request
       };
-      const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
-      if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request: operationRequest });
-        sendJson(req, res, operationStatusCode(existing), operationResponse(existing, {
-          reused: true,
-          redactionRoots
-        }), { Location: `/api/v1/operations/${existing.operation_id}` });
-        return;
-      }
+      if (replyIfIdempotentOperationExists({
+        req,
+        res,
+        ledger: app.ledger,
+        idempotencyKey,
+        operationType,
+        sourceProductId,
+        request: operationRequest,
+        redactionRoots
+      })) return;
       const created = await createAsyncOperation({
         idempotencyKey,
         operationType,
@@ -131,10 +131,7 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
         request: operationRequest,
         task: async () => app.commerceGateway.execute(operationId, body, executionContext)
       });
-      sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
-        reused: created.reused,
-        redactionRoots
-      }), { Location: `/api/v1/operations/${created.row.operation_id}` });
+      sendOperationResponse(req, res, created.row, { reused: created.reused, redactionRoots });
     }, { write: true, maxBodyBytes }),
 
     route('POST', /^\/api\/v1\/commerce\/capabilities\/probe$/, async ({ req, res, body }) => {
@@ -208,14 +205,16 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
       const operationType = 'commerce:update_product_detail';
       const sourceProductId = `channel:${channelProductNo}`;
       const operationRequest = { channelProductNo, detailContent: body.detailContent };
-      const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
-      if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request: operationRequest });
-        sendJson(req, res, operationStatusCode(existing), operationResponse(existing, { reused: true, redactionRoots }), {
-          Location: `/api/v1/operations/${existing.operation_id}`
-        });
-        return;
-      }
+      if (replyIfIdempotentOperationExists({
+        req,
+        res,
+        ledger: app.ledger,
+        idempotencyKey,
+        operationType,
+        sourceProductId,
+        request: operationRequest,
+        redactionRoots
+      })) return;
       const preview = await app.detailContentService.previewChannelUpdate(channelProductNo, body.detailContent);
       const created = await createAsyncOperation({
         idempotencyKey,
@@ -224,10 +223,7 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
         request: operationRequest,
         task: async () => app.detailContentService.updateChannelDetail(channelProductNo, body.detailContent)
       });
-      sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
-        reused: created.reused,
-        redactionRoots
-      }), { Location: `/api/v1/operations/${created.row.operation_id}` });
+      sendOperationResponse(req, res, created.row, { reused: created.reused, redactionRoots });
     }, { write: true, maxBodyBytes }),
 
     route('POST', /^\/api\/v1\/commerce\/products\/channel\/([^/]+)\/detail\/rollback$/, async ({ req, res, match, body }) => {
@@ -243,14 +239,16 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
       const operationType = 'commerce:rollback_product_detail';
       const sourceProductId = `channel:${channelProductNo}:backup:${body.backupId}`;
       const operationRequest = { channelProductNo, backupId: body.backupId };
-      const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
-      if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request: operationRequest });
-        sendJson(req, res, operationStatusCode(existing), operationResponse(existing, { reused: true, redactionRoots }), {
-          Location: `/api/v1/operations/${existing.operation_id}`
-        });
-        return;
-      }
+      if (replyIfIdempotentOperationExists({
+        req,
+        res,
+        ledger: app.ledger,
+        idempotencyKey,
+        operationType,
+        sourceProductId,
+        request: operationRequest,
+        redactionRoots
+      })) return;
       const created = await createAsyncOperation({
         idempotencyKey,
         operationType,
@@ -258,10 +256,7 @@ export function createCommerceRoutes({ app, httpConfig, createAsyncOperation, re
         request: operationRequest,
         task: async () => app.detailContentService.rollbackChannelDetail(body.backupId)
       });
-      sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
-        reused: created.reused,
-        redactionRoots
-      }), { Location: `/api/v1/operations/${created.row.operation_id}` });
+      sendOperationResponse(req, res, created.row, { reused: created.reused, redactionRoots });
     }, { write: true, maxBodyBytes })
   ];
 }

@@ -2,11 +2,10 @@ import { HttpError } from './errors.js';
 import { parseIntegerQuery, validateIdempotencyKey } from './security.js';
 import {
   baseUrlFromRequest,
-  ensureSameIdempotentOperation,
-  operationResponse,
-  operationStatusCode,
+  replyIfIdempotentOperationExists,
   route,
-  sendJson
+  sendJson,
+  sendOperationResponse
 } from './runtime.js';
 import { buildSearchAdOpenApi } from './openapi-searchad.js';
 import { SearchAdGatewayError, toPublicSearchAdError } from '../naver/searchad/gateway.js';
@@ -91,14 +90,15 @@ export function createSearchAdRoutes({ app, httpConfig, createAsyncOperation, re
       const preview = gateway.preview(operationKey, body);
       const operationType = `searchad:${operationKey}`;
       const sourceProductId = preview.resourceKey;
-      const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
-      if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId });
-        sendJson(req, res, operationStatusCode(existing), operationResponse(existing, { reused: true, redactionRoots }), {
-          Location: `/api/v1/operations/${existing.operation_id}`
-        });
-        return;
-      }
+      if (replyIfIdempotentOperationExists({
+        req,
+        res,
+        ledger: app.ledger,
+        idempotencyKey,
+        operationType,
+        sourceProductId,
+        redactionRoots
+      })) return;
       const created = await createAsyncOperation({
         idempotencyKey,
         operationType,
@@ -106,10 +106,7 @@ export function createSearchAdRoutes({ app, httpConfig, createAsyncOperation, re
         request: { operationKey, requestFingerprint: preview.requestFingerprint, resourceKey: preview.resourceKey },
         task: async () => gateway.execute(operationKey, body)
       });
-      sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
-        reused: created.reused,
-        redactionRoots
-      }), { Location: `/api/v1/operations/${created.row.operation_id}` });
+      sendOperationResponse(req, res, created.row, { reused: created.reused, redactionRoots });
     }, { write: true, maxBodyBytes }),
 
     route('POST', /^\/api\/v1\/searchad\/capabilities\/passive-probe$/, async ({ req, res, body }) => {

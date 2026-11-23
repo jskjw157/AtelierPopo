@@ -5,11 +5,10 @@ import { DriveBoundaryError } from '../drive/boundary.js';
 import { HttpError } from './errors.js';
 import { parseBooleanQuery, parseIntegerQuery, validateIdempotencyKey } from './security.js';
 import {
-  ensureSameIdempotentOperation,
-  operationResponse,
-  operationStatusCode,
+  replyIfIdempotentOperationExists,
   route,
   sendJson,
+  sendOperationResponse,
   validateProductId
 } from './runtime.js';
 
@@ -94,15 +93,16 @@ export function createDriveRoutes({ app, httpConfig, createAsyncOperation, redac
       throw new HttpError(400, 'DRIVE_INVALID_SECOND_CONFIRMATION', 'secondConfirmation이 대상 ID와 일치하지 않습니다.');
     }
     const idempotencyKey = validateIdempotencyKey(body.idempotencyKey);
-    const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
-    if (existing) {
-      ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request });
-      sendJson(req, res, operationStatusCode(existing), operationResponse(existing, {
-        reused: true,
-        redactionRoots
-      }), { Location: `/api/v1/operations/${existing.operation_id}` });
-      return;
-    }
+    if (replyIfIdempotentOperationExists({
+      req,
+      res,
+      ledger: app.ledger,
+      idempotencyKey,
+      operationType,
+      sourceProductId,
+      request,
+      redactionRoots
+    })) return;
     const created = await createAsyncOperation({
       idempotencyKey,
       operationType,
@@ -110,10 +110,7 @@ export function createDriveRoutes({ app, httpConfig, createAsyncOperation, redac
       request,
       task
     });
-    sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
-      reused: created.reused,
-      redactionRoots
-    }), { Location: `/api/v1/operations/${created.row.operation_id}` });
+    sendOperationResponse(req, res, created.row, { reused: created.reused, redactionRoots });
   }
 
   function inlineContentRequest(body) {
@@ -186,15 +183,16 @@ export function createDriveRoutes({ app, httpConfig, createAsyncOperation, redac
       const operationType = 'sync_drive_catalog';
       const sourceProductId = `drive-catalog:${fingerprint}`;
       const operationRequest = { productIds, includeImages, force, limit, concurrency };
-      const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
-      if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request: operationRequest });
-        sendJson(req, res, operationStatusCode(existing), operationResponse(existing, {
-          reused: true,
-          redactionRoots
-        }), { Location: `/api/v1/operations/${existing.operation_id}` });
-        return;
-      }
+      if (replyIfIdempotentOperationExists({
+        req,
+        res,
+        ledger: app.ledger,
+        idempotencyKey,
+        operationType,
+        sourceProductId,
+        request: operationRequest,
+        redactionRoots
+      })) return;
       const created = await createAsyncOperation({
         idempotencyKey,
         operationType,
@@ -213,10 +211,7 @@ export function createDriveRoutes({ app, httpConfig, createAsyncOperation, redac
           return result;
         }
       });
-      sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
-        reused: created.reused,
-        redactionRoots
-      }), { Location: `/api/v1/operations/${created.row.operation_id}` });
+      sendOperationResponse(req, res, created.row, { reused: created.reused, redactionRoots });
     }, { write: true }),
 
     driveRoute('POST', /^\/api\/v1\/drive\/cache\/cleanup$/, async ({ req, res, body }) => {

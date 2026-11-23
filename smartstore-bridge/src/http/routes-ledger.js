@@ -3,11 +3,10 @@ import { parseBooleanQuery, parseIntegerQuery, validateConfirmation, validateIde
 import { publicJob, publicOperation } from './presenters.js';
 import {
   assertHttpWriteAllowed,
-  ensureSameIdempotentOperation,
-  operationResponse,
-  operationStatusCode,
+  replyIfIdempotentOperationExists,
   route,
   sendJson,
+  sendOperationResponse,
   validateOperationId,
   validateProductId
 } from './runtime.js';
@@ -76,14 +75,15 @@ export function createLedgerRoutes({ app, httpConfig, createAsyncOperation, reda
       const status = String(body.status || 'previewed');
       const operationType = 'register_batch';
       const sourceProductId = `batch:${status}:${limit}`;
-      const existing = app.ledger.findOperationByIdempotencyKey(idempotencyKey);
-      if (existing) {
-        ensureSameIdempotentOperation(existing, { operationType, sourceProductId });
-        sendJson(req, res, operationStatusCode(existing), operationResponse(existing, { reused: true, redactionRoots }), {
-          Location: `/api/v1/operations/${existing.operation_id}`
-        });
-        return;
-      }
+      if (replyIfIdempotentOperationExists({
+        req,
+        res,
+        ledger: app.ledger,
+        idempotencyKey,
+        operationType,
+        sourceProductId,
+        redactionRoots
+      })) return;
 
       assertHttpWriteAllowed(app, httpConfig, confirmation, { batch: true });
       const created = await createAsyncOperation({
@@ -98,12 +98,7 @@ export function createLedgerRoutes({ app, httpConfig, createAsyncOperation, reda
           confirm: confirmation
         })
       });
-      sendJson(req, res, created.reused ? operationStatusCode(created.row) : 202, operationResponse(created.row, {
-        reused: created.reused,
-        redactionRoots
-      }), {
-        Location: `/api/v1/operations/${created.row.operation_id}`
-      });
+      sendOperationResponse(req, res, created.row, { reused: created.reused, redactionRoots });
     }, { write: true })
   ];
 }

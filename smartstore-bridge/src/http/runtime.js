@@ -165,6 +165,33 @@ export function operationStatusCode(row) {
   return ['succeeded', 'failed', 'interrupted', 'cancelled'].includes(row.status) ? 200 : 202;
 }
 
+export function sendOperationResponse(req, res, row, { reused = false, redactionRoots = [] } = {}) {
+  sendJson(
+    req,
+    res,
+    reused ? operationStatusCode(row) : 202,
+    operationResponse(row, { reused, redactionRoots }),
+    { Location: `/api/v1/operations/${row.operation_id}` }
+  );
+}
+
+export function replyIfIdempotentOperationExists({
+  req,
+  res,
+  ledger,
+  idempotencyKey,
+  operationType,
+  sourceProductId,
+  request,
+  redactionRoots = []
+}) {
+  const existing = ledger.findOperationByIdempotencyKey(idempotencyKey);
+  if (!existing) return false;
+  ensureSameIdempotentOperation(existing, { operationType, sourceProductId, request });
+  sendOperationResponse(req, res, existing, { reused: true, redactionRoots });
+  return true;
+}
+
 export function closeLedgerWhenQueueIdle(ledger, idle) {
   if (!idle) {
     const error = new Error('활성 작업이 남아 있어 작업 원장을 안전하게 닫을 수 없습니다.');
