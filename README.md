@@ -34,6 +34,8 @@
 
 ## 아키텍처
 
+![AtelierPopo 스마트스토어 MCP 및 네이버 검색광고 Gateway 아키텍처](docs/images/architecture.png)
+
 ```text
 MCP stdio (6 tools) ─┐
 CLI (src/cli.js) ────┴──▶ bootstrap (config · product service · ledger)
@@ -87,6 +89,8 @@ MCP와 CLI는 base `bootstrap` 구성을 사용하고, HTTP v05는 `bootstrap-v0
 | MCP stdio 계약 테스트 | `smartstore-bridge/test/mcp-contract.test.js` |
 | MCP handler 테스트 | `smartstore-bridge/test/mcp-tools.test.js` |
 | HTTP 보안 설정 테스트 | `smartstore-bridge/test/http-security-config.test.js` |
+| SearchAd 재시도 정책 테스트 (`GET` 429 재시도 / `POST` 자동 재시도 금지) | `smartstore-bridge/test/searchad-client.test.js` |
+| SearchAd 게이트·삭제 대상 ID 2차 확인 테스트 | `smartstore-bridge/test/searchad-gateway-capability.test.js` |
 | 로컬 데모 fixture | `smartstore-bridge/examples/local-demo/catalog/catalog_manifest.json` |
 
 ## 실행과 테스트
