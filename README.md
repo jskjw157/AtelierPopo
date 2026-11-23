@@ -14,7 +14,7 @@
 | 경로 | 설명 |
 |---|---|
 | `smartstore-bridge/` | 핵심 Node.js 브리지 (MCP stdio, HTTP v05, CLI, Commerce/SearchAd Gateway, Drive, 다중 공급처 카탈로그, SQLite 원장, PostgreSQL 마이그레이션) |
-| `frontend/` | Next.js 15 / React 19 정적 스토어프론트 프로토타입 (브리지 미연동) |
+| `frontend/` | 쇼핑몰 기본 화면과 상품 상세페이지 내보내기(export)용 Next.js 정적 UI 프로토타입 (`smartstore-bridge` 미연동) |
 | `.github/workflows/` | 다중 공급처 카탈로그 · 채널 가져오기 CI |
 
 ## 아키텍처
